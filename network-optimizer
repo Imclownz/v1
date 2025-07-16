@@ -1,0 +1,61 @@
+// network-optimizer.js
+const NETWORK_MODES = {
+    DEFAULT: {
+        protocol: "hybrid",
+        pingOptimization: true,
+        packetLossProtection: true,
+        compression: false
+    },
+    COMPETITIVE: {
+        protocol: "udp_priority",
+        pingOptimization: true,
+        packetLossProtection: false,
+        compression: true
+    }
+};
+
+function optimizeNetwork(body) {
+    try {
+        let data = typeof body === 'string' ? JSON.parse(body) : body;
+        const timestamp = Date.now();
+        const securityToken = "NET_" + timestamp.toString(36);
+        
+        // Auto-select mode based on time
+        const now = new Date();
+        const isPeakHour = (now.getHours() >= 18 || now.getHours() <= 23);
+        const currentMode = isPeakHour ? NETWORK_MODES.COMPETITIVE : NETWORK_MODES.DEFAULT;
+
+        data.network = {
+            ...currentMode,
+            version: "2.3",
+            timestamp: timestamp,
+            security: {
+                token: securityToken,
+                checksum: generateNetworkChecksum(securityToken),
+                behavior: getNetworkBehavior()
+            },
+            optimization: {
+                routeSelection: "auto_best",
+                packetResend: currentMode.protocol === "udp_priority" ? 1 : 3,
+                jitterBuffer: 20 // ms
+            }
+        };
+
+        return typeof body === 'string' ? JSON.stringify(data) : data;
+    } catch (e) {
+        console.error("[NETWORK] Error:", e.message.substring(0, 20));
+        return body;
+    }
+}
+
+function generateNetworkChecksum(token) {
+    const crypto = require('crypto');
+    return crypto.createHash('md5').update(token).digest('hex');
+}
+
+function getNetworkBehavior() {
+    const behaviors = ["normal", "gamer", "streamer", "competitive"];
+    return behaviors[Math.floor(Math.random() * behaviors.length)];
+}
+
+$done({ body: optimizeNetwork($response.body) });
