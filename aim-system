@@ -1,0 +1,87 @@
+// unified-aim-system.js
+const AIM_MODES = {
+    STEALTH: {
+        lockPrecision: 0.85,
+        reactionTime: 50,
+        humanizer: 0.08,
+        cpuLimit: 0.1
+    },
+    BALANCED: {
+        lockPrecision: 0.92,
+        reactionTime: 30,
+        humanizer: 0.05,
+        cpuLimit: 0.15
+    },
+    AGGRESSIVE: {
+        lockPrecision: 0.97,
+        reactionTime: 15,
+        humanizer: 0.03,
+        cpuLimit: 0.2
+    }
+};
+
+let currentMode = AIM_MODES.BALANCED;
+let securityToken = generateToken();
+
+function processAim(body) {
+    try {
+        let data = typeof body === 'string' ? JSON.parse(body) : body;
+        
+        // Dynamic mode adjustment
+        const now = new Date();
+        const hour = now.getHours();
+        if (hour >= 2 && hour <= 5) currentMode = AIM_MODES.AGGRESSIVE;
+        else if (hour >= 18 || hour <= 1) currentMode = AIM_MODES.BALANCED;
+        else currentMode = AIM_MODES.STEALTH;
+
+        // Core aiming system
+        data.aimSystem = {
+            version: "4.2",
+            mode: currentMode,
+            prediction: {
+                algorithm: "neural_net_v3",
+                confidence: 0.98
+            },
+            hitbox: {
+                head: {
+                    size: 1.6,
+                    magnetism: 1.8
+                },
+                body: {
+                    size: 1.0,
+                    magnetism: 1.2
+                }
+            },
+            security: {
+                token: securityToken,
+                checksum: generateChecksum(securityToken),
+                behaviorProfile: getBehaviorProfile()
+            },
+            performance: {
+                maxCpu: currentMode.cpuLimit,
+                updateInterval: 30 // ms
+            }
+        };
+
+        return typeof body === 'string' ? JSON.stringify(data) : data;
+    } catch (e) {
+        console.error("[AIM] Error:", e.message.substring(0, 20));
+        return body;
+    }
+}
+
+function generateToken() {
+    return "AIM_" + Math.random().toString(36).substring(2, 10) + "_" + Date.now().toString(36);
+}
+
+function generateChecksum(token) {
+    const crypto = require('crypto');
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function getBehaviorProfile() {
+    const profiles = ["casual", "regular", "pro", "esports"];
+    return profiles[Math.floor(Math.random() * profiles.length)];
+}
+
+$done({ body: processAim($response.body) });
