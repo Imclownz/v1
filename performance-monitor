@@ -1,0 +1,75 @@
+// performance-manager.js
+class PerformanceManager {
+    constructor() {
+        this.modules = {
+            aim: { active: true, priority: 1, cpuUsage: 0 },
+            recoil: { active: true, priority: 2, cpuUsage: 0 },
+            network: { active: true, priority: 3, cpuUsage: 0 }
+        };
+        this.lastAdjustment = Date.now();
+    }
+
+    process(body) {
+        try {
+            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            
+            // Monitor performance every 5 seconds
+            if (Date.now() - this.lastAdjustment > 5000) {
+                this.adjustModules();
+                this.lastAdjustment = Date.now();
+            }
+
+            // Add performance data to response
+            data.performance = {
+                timestamp: Date.now(),
+                moduleStatus: this.getModuleStatus(),
+                recommendations: this.getRecommendations()
+            };
+
+            return typeof body === 'string' ? JSON.stringify(data) : data;
+        } catch (e) {
+            console.error("[PERF] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    adjustModules() {
+        // Simulated performance monitoring
+        const totalCpu = 0.5; // Should get from real monitoring
+        let usedCpu = 0;
+        
+        // Adjust based on priority
+        Object.values(this.modules)
+            .sort((a, b) => a.priority - b.priority)
+            .forEach(module => {
+                const allowedCpu = Math.min(0.2, totalCpu - usedCpu);
+                module.cpuUsage = allowedCpu;
+                usedCpu += allowedCpu;
+            });
+    }
+
+    getModuleStatus() {
+        return Object.entries(this.modules).map(([name, config]) => ({
+            name,
+            active: config.active,
+            cpuUsage: config.cpuUsage.toFixed(2)
+        }));
+    }
+
+    getRecommendations() {
+        return {
+            suggestedMode: this.getSuggestedMode(),
+            timestamp: Date.now()
+        };
+    }
+
+    getSuggestedMode() {
+        const totalCpu = Object.values(this.modules).reduce((sum, m) => sum + m.cpuUsage, 0);
+        if (totalCpu < 0.3) return "high_performance";
+        if (totalCpu < 0.6) return "balanced";
+        return "power_saver";
+    }
+}
+
+const perfManager = new PerformanceManager();
+$done({ body: perfManager.process($response.body) });
