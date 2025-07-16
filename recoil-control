@@ -1,0 +1,70 @@
+// unified-recoil-control.js
+class RecoilSystem {
+    constructor() {
+        this.weaponProfiles = {
+            default: {
+                vertical: 0.05,
+                horizontal: 0.03,
+                pattern: "circular",
+                smoothing: 0.9
+            },
+            sniper: {
+                vertical: 0.1,
+                horizontal: 0.02,
+                pattern: "vertical",
+                smoothing: 0.95
+            },
+            smg: {
+                vertical: 0.03,
+                horizontal: 0.05,
+                pattern: "random",
+                smoothing: 0.85
+            }
+        };
+        this.securityToken = "RC_" + Date.now().toString(36);
+    }
+
+    process(body) {
+        try {
+            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            
+            const weaponType = data.weaponType || "default";
+            const profile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
+
+            data.recoilSystem = {
+                enabled: true,
+                version: "3.1",
+                mode: "adaptive_ai",
+                compensation: {
+                    vertical: profile.vertical,
+                    horizontal: profile.horizontal,
+                    pattern: profile.pattern,
+                    smoothing: profile.smoothing
+                },
+                security: {
+                    token: this.securityToken,
+                    checksum: this.generateChecksum(),
+                    behavior: this.getRecoilBehavior()
+                }
+            };
+
+            return typeof body === 'string' ? JSON.stringify(data) : data;
+        } catch (e) {
+            console.error("[RECOIL] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    generateChecksum() {
+        const crypto = require('crypto');
+        return crypto.createHash('sha1').update(this.securityToken).digest('hex');
+    }
+
+    getRecoilBehavior() {
+        const behaviors = ["human_light", "human_medium", "pro_stable", "randomized"];
+        return behaviors[Math.floor(Math.random() * behaviors.length)];
+    }
+}
+
+const recoilSystem = new RecoilSystem();
+$done({ body: recoilSystem.process($response.body) });
