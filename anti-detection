@@ -1,0 +1,59 @@
+// anti-detection-system.js
+class AntiDetection {
+    constructor() {
+        this.sessionId = "SESS_" + Date.now().toString(36);
+        this.behaviorProfiles = [
+            { name: "casual", reactionTime: { min: 200, max: 400 }, accuracy: 0.7 },
+            { name: "regular", reactionTime: { min: 150, max: 300 }, accuracy: 0.8 },
+            { name: "pro", reactionTime: { min: 100, max: 250 }, accuracy: 0.9 }
+        ];
+        this.currentProfile = this.getRandomProfile();
+    }
+
+    process(body) {
+        try {
+            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            
+            // Rotate profile every 15-30 minutes
+            if (Math.random() < 0.05) {
+                this.currentProfile = this.getRandomProfile();
+            }
+
+            data.security = {
+                version: "3.2",
+                session: this.sessionId,
+                behavior: this.currentProfile.name,
+                metrics: {
+                    reactionTime: this.getRandomReactionTime(),
+                    accuracy: this.currentProfile.accuracy,
+                    inputVariance: Math.random() * 0.1
+                },
+                checksum: this.generateChecksum(),
+                timestamp: Date.now()
+            };
+
+            return typeof body === 'string' ? JSON.stringify(data) : data;
+        } catch (e) {
+            console.error("[ANTI-DETECT] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    getRandomProfile() {
+        return this.behaviorProfiles[Math.floor(Math.random() * this.behaviorProfiles.length)];
+    }
+
+    getRandomReactionTime() {
+        const profile = this.currentProfile;
+        return profile.reactionTime.min + Math.random() * (profile.reactionTime.max - profile.reactionTime.min);
+    }
+
+    generateChecksum() {
+        const crypto = require('crypto');
+        const data = this.sessionId + this.currentProfile.name + Date.now();
+        return crypto.createHash('sha256').update(data).digest('hex');
+    }
+}
+
+const antiDetect = new AntiDetection();
+$done({ body: antiDetect.process($response.body) });
