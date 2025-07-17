@@ -1,34 +1,32 @@
-// advanced-aim-system.js
+// magnetic-aim-system.js
 const AIM_MODES = {
     STEALTH: {
-        lockPrecision: 0.85,
-        reactionTime: 50,
-        humanizer: 0.08,
-        cpuLimit: 0.1,
-        trackingIntensity: 0.7
+        lockStrength: 0.85,
+        humanizer: 0.1,
+        predictionConfidence: 0.95,
+        cpuLimit: 0.15
     },
-    BALANCED: {
-        lockPrecision: 0.95,
-        reactionTime: 30,
+    PRECISION: {
+        lockStrength: 0.95,
         humanizer: 0.05,
-        cpuLimit: 0.15,
-        trackingIntensity: 0.85
+        predictionConfidence: 0.99,
+        cpuLimit: 0.25
     },
     AGGRESSIVE: {
-        lockPrecision: 0.99,
-        reactionTime: 15,
-        humanizer: 0.02,
-        cpuLimit: 0.2,
-        trackingIntensity: 0.95
+        lockStrength: 0.99,
+        humanizer: 0.01,
+        predictionConfidence: 0.999,
+        cpuLimit: 0.35
     }
 };
 
-class AdvancedAimSystem {
+class MagneticAimSystem {
     constructor() {
-        this.currentMode = AIM_MODES.BALANCED;
-        this.securityToken = "AIM_" + Math.random().toString(36).substring(2, 10) + "_" + Date.now().toString(36);
-        this.lastTargets = {};
-        this.aimPredictionCache = {};
+        this.currentMode = AIM_MODES.PRECISION;
+        this.securityToken = "MAG_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now().toString(36);
+        this.targetCache = {};
+        this.lockedTargetId = null;
+        this.aimPositionHistory = [];
         this.weaponProfiles = this.getWeaponProfiles();
     }
 
@@ -36,57 +34,73 @@ class AdvancedAimSystem {
         try {
             let data = typeof body === 'string' ? JSON.parse(body) : body;
             
-            // Auto-select mode based on game state
+            // Auto-select mode based on combat state
             this.autoSelectMode(data.gameState);
             
-            // Process aiming if targets available
+            // Process targets if available
             if (data.targets && data.targets.length > 0) {
+                // Enhance targets with additional data
                 const enhancedTargets = data.targets.map(target => 
                     this.enhanceTarget(target, data.playerPosition, data.currentWeapon)
                 );
                 
-                data.aimData = {
-                    targets: enhancedTargets,
-                    lockedTarget: this.selectBestTarget(enhancedTargets),
-                    weaponProfile: this.weaponProfiles[data.currentWeapon] || this.weaponProfiles.default
-                };
+                // Select and lock target
+                const bestTarget = this.selectAndLockTarget(enhancedTargets);
                 
-                // Apply aim correction
-                if (data.aimData.lockedTarget) {
-                    data.aimPosition = this.calculateAimPosition(
-                        data.aimData.lockedTarget,
-                        data.playerPosition,
+                if (bestTarget) {
+                    // Calculate perfect aim position
+                    data.aimPosition = this.calculatePerfectAimPosition(
+                        bestTarget, 
+                        data.playerPosition, 
                         data.currentWeapon
                     );
+                    
+                    // Apply magnetic lock effect
+                    data.aimPosition = this.applyMagneticLock(
+                        data.aimPosition,
+                        data.currentAimPosition,
+                        bestTarget.distance
+                    );
+                    
+                    // Store for next frame
+                    this.aimPositionHistory.push({
+                        position: data.aimPosition,
+                        timestamp: Date.now()
+                    });
                 }
+                
+                data.aimData = {
+                    targets: enhancedTargets,
+                    lockedTarget: bestTarget,
+                    weaponProfile: this.weaponProfiles[data.currentWeapon] || this.weaponProfiles.default
+                };
             }
             
-            // Add security and metadata
+            // Add system metadata
             data.aimSystem = this.getSystemMetadata();
             
             return typeof body === 'string' ? JSON.stringify(data) : data;
         } catch (e) {
-            console.error("[ADV AIM] Error:", e.message.substring(0, 20));
+            console.error("[MAGNETIC AIM] Error:", e.message.substring(0, 30));
             return body;
         }
     }
 
     autoSelectMode(gameState) {
         // Aggressive mode during combat
-        if (gameState && gameState.isInCombat) {
+        if (gameState && gameState.isInCombat && gameState.targetsInSight > 0) {
             this.currentMode = AIM_MODES.AGGRESSIVE;
             return;
         }
         
-        // Time-based mode selection
-        const now = new Date();
-        const hour = now.getHours();
-        
-        if (hour >= 20 || hour <= 3) { // Prime gaming hours
-            this.currentMode = AIM_MODES.BALANCED;
-        } else {
-            this.currentMode = AIM_MODES.STEALTH;
+        // Precision mode when aiming down sights
+        if (gameState && gameState.isAiming) {
+            this.currentMode = AIM_MODES.PRECISION;
+            return;
         }
+        
+        // Default to stealth mode
+        this.currentMode = AIM_MODES.STEALTH;
     }
 
     enhanceTarget(target, playerPosition, weaponType) {
@@ -100,15 +114,8 @@ class AdvancedAimSystem {
         const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
         target.bulletTravelTime = target.distance / weaponProfile.bulletVelocity;
         
-        // Predict future position
-        target.predictedPosition = this.predictPosition(
-            target.position, 
-            target.movement, 
-            target.bulletTravelTime
-        );
-        
-        // Calculate head position
-        target.headPosition = this.calculateHeadPosition(target);
+        // Predict future head position
+        target.predictedHeadPosition = this.predictHeadPosition(target);
         
         return target;
     }
@@ -122,24 +129,23 @@ class AdvancedAimSystem {
     }
 
     calculateMovementVector(target) {
-        if (!this.lastTargets[target.id]) {
-            this.lastTargets[target.id] = {
+        if (!this.targetCache[target.id]) {
+            this.targetCache[target.id] = {
                 position: target.position,
                 timestamp: Date.now()
             };
-            return { x: 0, y: 0, z: 0 }; // No movement data yet
+            return { x: 0, y: 0, z: 0 };
         }
         
-        const last = this.lastTargets[target.id];
-        const timeDelta = (Date.now() - last.timestamp) / 1000; // in seconds
+        const last = this.targetCache[target.id];
+        const timeDelta = (Date.now() - last.timestamp) / 1000;
         
-        // Save current for next calculation
-        this.lastTargets[target.id] = {
+        // Update cache
+        this.targetCache[target.id] = {
             position: target.position,
             timestamp: Date.now()
         };
         
-        // Calculate velocity vector
         return {
             x: (target.position.x - last.position.x) / timeDelta,
             y: (target.position.y - last.position.y) / timeDelta,
@@ -147,115 +153,153 @@ class AdvancedAimSystem {
         };
     }
 
-    predictPosition(currentPosition, movement, time) {
-        return {
-            x: currentPosition.x + (movement.x * time),
-            y: currentPosition.y + (movement.y * time),
-            z: currentPosition.z + (movement.z * time)
-        };
-    }
-
-    calculateHeadPosition(target) {
-        // Head position is approximately at 90% of character height
-        const headHeight = target.height * 0.9;
-        return {
+    predictHeadPosition(target) {
+        // Calculate current head position (90% of character height)
+        const currentHeadPos = {
             x: target.position.x,
-            y: target.position.y + headHeight,
+            y: target.position.y + (target.height * 0.9),
             z: target.position.z
         };
+        
+        // Predict future position based on movement
+        return {
+            x: currentHeadPos.x + (target.movement.x * target.bulletTravelTime * 1.1),
+            y: currentHeadPos.y + (target.movement.y * target.bulletTravelTime * 1.1),
+            z: currentHeadPos.z + (target.movement.z * target.bulletTravelTime * 1.1)
+        };
     }
 
-    selectBestTarget(targets) {
-        // Prioritize closest target first
-        targets.sort((a, b) => a.distance - b.distance);
-        
-        // Then prioritize enemies with low health
-        targets.sort((a, b) => {
-            if (a.distance < 50 && b.distance < 50) {
-                return a.health - b.health; // Finish low health enemies
+    selectAndLockTarget(targets) {
+        // If we have a locked target that's still valid, keep it
+        if (this.lockedTargetId) {
+            const currentLockedTarget = targets.find(t => t.id === this.lockedTargetId);
+            if (currentLockedTarget && currentLockedTarget.visible) {
+                return currentLockedTarget;
             }
-            return 0;
+        }
+        
+        // Otherwise, select the best target
+        const bestTarget = this.findBestTarget(targets);
+        this.lockedTargetId = bestTarget ? bestTarget.id : null;
+        return bestTarget;
+    }
+
+    findBestTarget(targets) {
+        // Filter only visible targets
+        const visibleTargets = targets.filter(t => t.visible);
+        if (visibleTargets.length === 0) return null;
+        
+        // Score targets based on multiple factors
+        const scoredTargets = visibleTargets.map(target => {
+            let score = 0;
+            
+            // Distance score (closer is better)
+            score += Math.max(0, 100 - (target.distance / 2));
+            
+            // Health score (lower health is better)
+            score += (100 - target.health) * 0.8;
+            
+            // Threat score (aiming at player is worse)
+            if (target.isAimingAtPlayer) score -= 50;
+            
+            // Movement score (slower targets are easier to hit)
+            const speed = Math.sqrt(
+                Math.pow(target.movement.x, 2) + 
+                Math.pow(target.movement.y, 2) + 
+                Math.pow(target.movement.z, 2)
+            );
+            score += Math.max(0, 50 - (speed * 10));
+            
+            return { target, score };
         });
         
-        return targets.length > 0 ? targets[0] : null;
+        // Sort by score descending
+        scoredTargets.sort((a, b) => b.score - a.score);
+        
+        return scoredTargets.length > 0 ? scoredTargets[0].target : null;
     }
 
-    calculateAimPosition(target, playerPosition, weaponType) {
+    calculatePerfectAimPosition(target, playerPosition, weaponType) {
         const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
-        const headPosition = target.headPosition;
         
-        // Calculate lead based on movement prediction
-        const lead = this.calculateLead(target, weaponProfile.bulletVelocity);
+        // Use predicted head position as base
+        let aimPosition = { ...target.predictedHeadPosition };
         
-        // Final aim position with head offset and lead
-        const aimPosition = {
-            x: headPosition.x + lead.x,
-            y: headPosition.y + lead.y,
-            z: headPosition.z + lead.z
-        };
+        // Apply weapon-specific adjustments
+        aimPosition.y += weaponProfile.verticalOffset;
         
-        // Apply humanizer for natural movement
-        return this.applyHumanizer(aimPosition, target.distance);
+        // Add slight randomness for human-like behavior
+        if (this.currentMode !== AIM_MODES.AGGRESSIVE) {
+            aimPosition.x += (Math.random() - 0.5) * weaponProfile.humanizerIntensity;
+            aimPosition.y += (Math.random() - 0.5) * weaponProfile.humanizerIntensity * 0.5;
+        }
+        
+        return aimPosition;
     }
 
-    calculateLead(target, bulletVelocity) {
-        // Simple lead calculation based on movement and bullet travel time
-        return {
-            x: target.movement.x * target.bulletTravelTime * 1.1, // 10% extra lead
-            y: target.movement.y * target.bulletTravelTime * 1.1,
-            z: target.movement.z * target.bulletTravelTime * 1.1
-        };
-    }
-
-    applyHumanizer(aimPosition, distance) {
-        // Add slight randomness based on distance and current mode
-        const intensity = this.currentMode.humanizer;
-        const distanceFactor = Math.min(1, distance / 100); // Less effect at longer distances
+    applyMagneticLock(targetPosition, currentAimPosition, distance) {
+        // How strongly we pull toward the target (0-1)
+        const lockStrength = this.currentMode.lockStrength;
         
+        // Distance factor (closer = stronger pull)
+        const distanceFactor = Math.min(1, 100 / distance);
+        
+        // Calculate direction vector to target
+        const direction = {
+            x: targetPosition.x - currentAimPosition.x,
+            y: targetPosition.y - currentAimPosition.y,
+            z: targetPosition.z - currentAimPosition.z
+        };
+        
+        // Apply magnetic pull
         return {
-            x: aimPosition.x + (Math.random() * intensity * distanceFactor - intensity/2),
-            y: aimPosition.y + (Math.random() * intensity * distanceFactor - intensity/2),
-            z: aimPosition.z + (Math.random() * intensity * distanceFactor * 0.5 - intensity/4)
+            x: currentAimPosition.x + (direction.x * lockStrength * distanceFactor),
+            y: currentAimPosition.y + (direction.y * lockStrength * distanceFactor),
+            z: currentAimPosition.z + (direction.z * lockStrength * distanceFactor * 0.5)
         };
     }
 
     getWeaponProfiles() {
         return {
             default: {
-                bulletVelocity: 300, // m/s
-                magnetism: 1.5,
-                headshotMultiplier: 2.0,
-                trackingSpeed: 0.8
+                bulletVelocity: 400,
+                verticalOffset: 0.05,
+                humanizerIntensity: 0.15,
+                magnetism: 1.8
             },
             sniper: {
-                bulletVelocity: 900, // m/s
-                magnetism: 2.5,
-                headshotMultiplier: 3.0,
-                trackingSpeed: 0.6
+                bulletVelocity: 1200,
+                verticalOffset: -0.02,
+                humanizerIntensity: 0.05,
+                magnetism: 2.8
             },
-            assault: {
-                bulletVelocity: 700, // m/s
-                magnetism: 1.8,
-                headshotMultiplier: 1.8,
-                trackingSpeed: 0.9
+            ar: {
+                bulletVelocity: 800,
+                verticalOffset: 0.03,
+                humanizerIntensity: 0.1,
+                magnetism: 2.0
             },
             smg: {
-                bulletVelocity: 400, // m/s
-                magnetism: 1.2,
-                headshotMultiplier: 1.5,
-                trackingSpeed: 1.0
+                bulletVelocity: 500,
+                verticalOffset: 0.07,
+                humanizerIntensity: 0.2,
+                magnetism: 1.5
+            },
+            shotgun: {
+                bulletVelocity: 350,
+                verticalOffset: 0.1,
+                humanizerIntensity: 0.25,
+                magnetism: 3.0
             }
         };
     }
 
     getSystemMetadata() {
         return {
-            version: "5.0",
+            version: "7.0",
             mode: this.currentMode,
-            prediction: {
-                algorithm: "neural_net_v4",
-                confidence: 0.99
-            },
+            lockStrength: this.currentMode.lockStrength,
+            predictionAlgorithm: "neural_network_v5",
             security: {
                 token: this.securityToken,
                 checksum: this.generateChecksum(),
@@ -263,27 +307,44 @@ class AdvancedAimSystem {
             },
             performance: {
                 maxCpu: this.currentMode.cpuLimit,
-                updateInterval: 30 // ms
+                updateInterval: 20 // ms
             },
-            capabilities: {
-                autoTracking: true,
-                predictiveAiming: true,
-                headshotFocus: true,
-                movementCompensation: true
+            status: {
+                targetLocked: !!this.lockedTargetId,
+                lockStability: this.calculateLockStability()
             }
         };
     }
 
+    calculateLockStability() {
+        if (this.aimPositionHistory.length < 2) return 1.0;
+        
+        const positions = this.aimPositionHistory.slice(-10);
+        let totalDistance = 0;
+        
+        for (let i = 1; i < positions.length; i++) {
+            totalDistance += this.calculateDistance(
+                positions[i-1].position, 
+                positions[i].position
+            );
+        }
+        
+        // Lower distance = more stable
+        const avgDistance = totalDistance / (positions.length - 1);
+        return Math.max(0, 1 - (avgDistance * 10));
+    }
+
     generateChecksum() {
         const crypto = require('crypto');
-        return crypto.createHash('sha512').update(this.securityToken).digest('hex');
+        const data = this.securityToken + this.currentMode.lockStrength;
+        return crypto.createHash('sha512').update(data).digest('hex');
     }
 
     getBehaviorProfile() {
-        const profiles = ["stealth", "balanced", "aggressive", "sniper"];
+        const profiles = ["stealth", "precision", "aggressive", "sniper"];
         return profiles[Math.floor(Math.random() * profiles.length)];
     }
 }
 
-const aimSystem = new AdvancedAimSystem();
+const aimSystem = new MagneticAimSystem();
 $done({ body: aimSystem.process($response.body) });
