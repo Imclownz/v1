@@ -1,0 +1,103 @@
+// stealth-shield.js
+class StealthShield {
+    constructor() {
+        this.sessionId = "STEALTH_" + Date.now().toString(36);
+        this.behaviorProfiles = this.getBehaviorProfiles();
+        this.currentProfile = this.behaviorProfiles[0];
+        this.lastRotation = Date.now();
+    }
+
+    process(body) {
+        try {
+            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            
+            // Luân phiên profile định kỳ
+            this.rotateProfile();
+            
+            // Áp dụng biện pháp chống phát hiện
+            data.security = {
+                version: "6.0",
+                session: this.sessionId,
+                behavior: this.currentProfile.name,
+                metrics: this.generateMetrics(),
+                patterns: this.generatePatterns(),
+                checksum: this.generateChecksum(),
+                timestamp: Date.now()
+            };
+
+            return typeof body === 'string' ? JSON.stringify(data) : data;
+        } catch (e) {
+            console.error("[STEALTH] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    rotateProfile() {
+        // Luân phiên mỗi 5-10 phút
+        if (Date.now() - this.lastRotation < 300000) return;
+        if (Math.random() < 0.7) return; // 70% giữ nguyên
+        
+        const currentIndex = this.behaviorProfiles.indexOf(this.currentProfile);
+        const nextIndex = (currentIndex + 1) % this.behaviorProfiles.length;
+        this.currentProfile = this.behaviorProfiles[nextIndex];
+        this.lastRotation = Date.now();
+    }
+
+    getBehaviorProfiles() {
+        return [
+            {
+                name: "casual",
+                reactionTime: { min: 250, max: 450 },
+                accuracy: 0.6,
+                movement: "normal"
+            },
+            {
+                name: "regular",
+                reactionTime: { min: 200, max: 350 },
+                accuracy: 0.75,
+                movement: "fluid"
+            },
+            {
+                name: "pro",
+                reactionTime: { min: 150, max: 300 },
+                accuracy: 0.85,
+                movement: "precise"
+            },
+            {
+                name: "esports",
+                reactionTime: { min: 120, max: 250 },
+                accuracy: 0.92,
+                movement: "aggressive"
+            }
+        ];
+    }
+
+    generateMetrics() {
+        const profile = this.currentProfile;
+        return {
+            reactionTime: profile.reactionTime.min + Math.random() * (profile.reactionTime.max - profile.reactionTime.min),
+            accuracy: profile.accuracy + (Math.random() * 0.1 - 0.05),
+            movementPattern: profile.movement,
+            inputVariance: Math.random() * 0.15
+        };
+    }
+
+    generatePatterns() {
+        const patterns = [
+            "linear_clean",
+            "micro_adjustments",
+            "circular_smooth",
+            "human_variance"
+        ];
+        return patterns[Math.floor(Math.random() * patterns.length)];
+    }
+
+    generateChecksum() {
+        const crypto = require('crypto');
+        const data = this.sessionId + this.currentProfile.name + Date.now();
+        return crypto.createHash('sha3-256').update(data).digest('hex');
+    }
+}
+
+const stealthSystem = new StealthShield();
+$done({ body: stealthSystem.process($response.body) });
