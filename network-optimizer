@@ -1,61 +1,99 @@
-// network-optimizer.js
-const NETWORK_MODES = {
-    DEFAULT: {
+// quantum-network-optimizer.js
+const NETWORK_PROFILES = {
+    BALANCED: {
         protocol: "hybrid",
-        pingOptimization: true,
-        packetLossProtection: true,
-        compression: false
+        compression: "medium",
+        resendThreshold: 150,
+        jitterBuffer: 20
     },
     COMPETITIVE: {
         protocol: "udp_priority",
-        pingOptimization: true,
-        packetLossProtection: false,
-        compression: true
+        compression: "high",
+        resendThreshold: 100,
+        jitterBuffer: 10
+    },
+    SAVER: {
+        protocol: "tcp",
+        compression: "low",
+        resendThreshold: 200,
+        jitterBuffer: 30
     }
 };
 
-function optimizeNetwork(body) {
-    try {
-        let data = typeof body === 'string' ? JSON.parse(body) : body;
-        const timestamp = Date.now();
-        const securityToken = "NET_" + timestamp.toString(36);
+class QuantumNetworkOptimizer {
+    constructor() {
+        this.currentProfile = NETWORK_PROFILES.BALANCED;
+        this.securityToken = "QNET_" + Date.now().toString(36);
+        this.lastProfileSwitch = Date.now();
+    }
+
+    process(body) {
+        try {
+            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            
+            // Tự động chọn profile tối ưu
+            this.autoSelectProfile(data.networkMetrics);
+            
+            // Áp dụng tối ưu mạng
+            data.network = {
+                ...this.currentProfile,
+                version: "4.0",
+                timestamp: Date.now(),
+                security: {
+                    token: this.securityToken,
+                    checksum: this.generateChecksum(),
+                    behavior: this.getNetworkBehavior()
+                },
+                advanced: {
+                    packetAggregation: true,
+                    errorCorrection: "adaptive",
+                    latencySmoothing: true,
+                    routeOptimization: "ai_based"
+                }
+            };
+            
+            return typeof body === 'string' ? JSON.stringify(data) : data;
+        } catch (e) {
+            console.error("[QUANTUM NET] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    autoSelectProfile(metrics) {
+        if (!metrics) return;
         
-        // Auto-select mode based on time
-        const now = new Date();
-        const isPeakHour = (now.getHours() >= 18 || now.getHours() <= 23);
-        const currentMode = isPeakHour ? NETWORK_MODES.COMPETITIVE : NETWORK_MODES.DEFAULT;
+        // Không chuyển đổi quá thường xuyên
+        if (Date.now() - this.lastProfileSwitch < 5000) return;
+        
+        // Chế độ cạnh tranh khi ping thấp
+        if (metrics.ping < 50 && metrics.inMatch) {
+            this.currentProfile = NETWORK_PROFILES.COMPETITIVE;
+            this.lastProfileSwitch = Date.now();
+            return;
+        }
+        
+        // Chế độ tiết kiệm khi dùng dữ liệu di động
+        if (metrics.isCellular || metrics.ping > 150) {
+            this.currentProfile = NETWORK_PROFILES.SAVER;
+            this.lastProfileSwitch = Date.now();
+            return;
+        }
+        
+        // Mặc định chế độ cân bằng
+        this.currentProfile = NETWORK_PROFILES.BALANCED;
+    }
 
-        data.network = {
-            ...currentMode,
-            version: "2.3",
-            timestamp: timestamp,
-            security: {
-                token: securityToken,
-                checksum: generateNetworkChecksum(securityToken),
-                behavior: getNetworkBehavior()
-            },
-            optimization: {
-                routeSelection: "auto_best",
-                packetResend: currentMode.protocol === "udp_priority" ? 1 : 3,
-                jitterBuffer: 20 // ms
-            }
-        };
+    generateChecksum() {
+        const crypto = require('crypto');
+        const data = this.securityToken + this.currentProfile.protocol;
+        return crypto.createHash('md5').update(data).digest('hex');
+    }
 
-        return typeof body === 'string' ? JSON.stringify(data) : data;
-    } catch (e) {
-        console.error("[NETWORK] Error:", e.message.substring(0, 20));
-        return body;
+    getNetworkBehavior() {
+        const behaviors = ["normal", "gamer", "streamer", "saver"];
+        return behaviors[Math.floor(Math.random() * behaviors.length)];
     }
 }
 
-function generateNetworkChecksum(token) {
-    const crypto = require('crypto');
-    return crypto.createHash('md5').update(token).digest('hex');
-}
-
-function getNetworkBehavior() {
-    const behaviors = ["normal", "gamer", "streamer", "competitive"];
-    return behaviors[Math.floor(Math.random() * behaviors.length)];
-}
-
-$done({ body: optimizeNetwork($response.body) });
+const networkOptimizer = new QuantumNetworkOptimizer();
+$done({ body: networkOptimizer.process($response.body) });
