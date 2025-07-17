@@ -1,75 +1,112 @@
-// performance-manager.js
-class PerformanceManager {
+// performance-master.js
+class PerformanceMaster {
     constructor() {
         this.modules = {
-            aim: { active: true, priority: 1, cpuUsage: 0 },
-            recoil: { active: true, priority: 2, cpuUsage: 0 },
-            network: { active: true, priority: 3, cpuUsage: 0 }
+            aim: { active: true, priority: 1, cpuBudget: 0.2 },
+            recoil: { active: true, priority: 2, cpuBudget: 0.15 },
+            network: { active: true, priority: 3, cpuBudget: 0.1 },
+            graphics: { active: true, priority: 4, cpuBudget: 0.25 }
         };
         this.lastAdjustment = Date.now();
+        this.deviceProfile = this.detectDeviceProfile();
     }
 
     process(body) {
         try {
             let data = typeof body === 'string' ? JSON.parse(body) : body;
             
-            // Monitor performance every 5 seconds
+            // Điều chỉnh module mỗi 5 giây
             if (Date.now() - this.lastAdjustment > 5000) {
                 this.adjustModules();
                 this.lastAdjustment = Date.now();
             }
-
-            // Add performance data to response
+            
+            // Thêm dữ liệu hiệu năng vào response
             data.performance = {
                 timestamp: Date.now(),
-                moduleStatus: this.getModuleStatus(),
+                deviceProfile: this.deviceProfile,
+                moduleAllocations: this.getModuleAllocations(),
                 recommendations: this.getRecommendations()
             };
 
             return typeof body === 'string' ? JSON.stringify(data) : data;
         } catch (e) {
-            console.error("[PERF] Error:", e.message.substring(0, 20));
+            console.error("[PERF MASTER] Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
-    adjustModules() {
-        // Simulated performance monitoring
-        const totalCpu = 0.5; // Should get from real monitoring
-        let usedCpu = 0;
+    detectDeviceProfile() {
+        // Giả lập phát hiện thiết bị
+        const ram = $device.ram; // Giả định truy cập RAM
+        const cores = $device.cpuCores;
         
-        // Adjust based on priority
-        Object.values(this.modules)
-            .sort((a, b) => a.priority - b.priority)
-            .forEach(module => {
-                const allowedCpu = Math.min(0.2, totalCpu - usedCpu);
-                module.cpuUsage = allowedCpu;
-                usedCpu += allowedCpu;
-            });
+        if (ram > 6000 && cores > 6) return "high_end";
+        if (ram > 3000 && cores > 4) return "mid_range";
+        return "low_end";
     }
 
-    getModuleStatus() {
+    adjustModules() {
+        // Điều chỉnh dựa trên profile thiết bị
+        switch (this.deviceProfile) {
+            case "high_end":
+                this.modules.aim.cpuBudget = 0.25;
+                this.modules.recoil.cpuBudget = 0.2;
+                this.modules.network.cpuBudget = 0.15;
+                this.modules.graphics.cpuBudget = 0.3;
+                break;
+            case "mid_range":
+                this.modules.aim.cpuBudget = 0.2;
+                this.modules.recoil.cpuBudget = 0.15;
+                this.modules.network.cpuBudget = 0.1;
+                this.modules.graphics.cpuBudget = 0.25;
+                break;
+            case "low_end":
+                this.modules.aim.cpuBudget = 0.15;
+                this.modules.recoil.cpuBudget = 0.1;
+                this.modules.network.cpuBudget = 0.08;
+                this.modules.graphics.cpuBudget = 0.2;
+                // Tắt module không cần thiết
+                this.modules.graphics.active = false;
+                break;
+        }
+    }
+
+    getModuleAllocations() {
         return Object.entries(this.modules).map(([name, config]) => ({
-            name,
+            module: name,
             active: config.active,
-            cpuUsage: config.cpuUsage.toFixed(2)
+            cpuBudget: config.cpuBudget
         }));
     }
 
     getRecommendations() {
+        const totalCpu = Object.values(this.modules)
+            .filter(m => m.active)
+            .reduce((sum, m) => sum + m.cpuBudget, 0);
+        
+        let status = "optimal";
+        if (totalCpu > 0.9) status = "critical";
+        else if (totalCpu > 0.7) status = "high";
+        else if (totalCpu > 0.5) status = "moderate";
+        
         return {
-            suggestedMode: this.getSuggestedMode(),
-            timestamp: Date.now()
+            status,
+            suggestedActions: this.getSuggestedActions(status)
         };
     }
 
-    getSuggestedMode() {
-        const totalCpu = Object.values(this.modules).reduce((sum, m) => sum + m.cpuUsage, 0);
-        if (totalCpu < 0.3) return "high_performance";
-        if (totalCpu < 0.6) return "balanced";
-        return "power_saver";
+    getSuggestedActions(status) {
+        switch (status) {
+            case "critical":
+                return ["disable_graphics", "reduce_aim_budget"];
+            case "high":
+                return ["reduce_graphics_budget"];
+            default:
+                return ["none"];
+        }
     }
 }
 
-const perfManager = new PerformanceManager();
-$done({ body: perfManager.process($response.body) });
+const perfMaster = new PerformanceMaster();
+$done({ body: perfMaster.process($response.body) });
