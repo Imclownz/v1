@@ -1,0 +1,74 @@
+// magnetic-enhancer.js
+class MagneticEnhancer {
+    constructor() {
+        this.enhancementLevel = 1.0;
+        this.lastUpdate = Date.now();
+    }
+
+    process(body) {
+        try {
+            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            
+            // Update enhancement based on combat state
+            this.updateEnhancementLevel(data.gameState);
+            
+            // Apply enhancement to aiming data
+            if (data.aimSystem && data.aimSystem.status && data.aimPosition) {
+                data.aimSystem.status.magneticEnhancement = this.enhancementLevel;
+                
+                // Boost lock strength during critical moments
+                if (this.enhancementLevel > 1.0) {
+                    const boostFactor = this.enhancementLevel - 1.0;
+                    const direction = {
+                        x: data.aimData.lockedTarget.predictedHeadPosition.x - data.aimPosition.x,
+                        y: data.aimData.lockedTarget.predictedHeadPosition.y - data.aimPosition.y,
+                        z: data.aimData.lockedTarget.predictedHeadPosition.z - data.aimPosition.z
+                    };
+                    
+                    data.aimPosition.x += direction.x * boostFactor * 0.5;
+                    data.aimPosition.y += direction.y * boostFactor * 0.5;
+                }
+            }
+            
+            return typeof body === 'string' ? JSON.stringify(data) : data;
+        } catch (e) {
+            console.error("[MAG ENHANCER] Error:", e.message.substring(0, 30));
+            return body;
+        }
+    }
+
+    updateEnhancementLevel(gameState) {
+        // Only update every 500ms
+        if (Date.now() - this.lastUpdate < 500) return;
+        this.lastUpdate = Date.now();
+        
+        if (!gameState) {
+            this.enhancementLevel = 1.0;
+            return;
+        }
+        
+        // Critical enhancement when low health
+        if (gameState.playerHealth < 30) {
+            this.enhancementLevel = 1.8;
+            return;
+        }
+        
+        // Enhanced when in combat with multiple enemies
+        if (gameState.targetsInSight > 1) {
+            this.enhancementLevel = 1.5;
+            return;
+        }
+        
+        // Normal enhancement when aiming
+        if (gameState.isAiming) {
+            this.enhancementLevel = 1.2;
+            return;
+        }
+        
+        // Default level
+        this.enhancementLevel = 1.0;
+    }
+}
+
+const enhancer = new MagneticEnhancer();
+$done({ body: enhancer.process($response.body) });
