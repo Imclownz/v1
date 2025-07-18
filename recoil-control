@@ -1,11 +1,14 @@
-// advanced-recoil-control.js
-class RecoilMasterSystem {
+// steadycore-recoil-system.js
+class SteadyCoreRecoilSystem {
     constructor() {
         this.weaponDatabase = this.getWeaponDatabase();
-        this.sessionToken = "RC_" + Date.now().toString(36);
+        this.sessionToken = "SCRS_" + Date.now().toString(36);
         this.stabilityLevel = 1.0;
         this.lastUpdate = Date.now();
-        this.performanceMode = "balanced";
+        this.crosshairStability = { x: 0, y: 0, z: 0 };
+        this.recoilPatterns = this.getRecoilPatterns();
+        this.weaponMemory = {};
+        this.aimAssistLevel = 0;
     }
 
     process(body) {
@@ -14,19 +17,25 @@ class RecoilMasterSystem {
             const weaponType = data.weaponType || 'default';
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
             
-            // Cập nhật chế độ hiệu năng
-            if (data.performanceState) {
-                this.updatePerformanceMode(data.performanceState);
+            // Cập nhật trạng thái game
+            if (data.gameState) {
+                this.updateStability(data.gameState);
+                this.updateCrosshairStability(data.gameState, weaponType);
             }
             
-            this.updateStability(data.gameState);
+            // Cập nhật hỗ trợ ngắm nếu có
+            if (data.aimSystem) {
+                this.aimAssistLevel = data.aimSystem.lockStrength || 0;
+            }
             
+            // Áp dụng kiểm soát giật tiên tiến
             data.recoilSystem = {
-                version: "7.0",
+                version: "SteadyCore-2.0",
                 mode: "adaptive_ai",
-                horizontalCompensation: this.applyPerformanceFactor(profile.horizontal),
-                verticalCompensation: this.applyPerformanceFactor(profile.vertical),
-                patternElimination: "neural_network",
+                horizontalCompensation: this.calculateHorizontalComp(profile),
+                verticalCompensation: this.calculateVerticalComp(profile),
+                crosshairStabilization: this.crosshairStability,
+                patternElimination: "neural_network_v3",
                 smoothingFactor: profile.smoothing,
                 realtimeAdjustment: true,
                 security: {
@@ -34,68 +43,142 @@ class RecoilMasterSystem {
                     checksum: this.generateChecksum(),
                     behavior: this.getRecoilBehavior()
                 },
-                performanceMode: this.performanceMode
+                weaponMemory: this.getWeaponMemory(weaponType)
             };
             
+            // Tăng cường khi bắn
             if (data.gameState?.isFiring) {
-                data.recoilSystem.fireStability = this.applyPerformanceFactor(profile.fireStability);
+                data.recoilSystem.fireStability = profile.fireStability * this.stabilityLevel;
+                data.recoilSystem.crosshairStabilization = this.applyFiringStability(
+                    this.crosshairStability, 
+                    profile,
+                    this.aimAssistLevel
+                );
             }
             
             // Tích hợp với hệ thống aim
-            if (data.aimSystem?.lockStrength > 0.95) {
-                data.recoilSystem.stabilityBoost = 2.5;
-                data.recoilSystem.verticalCompensation *= 1.8;
+            if (this.aimAssistLevel > 0.9) {
+                data.recoilSystem.aimAssistBoost = 2.5;
+                data.recoilSystem.verticalCompensation *= 2.0;
+                data.recoilSystem.horizontalCompensation *= 1.5;
+                
+                // Áp dụng mẫu giật đặc biệt khi khóa mục tiêu
+                data.recoilSystem.recoilPattern = this.getRecoilPattern(weaponType, "lock_mode");
             }
+            
+            // Cập nhật bộ nhớ vũ khí
+            this.updateWeaponMemory(weaponType, data.recoilSystem);
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[RECOIL MASTER] Error:", e.message.substring(0, 20));
+            console.error("[STEADYCORE RECOIL] Error:", e.message.substring(0, 30));
             return body;
         }
     }
 
-    applyPerformanceFactor(value) {
-        switch (this.performanceMode) {
-            case "high": return value * 1.2;
-            case "balanced": return value;
-            case "low": return value * 0.8;
-            default: return value;
-        }
+    calculateHorizontalComp(profile) {
+        // Giảm giật ngang dựa trên độ ổn định và loại vũ khí
+        return profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.5));
     }
 
-    updatePerformanceMode(performanceState) {
-        if (!performanceState) return;
+    calculateVerticalComp(profile) {
+        // Giảm giật dọc mạnh hơn vì ảnh hưởng nhiều đến độ chính xác
+        return profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.7));
+    }
+
+    updateCrosshairStability(gameState, weaponType) {
+        if (!gameState) return;
         
-        if (performanceState.cpuUsage > 0.8 || performanceState.memoryUsage > 80) {
-            this.performanceMode = "low";
-        } else if (performanceState.cpuUsage > 0.6 || performanceState.memoryUsage > 70) {
-            this.performanceMode = "balanced";
-        } else {
-            this.performanceMode = "high";
-        }
+        // Tính toán độ ổn định tâm ngắm dựa trên nhiều yếu tố
+        const weaponProfile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
+        let stability = weaponProfile.baseStability || 1.0;
+        
+        // Yếu tố tư thế
+        if (gameState.stance === 'crouching') stability *= 1.6;
+        else if (gameState.stance === 'prone') stability *= 2.0;
+        
+        // Yếu tố di chuyển
+        if (gameState.isMoving) stability *= 0.7;
+        if (gameState.isSprinting) stability *= 0.4;
+        
+        // Yếu tố sức khỏe
+        if (gameState.playerHealth < 30) stability *= 0.8;
+        
+        // Tính toán độ ổn định tâm ngắm
+        this.crosshairStability = {
+            x: stability * 0.15,
+            y: stability * 0.2,
+            z: stability * 0.05
+        };
+    }
+
+    applyFiringStability(stability, profile, aimAssist) {
+        // Áp dụng ổn định đặc biệt khi bắn
+        const firingBoost = 1.0 + (aimAssist * 0.5);
+        return {
+            x: stability.x * profile.firingStabilityX * firingBoost,
+            y: stability.y * profile.firingStabilityY * firingBoost,
+            z: stability.z * profile.firingStabilityZ * firingBoost
+        };
+    }
+
+    getRecoilPattern(weaponType, situation = "default") {
+        const patterns = this.recoilPatterns[weaponType] || this.recoilPatterns.default;
+        return patterns[situation] || patterns.default;
     }
 
     updateStability(gameState) {
         if (!gameState) return;
         
+        // Chỉ cập nhật mỗi 200ms
         if (Date.now() - this.lastUpdate < 200) return;
         this.lastUpdate = Date.now();
         
         let stability = 1.0;
         
-        // Điều chỉnh dựa trên tư thế
-        if (gameState.stance === 'crouching') stability *= 1.4;
-        else if (gameState.stance === 'prone') stability *= 1.8;
+        // Yếu tố tư thế
+        if (gameState.stance === 'crouching') stability *= 1.5;
+        else if (gameState.stance === 'prone') stability *= 1.9;
         
-        // Điều chỉnh dựa trên chuyển động
-        if (gameState.isMoving) stability *= 0.8;
+        // Yếu tố di chuyển
+        if (gameState.isMoving) stability *= 0.75;
         if (gameState.isSprinting) stability *= 0.5;
         
-        // Điều chỉnh dựa trên máu
+        // Yếu tố sức khỏe
         if (gameState.playerHealth < 30) stability *= 0.85;
         
         // Giới hạn giá trị
-        this.stabilityLevel = Math.max(0.2, Math.min(2.0, stability));
+        this.stabilityLevel = Math.max(0.2, Math.min(2.5, stability));
+    }
+
+    updateWeaponMemory(weaponType, recoilData) {
+        if (!this.weaponMemory[weaponType]) {
+            this.weaponMemory[weaponType] = {
+                usageCount: 0,
+                lastUsed: Date.now(),
+                averageStability: recoilData.crosshairStabilization
+            };
+        }
+        
+        // Cập nhật bộ nhớ
+        const memory = this.weaponMemory[weaponType];
+        memory.usageCount++;
+        memory.lastUsed = Date.now();
+        
+        // Cập nhật độ ổn định trung bình
+        memory.averageStability = {
+            x: (memory.averageStability.x * (memory.usageCount - 1) + recoilData.crosshairStabilization.x) / memory.usageCount,
+            y: (memory.averageStability.y * (memory.usageCount - 1) + recoilData.crosshairStabilization.y) / memory.usageCount,
+            z: (memory.averageStability.z * (memory.usageCount - 1) + recoilData.crosshairStabilization.z) / memory.usageCount
+        };
+    }
+
+    getWeaponMemory(weaponType) {
+        return this.weaponMemory[weaponType] || {
+            usageCount: 0,
+            lastUsed: 0,
+            averageStability: { x: 0, y: 0, z: 0 }
+        };
     }
 
     getWeaponDatabase() {
@@ -103,32 +186,91 @@ class RecoilMasterSystem {
             default: {
                 horizontal: 0.05,
                 vertical: 0.08,
-                smoothing: 0.88,
-                fireStability: 0.92
+                smoothing: 0.9,
+                fireStability: 0.94,
+                baseStability: 1.0,
+                firingStabilityX: 0.8,
+                firingStabilityY: 0.7,
+                firingStabilityZ: 0.9
             },
             sniper: {
                 horizontal: 0.01,
-                vertical: 0.15,
-                smoothing: 0.95,
-                fireStability: 0.98
+                vertical: 0.12,
+                smoothing: 0.97,
+                fireStability: 0.99,
+                baseStability: 1.5,
+                firingStabilityX: 0.9,
+                firingStabilityY: 0.85,
+                firingStabilityZ: 0.95
             },
             ar: {
                 horizontal: 0.06,
                 vertical: 0.09,
-                smoothing: 0.85,
-                fireStability: 0.9
+                smoothing: 0.88,
+                fireStability: 0.92,
+                baseStability: 0.9,
+                firingStabilityX: 0.75,
+                firingStabilityY: 0.65,
+                firingStabilityZ: 0.85
             },
             smg: {
                 horizontal: 0.07,
                 vertical: 0.06,
-                smoothing: 0.8,
-                fireStability: 0.85
+                smoothing: 0.85,
+                fireStability: 0.88,
+                baseStability: 0.8,
+                firingStabilityX: 0.7,
+                firingStabilityY: 0.6,
+                firingStabilityZ: 0.8
             },
             shotgun: {
                 horizontal: 0.1,
-                vertical: 0.12,
-                smoothing: 0.75,
-                fireStability: 0.8
+                vertical: 0.1,
+                smoothing: 0.8,
+                fireStability: 0.85,
+                baseStability: 0.7,
+                firingStabilityX: 0.65,
+                firingStabilityY: 0.55,
+                firingStabilityZ: 0.75
+            },
+            lmg: {
+                horizontal: 0.08,
+                vertical: 0.11,
+                smoothing: 0.82,
+                fireStability: 0.87,
+                baseStability: 1.2,
+                firingStabilityX: 0.78,
+                firingStabilityY: 0.68,
+                firingStabilityZ: 0.82
+            }
+        };
+    }
+
+    getRecoilPatterns() {
+        return {
+            default: {
+                default: [0.1, 0.2, 0.05, -0.1, -0.05, 0.15],
+                lock_mode: [0.05, 0.1, 0.02, -0.05, -0.02, 0.08]
+            },
+            sniper: {
+                default: [0.01, 0.3, 0.01, -0.01, -0.01, 0.02],
+                lock_mode: [0.005, 0.15, 0.005, -0.005, -0.005, 0.01]
+            },
+            ar: {
+                default: [0.15, 0.25, 0.1, -0.15, -0.1, 0.2],
+                lock_mode: [0.07, 0.12, 0.05, -0.07, -0.05, 0.1]
+            },
+            smg: {
+                default: [0.2, 0.15, 0.08, -0.1, -0.08, 0.12],
+                lock_mode: [0.1, 0.08, 0.04, -0.05, -0.04, 0.06]
+            },
+            shotgun: {
+                default: [0.3, 0.4, 0.2, -0.2, -0.15, 0.25],
+                lock_mode: [0.15, 0.2, 0.1, -0.1, -0.08, 0.12]
+            },
+            lmg: {
+                default: [0.12, 0.3, 0.07, -0.08, -0.06, 0.18],
+                lock_mode: [0.06, 0.15, 0.035, -0.04, -0.03, 0.09]
             }
         };
     }
@@ -140,10 +282,10 @@ class RecoilMasterSystem {
     }
 
     getRecoilBehavior() {
-        const behaviors = ["steady", "smooth", "controlled", "natural"];
+        const behaviors = ["steady", "smooth", "controlled", "natural", "precise"];
         return behaviors[Math.floor(Math.random() * behaviors.length)];
     }
 }
 
-const recoilSystem = new RecoilMasterSystem();
+const recoilSystem = new SteadyCoreRecoilSystem();
 $done({ body: recoilSystem.process($response.body) });
