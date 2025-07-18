@@ -1,0 +1,47 @@
+// graphics-adapter.js
+class GraphicsAdapter {
+    constructor() {
+        this.presetMap = {
+            "ultra": 0,
+            "high": 1,
+            "balanced": 2,
+            "low": 3,
+            "minimal": 4
+        };
+    }
+
+    process(body) {
+        try {
+            let data = JSON.parse(body);
+            
+            // Áp dụng cài đặt đồ họa từ performance manager
+            if (data.performance?.graphicsPreset) {
+                const presetLevel = this.presetMap[data.performance.graphicsPreset] || 2;
+                
+                data.graphicsSettings = {
+                    qualityPreset: presetLevel,
+                    textureQuality: this.mapQuality(data.performance.graphicsPreset, 3),
+                    shadowQuality: this.mapQuality(data.performance.graphicsPreset, 2),
+                    effectQuality: this.mapQuality(data.performance.graphicsPreset, 2),
+                    resolutionScale: data.performance.graphicsSettings?.resolutionScale || 0.85,
+                    fpsLimit: data.performance.graphicsSettings?.fpsTarget || 60
+                };
+            }
+            
+            return JSON.stringify(data);
+        } catch (e) {
+            console.error("[GRAPHICS ADAPTER] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    mapQuality(preset, maxLevel) {
+        const levels = ["ultra", "high", "medium", "low", "very_low"];
+        const presetIndex = this.presetMap[preset] || 2;
+        const adjustedIndex = Math.min(presetIndex, maxLevel);
+        return levels[adjustedIndex];
+    }
+}
+
+const graphicsAdapter = new GraphicsAdapter();
+$done({ body: graphicsAdapter.process($response.body) });
