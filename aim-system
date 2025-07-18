@@ -29,6 +29,19 @@ class PerfectLockUltimateSystem {
                 if (lockedTarget) {
                     data.aimPosition = this.calculatePerfectAim(lockedTarget, data.playerPosition, data.currentWeapon);
                     data.aimPosition = this.applyPerfectLock(data.aimPosition, data.currentAimPosition, lockedTarget.distance);
+            if (data.recoilSystem && data.recoilSystem.crosshairStabilization) {
+    // Tăng độ ổn định khi khóa mục tiêu
+    if (data.aimSystem.lockStrength > 0.95) {
+        data.aimPosition = {
+            x: data.aimPosition.x * data.recoilSystem.crosshairStabilization.x * 1.5,
+            y: data.aimPosition.y * data.recoilSystem.crosshairStabilization.y * 1.5,
+            z: data.aimPosition.z * data.recoilSystem.crosshairStabilization.z * 1.2
+        };
+    }
+    
+    // Gửi thông tin về hệ thống recoil
+    data.recoilSystem.aimLockStrength = data.aimSystem.lockStrength;
+}
                     
                     // Tính toán đường đạn dẫn đường chỉ ở chế độ hiệu năng cao
                     if (this.performanceMode === "high") {
