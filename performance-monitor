@@ -1,5 +1,5 @@
-// smart-performance-manager.js
-class SmartPerformanceManager {
+// ultimate-performance-manager.js
+class UltimatePerformanceManager {
     constructor() {
         this.modules = {
             aim: { active: true, priority: 1, cpuBudget: 0.2 },
@@ -8,44 +8,100 @@ class SmartPerformanceManager {
             graphics: { active: true, priority: 4, cpuBudget: 0.25 }
         };
         this.lastAdjustment = Date.now();
-        this.deviceProfile = this.detectDeviceProfile();
-        this.gameState = null;
+        this.deviceProfile = "unknown";
         this.performanceStats = {
             avgCpu: 0,
             avgMemory: 0,
+            avgFps: 0,
+            avgTemp: 0,
             samples: 0
         };
+        this.graphicsPresets = {
+            ultra: {
+                textureQuality: "ultra",
+                shadowQuality: "high",
+                effectsQuality: "high",
+                resolutionScale: 1.0,
+                fpsTarget: 120
+            },
+            high: {
+                textureQuality: "high",
+                shadowQuality: "medium",
+                effectsQuality: "medium",
+                resolutionScale: 0.9,
+                fpsTarget: 90
+            },
+            balanced: {
+                textureQuality: "medium",
+                shadowQuality: "low",
+                effectsQuality: "medium",
+                resolutionScale: 0.85,
+                fpsTarget: 60
+            },
+            low: {
+                textureQuality: "low",
+                shadowQuality: "off",
+                effectsQuality: "low",
+                resolutionScale: 0.75,
+                fpsTarget: 45
+            },
+            minimal: {
+                textureQuality: "very_low",
+                shadowQuality: "off",
+                effectsQuality: "off",
+                resolutionScale: 0.6,
+                fpsTarget: 30
+            }
+        };
+        this.currentGraphicsPreset = "balanced";
+        this.thermalThrottleDetected = false;
     }
 
     process(body) {
         try {
             let data = JSON.parse(body);
-            this.gameState = data.gameState || this.gameState;
             
-            // Cập nhật thống kê hiệu năng
-            this.updatePerformanceStats(data.performanceState);
-            
-            // Điều chỉnh module mỗi 5 giây hoặc khi có thay đổi lớn
-            if (Date.now() - this.lastAdjustment > 5000 || 
-                (data.performanceState && data.performanceState.cpuUsage > 0.8)) {
-                this.adjustModules();
-                this.lastAdjustment = Date.now();
+            // Cập nhật trạng thái game nếu có
+            if (data.gameState) {
+                this.gameState = data.gameState;
             }
             
+            // Cập nhật thống kê hiệu năng
+            if (data.performanceState) {
+                this.updatePerformanceStats(data.performanceState);
+            }
+            
+            // Điều chỉnh hệ thống mỗi 5 giây hoặc khi có vấn đề hiệu năng
+            const now = Date.now();
+            if (now - this.lastAdjustment > 5000 || 
+                (data.performanceState && (data.performanceState.cpuUsage > 0.85 || data.performanceState.memoryUsage > 85))) {
+                this.adjustSystem();
+                this.lastAdjustment = now;
+            }
+            
+            // Áp dụng cài đặt đồ họa
+            if (data.graphicsSettings) {
+                data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
+            }
+            
+            // Thêm dữ liệu hiệu năng vào response
             data.performance = {
-                timestamp: Date.now(),
+                timestamp: now,
                 deviceProfile: this.deviceProfile,
+                graphicsPreset: this.currentGraphicsPreset,
                 moduleAllocations: this.getModuleAllocations(),
                 recommendations: this.getRecommendations(),
                 stats: {
                     avgCpu: this.performanceStats.avgCpu,
-                    avgMemory: this.performanceStats.avgMemory
+                    avgMemory: this.performanceStats.avgMemory,
+                    avgFps: this.performanceStats.avgFps,
+                    avgTemp: this.performanceStats.avgTemp
                 }
             };
 
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[PERF MANAGER] Error:", e.message.substring(0, 20));
+            console.error("[ULTIMATE PERF] Error:", e.message.substring(0, 20));
             return body;
         }
     }
@@ -53,28 +109,57 @@ class SmartPerformanceManager {
     updatePerformanceStats(performanceState) {
         if (!performanceState) return;
         
-        // Cập nhật trung bình di động
-        const weight = 0.2; // Hệ số làm mịn
-        this.performanceStats.avgCpu = this.performanceStats.avgCpu * (1 - weight) + performanceState.cpuUsage * weight;
-        this.performanceStats.avgMemory = this.performanceStats.avgMemory * (1 - weight) + performanceState.memoryUsage * weight;
-        this.performanceStats.samples++;
-    }
-
-    detectDeviceProfile() {
-        // Phát hiện profile thiết bị dựa trên thông số hiệu năng
-        if (this.performanceStats.samples < 5) return "unknown";
+        // Trọng số cho trung bình di động
+        const weight = 0.3;
         
-        if (this.performanceStats.avgCpu < 0.4 && this.performanceStats.avgMemory < 50) {
-            return "high_end";
-        } else if (this.performanceStats.avgCpu < 0.6 && this.performanceStats.avgMemory < 70) {
-            return "mid_range";
-        } else {
-            return "low_end";
+        // Cập nhật trung bình di động
+        this.performanceStats.avgCpu = this.calculateMovingAverage(
+            this.performanceStats.avgCpu, performanceState.cpuUsage, weight
+        );
+        this.performanceStats.avgMemory = this.calculateMovingAverage(
+            this.performanceStats.avgMemory, performanceState.memoryUsage, weight
+        );
+        this.performanceStats.avgFps = this.calculateMovingAverage(
+            this.performanceStats.avgFps, performanceState.fps, weight
+        );
+        
+        // Cập nhật nhiệt độ nếu có
+        if (performanceState.temperature) {
+            this.performanceStats.avgTemp = this.calculateMovingAverage(
+                this.performanceStats.avgTemp, performanceState.temperature, weight
+            );
+        }
+        
+        this.performanceStats.samples++;
+        
+        // Phát hiện profile thiết bị sau 5 mẫu
+        if (this.performanceStats.samples >= 5 && this.deviceProfile === "unknown") {
+            this.detectDeviceProfile();
         }
     }
 
-    adjustModules() {
-        // Điều chỉnh dựa trên profile thiết bị
+    calculateMovingAverage(current, newValue, weight) {
+        return current * (1 - weight) + newValue * weight;
+    }
+
+    detectDeviceProfile() {
+        if (this.performanceStats.avgCpu < 0.4 && this.performanceStats.avgMemory < 50) {
+            this.deviceProfile = "high_end";
+            this.currentGraphicsPreset = "high";
+        } else if (this.performanceStats.avgCpu < 0.6 && this.performanceStats.avgMemory < 70) {
+            this.deviceProfile = "mid_range";
+            this.currentGraphicsPreset = "balanced";
+        } else {
+            this.deviceProfile = "low_end";
+            this.currentGraphicsPreset = "low";
+        }
+    }
+
+    adjustSystem() {
+        // Điều chỉnh đồ họa dựa trên hiệu năng
+        this.adjustGraphicsQuality();
+        
+        // Điều chỉnh module dựa trên profile thiết bị
         switch (this.deviceProfile) {
             case "high_end":
                 this.setModuleBudgets(0.25, 0.2, 0.15, 0.3);
@@ -84,8 +169,6 @@ class SmartPerformanceManager {
                 break;
             case "low_end":
                 this.setModuleBudgets(0.15, 0.1, 0.08, 0.2);
-                // Tắt module không cần thiết
-                this.modules.graphics.active = false;
                 break;
             default:
                 this.setModuleBudgets(0.2, 0.15, 0.1, 0.25);
@@ -98,10 +181,14 @@ class SmartPerformanceManager {
             this.modules.graphics.cpuBudget = Math.max(0.1, this.modules.graphics.cpuBudget - 0.08);
         }
         
-        // Giảm tải khi hiệu năng thấp
-        if (this.performanceStats.avgCpu > 0.7) {
-            this.modules.graphics.cpuBudget *= 0.7;
-            this.modules.network.cpuBudget *= 0.8;
+        // Giảm tải khi nhiệt độ cao
+        if (this.performanceStats.avgTemp > 45) {
+            this.reduceThermalLoad();
+        }
+        
+        // Tối ưu cho chế độ sinh tồn
+        if (this.gameState?.playerHealth < 30) {
+            this.enableSurvivalMode();
         }
     }
 
@@ -110,6 +197,95 @@ class SmartPerformanceManager {
         this.modules.recoil.cpuBudget = recoil;
         this.modules.network.cpuBudget = network;
         this.modules.graphics.cpuBudget = graphics;
+    }
+
+    adjustGraphicsQuality() {
+        // Tự động giảm đồ họa nếu FPS thấp
+        if (this.performanceStats.avgFps < this.graphicsPresets[this.currentGraphicsPreset].fpsTarget * 0.8) {
+            this.downgradeGraphics();
+        }
+        // Tăng đồ họa nếu FPS ổn định và có tài nguyên
+        else if (this.performanceStats.avgFps > this.graphicsPresets[this.currentGraphicsPreset].fpsTarget * 1.2 && 
+                 this.performanceStats.avgCpu < 0.6) {
+            this.upgradeGraphics();
+        }
+        
+        // Giảm đồ họa khẩn cấp nếu nhiệt độ quá cao
+        if (this.performanceStats.avgTemp > 48 && this.currentGraphicsPreset !== "minimal") {
+            this.currentGraphicsPreset = "minimal";
+            this.thermalThrottleDetected = true;
+        }
+    }
+
+    downgradeGraphics() {
+        const presets = ["ultra", "high", "balanced", "low", "minimal"];
+        const currentIndex = presets.indexOf(this.currentGraphicsPreset);
+        
+        if (currentIndex < presets.length - 1) {
+            this.currentGraphicsPreset = presets[currentIndex + 1];
+        }
+    }
+
+    upgradeGraphics() {
+        const presets = ["ultra", "high", "balanced", "low", "minimal"];
+        const currentIndex = presets.indexOf(this.currentGraphicsPreset);
+        
+        if (currentIndex > 0 && !this.thermalThrottleDetected) {
+            this.currentGraphicsPreset = presets[currentIndex - 1];
+        }
+    }
+
+    applyGraphicsSettings(currentSettings) {
+        // Tạo bản sao của cài đặt đồ họa hiện tại
+        const newSettings = { ...currentSettings };
+        
+        // Áp dụng preset đồ họa
+        const preset = this.graphicsPresets[this.currentGraphicsPreset];
+        
+        // Chỉ áp dụng nếu khác biệt đáng kể
+        if (newSettings.textureQuality !== preset.textureQuality ||
+            newSettings.shadowQuality !== preset.shadowQuality ||
+            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.1) {
+            
+            newSettings.textureQuality = preset.textureQuality;
+            newSettings.shadowQuality = preset.shadowQuality;
+            newSettings.effectsQuality = preset.effectsQuality;
+            newSettings.resolutionScale = preset.resolutionScale;
+            newSettings.fpsTarget = preset.fpsTarget;
+            
+            // Ghi nhật ký thay đổi
+            console.log(`Applying graphics preset: ${this.currentGraphicsPreset}`);
+        }
+        
+        return newSettings;
+    }
+
+    reduceThermalLoad() {
+        // Giảm tải đồ họa
+        this.downgradeGraphics();
+        
+        // Giảm tải CPU cho các module không quan trọng
+        this.modules.graphics.cpuBudget *= 0.7;
+        this.modules.network.cpuBudget *= 0.8;
+        
+        // Tắt các hiệu ứng không cần thiết
+        if (this.gameState) {
+            this.gameState.particleEffects = false;
+            this.gameState.ambientOcclusion = false;
+        }
+    }
+
+    enableSurvivalMode() {
+        // Kích hoạt chế độ ưu tiên sinh tồn
+        this.modules.aim.cpuBudget = Math.min(0.35, this.modules.aim.cpuBudget + 0.1);
+        this.modules.recoil.cpuBudget = Math.min(0.25, this.modules.recoil.cpuBudget + 0.1);
+        
+        // Giảm đồ họa để tiết kiệm tài nguyên
+        this.downgradeGraphics();
+        
+        // Tắt các thành phần đồ họa không cần thiết
+        this.graphicsPresets[this.currentGraphicsPreset].effectsQuality = "off";
+        this.graphicsPresets[this.currentGraphicsPreset].shadowQuality = "off";
     }
 
     getModuleAllocations() {
@@ -121,34 +297,60 @@ class SmartPerformanceManager {
     }
 
     getRecommendations() {
-        const totalCpu = Object.values(this.modules)
-            .filter(m => m.active)
-            .reduce((sum, m) => sum + m.cpuBudget, 0);
+        const recommendations = {
+            status: "optimal",
+            actions: [],
+            details: ""
+        };
         
-        let status = "optimal";
-        let actions = [];
-        
-        if (totalCpu > 0.9 || this.performanceStats.avgCpu > 0.85) {
-            status = "critical";
-            actions = ["reduce_graphics", "disable_non_essential"];
-        } else if (totalCpu > 0.7 || this.performanceStats.avgCpu > 0.7) {
-            status = "high";
-            actions = ["reduce_graphics"];
-        } else if (totalCpu > 0.5 || this.performanceStats.avgCpu > 0.6) {
-            status = "moderate";
-            actions = ["optimize_settings"];
-        } else {
-            status = "optimal";
-            actions = ["none"];
+        // Kiểm tra tải CPU
+        if (this.performanceStats.avgCpu > 0.85) {
+            recommendations.status = "critical";
+            recommendations.actions.push("reduce_graphics", "disable_background_processes");
+            recommendations.details = "CPU usage too high";
+        } 
+        else if (this.performanceStats.avgCpu > 0.7) {
+            recommendations.status = "high";
+            recommendations.actions.push("reduce_graphics");
+            recommendations.details = "High CPU usage";
         }
         
-        return {
-            status,
-            actions,
-            totalCpu: totalCpu.toFixed(2)
-        };
+        // Kiểm tra FPS
+        const targetFps = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
+        if (this.performanceStats.avgFps < targetFps * 0.7) {
+            recommendations.status = "critical";
+            recommendations.actions.push("downgrade_graphics", "close_background_apps");
+            recommendations.details += recommendations.details ? ", Low FPS" : "Low FPS";
+        }
+        else if (this.performanceStats.avgFps < targetFps * 0.9) {
+            if (recommendations.status !== "critical") recommendations.status = "high";
+            recommendations.actions.push("downgrade_graphics");
+            recommendations.details += recommendations.details ? ", Suboptimal FPS" : "Suboptimal FPS";
+        }
+        
+        // Kiểm tra nhiệt độ
+        if (this.performanceStats.avgTemp > 48) {
+            recommendations.status = "critical";
+            recommendations.actions.push("reduce_thermal_load", "enable_cooling");
+            recommendations.details += recommendations.details ? ", High temperature" : "High temperature";
+        }
+        else if (this.performanceStats.avgTemp > 42) {
+            if (recommendations.status !== "critical") recommendations.status = "high";
+            recommendations.actions.push("reduce_performance_load");
+            recommendations.details += recommendations.details ? ", Elevated temperature" : "Elevated temperature";
+        }
+        
+        // Không có vấn đề
+        if (recommendations.actions.length === 0) {
+            recommendations.details = "System is running optimally";
+        }
+        
+        // Loại bỏ các hành động trùng lặp
+        recommendations.actions = [...new Set(recommendations.actions)];
+        
+        return recommendations;
     }
 }
 
-const perfManager = new SmartPerformanceManager();
+const perfManager = new UltimatePerformanceManager();
 $done({ body: perfManager.process($response.body) });
