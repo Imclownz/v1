@@ -1,261 +1,262 @@
-// magnetic-aim-system.js
-const AIM_MODES = {
-    STEALTH: {
-        lockStrength: 0.85,
-        humanizer: 0.1,
-        predictionConfidence: 0.95,
-        cpuLimit: 0.15
-    },
-    PRECISION: {
-        lockStrength: 0.95,
-        humanizer: 0.05,
-        predictionConfidence: 0.99,
-        cpuLimit: 0.25
-    },
-    AGGRESSIVE: {
-        lockStrength: 0.99,
-        humanizer: 0.01,
-        predictionConfidence: 0.999,
-        cpuLimit: 0.35
-    }
-};
-
-class MagneticAimSystem {
+// perfectlock-ultimate.js
+class PerfectLockUltimateSystem {
     constructor() {
-        this.currentMode = AIM_MODES.PRECISION;
-        this.securityToken = "MAG_" + Math.random().toString(36).substring(2, 12) + "_" + Date.now().toString(36);
-        this.targetCache = {};
-        this.lockedTargetId = null;
-        this.aimPositionHistory = [];
+        this.lockStrength = 0.99;
+        this.targetHistory = new Map();
+        this.sessionToken = `PLOCK_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
         this.weaponProfiles = this.getWeaponProfiles();
+        this.ballisticCalculator = new BallisticCalculator();
+        this.lastLockTime = 0;
+        this.performanceMode = "balanced";
+        this.aimPredictionLevel = 3;
     }
 
     process(body) {
         try {
-            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            const data = JSON.parse(body);
             
-            // Auto-select mode based on combat state
-            this.autoSelectMode(data.gameState);
+            // Cập nhật chế độ hiệu năng
+            this.updatePerformanceMode(data.performanceState);
             
-            // Process targets if available
+            // Cập nhật dữ liệu trò chơi
+            if (data.gameState) this.updateGameState(data.gameState);
+            
+            // Xử lý khi có mục tiêu
             if (data.targets && data.targets.length > 0) {
-                // Enhance targets with additional data
-                const enhancedTargets = data.targets.map(target => 
-                    this.enhanceTarget(target, data.playerPosition, data.currentWeapon)
-                );
+                const enhancedTargets = this.enhanceTargets(data.targets, data.playerPosition, data.currentWeapon);
+                const lockedTarget = this.selectAndLockTarget(enhancedTargets);
                 
-                // Select and lock target
-                const bestTarget = this.selectAndLockTarget(enhancedTargets);
-                
-                if (bestTarget) {
-                    // Calculate perfect aim position
-                    data.aimPosition = this.calculatePerfectAimPosition(
-                        bestTarget, 
-                        data.playerPosition, 
-                        data.currentWeapon
-                    );
+                if (lockedTarget) {
+                    data.aimPosition = this.calculatePerfectAim(lockedTarget, data.playerPosition, data.currentWeapon);
+                    data.aimPosition = this.applyPerfectLock(data.aimPosition, data.currentAimPosition, lockedTarget.distance);
                     
-                    // Apply magnetic lock effect
-                    data.aimPosition = this.applyMagneticLock(
-                        data.aimPosition,
-                        data.currentAimPosition,
-                        bestTarget.distance
-                    );
+                    // Tính toán đường đạn dẫn đường chỉ ở chế độ hiệu năng cao
+                    if (this.performanceMode === "high") {
+                        data.bulletTrajectory = this.calculateGuidedTrajectory(
+                            data.playerPosition,
+                            data.aimPosition,
+                            lockedTarget,
+                            data.currentWeapon
+                        );
+                    }
                     
-                    // Store for next frame
-                    this.aimPositionHistory.push({
-                        position: data.aimPosition,
-                        timestamp: Date.now()
-                    });
+                    // Đánh dấu thời gian khóa cuối cùng
+                    this.lastLockTime = Date.now();
                 }
                 
                 data.aimData = {
                     targets: enhancedTargets,
-                    lockedTarget: bestTarget,
-                    weaponProfile: this.weaponProfiles[data.currentWeapon] || this.weaponProfiles.default
+                    lockedTarget,
+                    lockStrength: this.lockStrength,
+                    predictionLevel: this.aimPredictionLevel
                 };
             }
             
-            // Add system metadata
+            // Thêm metadata hệ thống
             data.aimSystem = this.getSystemMetadata();
             
-            return typeof body === 'string' ? JSON.stringify(data) : data;
+            return JSON.stringify(data);
         } catch (e) {
-            console.error("[MAGNETIC AIM] Error:", e.message.substring(0, 30));
+            console.error("[PERFECTLOCK ULTIMATE] Error:", e.message.substring(0, 30));
             return body;
         }
     }
 
-    autoSelectMode(gameState) {
-        // Aggressive mode during combat
-        if (gameState && gameState.isInCombat && gameState.targetsInSight > 0) {
-            this.currentMode = AIM_MODES.AGGRESSIVE;
-            return;
-        }
+    updatePerformanceMode(performanceState) {
+        if (!performanceState) return;
         
-        // Precision mode when aiming down sights
-        if (gameState && gameState.isAiming) {
-            this.currentMode = AIM_MODES.PRECISION;
-            return;
+        // Tự động điều chỉnh chế độ hiệu năng
+        if (performanceState.cpuUsage > 0.8 || performanceState.memoryUsage > 80) {
+            this.performanceMode = "low";
+            this.aimPredictionLevel = 1;
+        } else if (performanceState.cpuUsage > 0.6 || performanceState.memoryUsage > 70) {
+            this.performanceMode = "balanced";
+            this.aimPredictionLevel = 2;
+        } else {
+            this.performanceMode = "high";
+            this.aimPredictionLevel = 3;
         }
-        
-        // Default to stealth mode
-        this.currentMode = AIM_MODES.STEALTH;
     }
 
-    enhanceTarget(target, playerPosition, weaponType) {
-        // Calculate distance to target
-        target.distance = this.calculateDistance(playerPosition, target.position);
-        
-        // Calculate movement vector
-        target.movement = this.calculateMovementVector(target);
-        
-        // Calculate bullet travel time
-        const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
-        target.bulletTravelTime = target.distance / weaponProfile.bulletVelocity;
-        
-        // Predict future head position
-        target.predictedHeadPosition = this.predictHeadPosition(target);
-        
-        return target;
-    }
-
-    calculateDistance(pos1, pos2) {
-        return Math.sqrt(
-            Math.pow(pos2.x - pos1.x, 2) + 
-            Math.pow(pos2.y - pos1.y, 2) + 
-            Math.pow(pos2.z - pos1.z, 2)
-        );
+    enhanceTargets(targets, playerPosition, weaponType) {
+        return targets.map(target => {
+            // Tính khoảng cách nâng cao
+            const distance = this.calculateDistance(playerPosition, target.position);
+            
+            // Tính toán thời gian đạn bay
+            const bulletSpeed = this.weaponProfiles[weaponType]?.bulletVelocity || 400;
+            const travelTime = distance / bulletSpeed;
+            
+            // Chỉ tính toán chuyển động phức tạp ở chế độ hiệu năng cao
+            let movementVector = { x: 0, y: 0, z: 0 };
+            if (this.aimPredictionLevel > 1) {
+                movementVector = this.calculateMovementVector(target);
+            }
+            
+            return {
+                ...target,
+                distance,
+                movement: movementVector,
+                travelTime,
+                predictedHeadPosition: this.predictHeadPosition(target, travelTime)
+            };
+        });
     }
 
     calculateMovementVector(target) {
-        if (!this.targetCache[target.id]) {
-            this.targetCache[target.id] = {
-                position: target.position,
-                timestamp: Date.now()
-            };
+        const now = Date.now();
+        
+        if (!this.targetHistory.has(target.id)) {
+            this.targetHistory.set(target.id, {
+                positions: [target.position],
+                timestamps: [now]
+            });
             return { x: 0, y: 0, z: 0 };
         }
         
-        const last = this.targetCache[target.id];
-        const timeDelta = (Date.now() - last.timestamp) / 1000;
+        const history = this.targetHistory.get(target.id);
+        history.positions.push(target.position);
+        history.timestamps.push(now);
         
-        // Update cache
-        this.targetCache[target.id] = {
-            position: target.position,
-            timestamp: Date.now()
-        };
+        // Giữ lịch sử tùy theo cấp độ dự đoán
+        const maxHistory = this.aimPredictionLevel + 2;
+        if (history.positions.length > maxHistory) {
+            history.positions.shift();
+            history.timestamps.shift();
+        }
         
-        return {
-            x: (target.position.x - last.position.x) / timeDelta,
-            y: (target.position.y - last.position.y) / timeDelta,
-            z: (target.position.z - last.position.z) / timeDelta
-        };
+        // Tính vector chuyển động trung bình
+        let totalX = 0, totalY = 0, totalZ = 0;
+        let totalTime = 0;
+        
+        for (let i = 1; i < history.positions.length; i++) {
+            const dx = history.positions[i].x - history.positions[i-1].x;
+            const dy = history.positions[i].y - history.positions[i-1].y;
+            const dz = history.positions[i].z - history.positions[i-1].z;
+            const dt = (history.timestamps[i] - history.timestamps[i-1]) / 1000;
+            
+            totalX += dx / dt;
+            totalY += dy / dt;
+            totalZ += dz / dt;
+            totalTime += dt;
+        }
+        
+        const avgX = totalX / (history.positions.length - 1);
+        const avgY = totalY / (history.positions.length - 1);
+        const avgZ = totalZ / (history.positions.length - 1);
+        
+        return { x: avgX, y: avgY, z: avgZ };
     }
 
-    predictHeadPosition(target) {
-        // Calculate current head position (90% of character height)
-        const currentHeadPos = {
+    predictHeadPosition(target, travelTime) {
+        // Vị trí đầu hiện tại
+        const currentHead = {
             x: target.position.x,
-            y: target.position.y + (target.height * 0.9),
+            y: target.position.y + target.height * 0.9,
             z: target.position.z
         };
         
-        // Predict future position based on movement
+        // Dự đoán vị trí đầu tương lai
         return {
-            x: currentHeadPos.x + (target.movement.x * target.bulletTravelTime * 1.1),
-            y: currentHeadPos.y + (target.movement.y * target.bulletTravelTime * 1.1),
-            z: currentHeadPos.z + (target.movement.z * target.bulletTravelTime * 1.1)
+            x: currentHead.x + (target.movement.x * travelTime * 1.15),
+            y: currentHead.y + (target.movement.y * travelTime * 1.15),
+            z: currentHead.z + (target.movement.z * travelTime * 1.15)
         };
     }
 
     selectAndLockTarget(targets) {
-        // If we have a locked target that's still valid, keep it
-        if (this.lockedTargetId) {
-            const currentLockedTarget = targets.find(t => t.id === this.lockedTargetId);
-            if (currentLockedTarget && currentLockedTarget.visible) {
-                return currentLockedTarget;
+        // Ưu tiên mục tiêu đã khóa trước đó
+        for (const target of targets) {
+            if (target.isLocked && target.visible) {
+                return target;
             }
         }
         
-        // Otherwise, select the best target
-        const bestTarget = this.findBestTarget(targets);
-        this.lockedTargetId = bestTarget ? bestTarget.id : null;
-        return bestTarget;
+        // Tìm mục tiêu tốt nhất với thuật toán nâng cao
+        return targets.reduce((best, current) => {
+            if (!best) return current;
+            
+            // Tính điểm ưu tiên
+            const currentScore = this.calculateTargetScore(current);
+            const bestScore = this.calculateTargetScore(best);
+            
+            return currentScore > bestScore ? current : best;
+        }, null);
     }
 
-    findBestTarget(targets) {
-        // Filter only visible targets
-        const visibleTargets = targets.filter(t => t.visible);
-        if (visibleTargets.length === 0) return null;
+    calculateTargetScore(target) {
+        let score = 0;
         
-        // Score targets based on multiple factors
-        const scoredTargets = visibleTargets.map(target => {
-            let score = 0;
-            
-            // Distance score (closer is better)
-            score += Math.max(0, 100 - (target.distance / 2));
-            
-            // Health score (lower health is better)
-            score += (100 - target.health) * 0.8;
-            
-            // Threat score (aiming at player is worse)
-            if (target.isAimingAtPlayer) score -= 50;
-            
-            // Movement score (slower targets are easier to hit)
-            const speed = Math.sqrt(
-                Math.pow(target.movement.x, 2) + 
-                Math.pow(target.movement.y, 2) + 
-                Math.pow(target.movement.z, 2)
-            );
-            score += Math.max(0, 50 - (speed * 10));
-            
-            return { target, score };
-        });
+        // Ưu tiên mục tiêu gần
+        score += Math.max(0, 100 - (target.distance / 2));
         
-        // Sort by score descending
-        scoredTargets.sort((a, b) => b.score - a.score);
+        // Ưu tiên mục tiêu ít máu
+        score += (100 - target.health) * 0.8;
         
-        return scoredTargets.length > 0 ? scoredTargets[0].target : null;
+        // Ưu tiên mục tiêu di chuyển chậm
+        const speed = Math.sqrt(
+            target.movement.x * target.movement.x +
+            target.movement.y * target.movement.y +
+            target.movement.z * target.movement.z
+        );
+        score += Math.max(0, 50 - (speed * 10));
+        
+        // Trừ điểm nếu mục tiêu đang nhắm vào người chơi
+        if (target.isAimingAtPlayer) score -= 30;
+        
+        return score;
     }
 
-    calculatePerfectAimPosition(target, playerPosition, weaponType) {
-        const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
+    calculatePerfectAim(target, playerPosition, weaponType) {
+        // Vị trí đầu dự đoán
+        let aimPosition = target.predictedHeadPosition;
         
-        // Use predicted head position as base
-        let aimPosition = { ...target.predictedHeadPosition };
-        
-        // Apply weapon-specific adjustments
-        aimPosition.y += weaponProfile.verticalOffset;
-        
-        // Add slight randomness for human-like behavior
-        if (this.currentMode !== AIM_MODES.AGGRESSIVE) {
-            aimPosition.x += (Math.random() - 0.5) * weaponProfile.humanizerIntensity;
-            aimPosition.y += (Math.random() - 0.5) * weaponProfile.humanizerIntensity * 0.5;
+        // Bù trọng lực cho đạn (với súng bắn tỉa)
+        if (weaponType === 'sniper') {
+            const gravity = 9.8; // m/s²
+            const drop = 0.5 * gravity * Math.pow(target.travelTime, 2);
+            aimPosition.y += drop;
         }
+        
+        // Hiệu chỉnh vũ khí
+        const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
+        aimPosition.y += weaponProfile.verticalOffset;
         
         return aimPosition;
     }
 
-    applyMagneticLock(targetPosition, currentAimPosition, distance) {
-        // How strongly we pull toward the target (0-1)
-        const lockStrength = this.currentMode.lockStrength;
-        
-        // Distance factor (closer = stronger pull)
-        const distanceFactor = Math.min(1, 100 / distance);
-        
-        // Calculate direction vector to target
+    applyPerfectLock(targetPosition, currentPosition, distance) {
+        // Tính toán hướng đến mục tiêu
         const direction = {
-            x: targetPosition.x - currentAimPosition.x,
-            y: targetPosition.y - currentAimPosition.y,
-            z: targetPosition.z - currentAimPosition.z
+            x: targetPosition.x - currentPosition.x,
+            y: targetPosition.y - currentPosition.y,
+            z: targetPosition.z - currentPosition.z
         };
         
-        // Apply magnetic pull
+        // Áp dụng hiệu ứng khóa hoàn hảo
+        const lockFactor = this.lockStrength * Math.min(1, 100 / distance);
+        
         return {
-            x: currentAimPosition.x + (direction.x * lockStrength * distanceFactor),
-            y: currentAimPosition.y + (direction.y * lockStrength * distanceFactor),
-            z: currentAimPosition.z + (direction.z * lockStrength * distanceFactor * 0.5)
+            x: currentPosition.x + (direction.x * lockFactor),
+            y: currentPosition.y + (direction.y * lockFactor),
+            z: currentPosition.z + (direction.z * lockFactor * 0.8)
+        };
+    }
+
+    calculateGuidedTrajectory(start, end, target, weaponType) {
+        const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
+        const guidedFactor = weaponProfile.guidedFactor || 0;
+        
+        return {
+            start,
+            end: target.predictedHeadPosition,
+            speed: weaponProfile.bulletVelocity,
+            isGuided: guidedFactor > 0,
+            correction: {
+                x: (target.movement.x * target.travelTime * guidedFactor),
+                y: (target.movement.y * target.travelTime * guidedFactor),
+                z: (target.movement.z * target.travelTime * guidedFactor)
+            }
         };
     }
 
@@ -264,87 +265,84 @@ class MagneticAimSystem {
             default: {
                 bulletVelocity: 400,
                 verticalOffset: 0.05,
-                humanizerIntensity: 0.15,
-                magnetism: 1.8
+                guidedFactor: 0.3
             },
             sniper: {
                 bulletVelocity: 1200,
                 verticalOffset: -0.02,
-                humanizerIntensity: 0.05,
-                magnetism: 2.8
+                guidedFactor: 0.7
             },
             ar: {
                 bulletVelocity: 800,
                 verticalOffset: 0.03,
-                humanizerIntensity: 0.1,
-                magnetism: 2.0
+                guidedFactor: 0.4
             },
             smg: {
                 bulletVelocity: 500,
                 verticalOffset: 0.07,
-                humanizerIntensity: 0.2,
-                magnetism: 1.5
+                guidedFactor: 0.2
             },
             shotgun: {
                 bulletVelocity: 350,
                 verticalOffset: 0.1,
-                humanizerIntensity: 0.25,
-                magnetism: 3.0
+                guidedFactor: 0.1
             }
         };
+    }
+
+    updateGameState(gameState) {
+        // Tăng cường độ khóa trong chiến đấu
+        const inCombat = gameState.isInCombat || (Date.now() - this.lastLockTime < 3000);
+        
+        if (inCombat) {
+            this.lockStrength = Math.min(0.999, this.lockStrength + 0.1);
+        } else {
+            this.lockStrength = Math.max(0.95, this.lockStrength - 0.05);
+        }
+        
+        // Tăng cường khi ngắm bắn
+        if (gameState.isAiming) {
+            this.lockStrength = 0.995;
+        }
+        
+        // Tăng cường khi máu thấp
+        if (gameState.playerHealth < 30) {
+            this.lockStrength = 0.999;
+        }
     }
 
     getSystemMetadata() {
         return {
-            version: "7.0",
-            mode: this.currentMode,
-            lockStrength: this.currentMode.lockStrength,
-            predictionAlgorithm: "neural_network_v5",
+            version: "Ultimate-4.0",
+            lockStrength: this.lockStrength,
+            performanceMode: this.performanceMode,
+            predictionLevel: this.aimPredictionLevel,
             security: {
-                token: this.securityToken,
+                token: this.sessionToken,
                 checksum: this.generateChecksum(),
-                behaviorProfile: this.getBehaviorProfile()
-            },
-            performance: {
-                maxCpu: this.currentMode.cpuLimit,
-                updateInterval: 20 // ms
-            },
-            status: {
-                targetLocked: !!this.lockedTargetId,
-                lockStability: this.calculateLockStability()
+                behaviorProfile: this.getRandomBehavior()
             }
         };
     }
 
-    calculateLockStability() {
-        if (this.aimPositionHistory.length < 2) return 1.0;
-        
-        const positions = this.aimPositionHistory.slice(-10);
-        let totalDistance = 0;
-        
-        for (let i = 1; i < positions.length; i++) {
-            totalDistance += this.calculateDistance(
-                positions[i-1].position, 
-                positions[i].position
-            );
-        }
-        
-        // Lower distance = more stable
-        const avgDistance = totalDistance / (positions.length - 1);
-        return Math.max(0, 1 - (avgDistance * 10));
-    }
-
     generateChecksum() {
         const crypto = require('crypto');
-        const data = this.securityToken + this.currentMode.lockStrength;
+        const data = this.sessionToken + this.lockStrength;
         return crypto.createHash('sha512').update(data).digest('hex');
     }
 
-    getBehaviorProfile() {
-        const profiles = ["stealth", "precision", "aggressive", "sniper"];
-        return profiles[Math.floor(Math.random() * profiles.length)];
+    getRandomBehavior() {
+        const behaviors = ["sniper", "assault", "stealth", "aggressive"];
+        return behaviors[Math.floor(Math.random() * behaviors.length)];
     }
 }
 
-const aimSystem = new MagneticAimSystem();
+class BallisticCalculator {
+    calculateDrop(distance, bulletVelocity, gravity = 9.8) {
+        const time = distance / bulletVelocity;
+        return 0.5 * gravity * Math.pow(time, 2);
+    }
+}
+
+const aimSystem = new PerfectLockUltimateSystem();
 $done({ body: aimSystem.process($response.body) });
