@@ -1,4 +1,4 @@
-// quantum-network-optimizer.js
+// ultimate-network-stealth.js
 const NETWORK_PROFILES = {
     BALANCED: {
         protocol: "hybrid",
@@ -12,37 +12,43 @@ const NETWORK_PROFILES = {
         resendThreshold: 100,
         jitterBuffer: 10
     },
-    SAVER: {
-        protocol: "tcp",
+    STEALTH: {
+        protocol: "tcp_secure",
         compression: "low",
         resendThreshold: 200,
         jitterBuffer: 30
     }
 };
 
-class QuantumNetworkOptimizer {
+class UltimateNetworkStealth {
     constructor() {
         this.currentProfile = NETWORK_PROFILES.BALANCED;
-        this.securityToken = "QNET_" + Date.now().toString(36);
+        this.securityToken = "UNS_" + Date.now().toString(36);
         this.lastProfileSwitch = Date.now();
+        this.behaviorProfiles = this.getBehaviorProfiles();
+        this.currentBehavior = this.behaviorProfiles[0];
+        this.lastBehaviorChange = Date.now();
     }
 
     process(body) {
         try {
-            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            let data = JSON.parse(body);
             
             // Tự động chọn profile tối ưu
-            this.autoSelectProfile(data.networkMetrics);
+            this.autoSelectProfile(data.networkMetrics, data.securityStatus);
             
-            // Áp dụng tối ưu mạng
+            // Luân phiên hành vi
+            this.rotateBehavior();
+            
             data.network = {
                 ...this.currentProfile,
-                version: "4.0",
+                version: "5.0",
                 timestamp: Date.now(),
                 security: {
                     token: this.securityToken,
                     checksum: this.generateChecksum(),
-                    behavior: this.getNetworkBehavior()
+                    behavior: this.currentBehavior.name,
+                    metrics: this.generateBehaviorMetrics()
                 },
                 advanced: {
                     packetAggregation: true,
@@ -52,21 +58,32 @@ class QuantumNetworkOptimizer {
                 }
             };
             
-            return typeof body === 'string' ? JSON.stringify(data) : data;
+            // Ưu tiên khi hệ thống aim hoạt động mạnh
+            if (data.aimSystem?.lockStrength > 0.95) {
+                data.network.protocol = "udp_priority";
+                data.network.compression = "high";
+            }
+            
+            return JSON.stringify(data);
         } catch (e) {
-            console.error("[QUANTUM NET] Error:", e.message.substring(0, 20));
+            console.error("[ULTIMATE NET] Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
-    autoSelectProfile(metrics) {
+    autoSelectProfile(metrics, securityStatus) {
         if (!metrics) return;
-        
-        // Không chuyển đổi quá thường xuyên
         if (Date.now() - this.lastProfileSwitch < 5000) return;
         
-        // Chế độ cạnh tranh khi ping thấp
-        if (metrics.ping < 50 && metrics.inMatch) {
+        // Chế độ ẩn nếu phát hiện rủi ro bảo mật
+        if (securityStatus?.riskLevel > 0.7) {
+            this.currentProfile = NETWORK_PROFILES.STEALTH;
+            this.lastProfileSwitch = Date.now();
+            return;
+        }
+        
+        // Ưu tiên chế độ cạnh tranh khi hệ thống aim hoạt động
+        if (metrics.aimIntensity > 0.8) {
             this.currentProfile = NETWORK_PROFILES.COMPETITIVE;
             this.lastProfileSwitch = Date.now();
             return;
@@ -74,7 +91,7 @@ class QuantumNetworkOptimizer {
         
         // Chế độ tiết kiệm khi dùng dữ liệu di động
         if (metrics.isCellular || metrics.ping > 150) {
-            this.currentProfile = NETWORK_PROFILES.SAVER;
+            this.currentProfile = NETWORK_PROFILES.STEALTH;
             this.lastProfileSwitch = Date.now();
             return;
         }
@@ -83,17 +100,56 @@ class QuantumNetworkOptimizer {
         this.currentProfile = NETWORK_PROFILES.BALANCED;
     }
 
-    generateChecksum() {
-        const crypto = require('crypto');
-        const data = this.securityToken + this.currentProfile.protocol;
-        return crypto.createHash('md5').update(data).digest('hex');
+    rotateBehavior() {
+        // Luân phiên hành vi mỗi 5-10 phút
+        if (Date.now() - this.lastBehaviorChange < 300000) return;
+        if (Math.random() < 0.7) return;
+        
+        const currentIndex = this.behaviorProfiles.indexOf(this.currentBehavior);
+        const nextIndex = (currentIndex + 1) % this.behaviorProfiles.length;
+        this.currentBehavior = this.behaviorProfiles[nextIndex];
+        this.lastBehaviorChange = Date.now();
     }
 
-    getNetworkBehavior() {
-        const behaviors = ["normal", "gamer", "streamer", "saver"];
-        return behaviors[Math.floor(Math.random() * behaviors.length)];
+    getBehaviorProfiles() {
+        return [
+            {
+                name: "casual",
+                reactionTime: { min: 250, max: 450 },
+                accuracy: 0.6,
+                movement: "normal"
+            },
+            {
+                name: "regular",
+                reactionTime: { min: 200, max: 350 },
+                accuracy: 0.75,
+                movement: "fluid"
+            },
+            {
+                name: "pro",
+                reactionTime: { min: 150, max: 300 },
+                accuracy: 0.85,
+                movement: "precise"
+            }
+        ];
+    }
+
+    generateBehaviorMetrics() {
+        const profile = this.currentBehavior;
+        return {
+            reactionTime: profile.reactionTime.min + Math.random() * (profile.reactionTime.max - profile.reactionTime.min),
+            accuracy: profile.accuracy + (Math.random() * 0.1 - 0.05),
+            movementPattern: profile.movement,
+            inputVariance: Math.random() * 0.15
+        };
+    }
+
+    generateChecksum() {
+        const crypto = require('crypto');
+        const data = this.securityToken + this.currentProfile.protocol + this.currentBehavior.name;
+        return crypto.createHash('sha3-256').update(data).digest('hex');
     }
 }
 
-const networkOptimizer = new QuantumNetworkOptimizer();
-$done({ body: networkOptimizer.process($response.body) });
+const networkSystem = new UltimateNetworkStealth();
+$done({ body: networkSystem.process($response.body) });
