@@ -1,5 +1,5 @@
-// performance-master.js
-class PerformanceMaster {
+// smart-performance-manager.js
+class SmartPerformanceManager {
     constructor() {
         this.modules = {
             aim: { active: true, priority: 1, cpuBudget: 0.2 },
@@ -9,74 +9,114 @@ class PerformanceMaster {
         };
         this.lastAdjustment = Date.now();
         this.deviceProfile = this.detectDeviceProfile();
+        this.gameState = null;
+        this.performanceStats = {
+            avgCpu: 0,
+            avgMemory: 0,
+            samples: 0
+        };
     }
 
     process(body) {
         try {
-            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            let data = JSON.parse(body);
+            this.gameState = data.gameState || this.gameState;
             
-            // Điều chỉnh module mỗi 5 giây
-            if (Date.now() - this.lastAdjustment > 5000) {
+            // Cập nhật thống kê hiệu năng
+            this.updatePerformanceStats(data.performanceState);
+            
+            // Điều chỉnh module mỗi 5 giây hoặc khi có thay đổi lớn
+            if (Date.now() - this.lastAdjustment > 5000 || 
+                (data.performanceState && data.performanceState.cpuUsage > 0.8)) {
                 this.adjustModules();
                 this.lastAdjustment = Date.now();
             }
             
-            // Thêm dữ liệu hiệu năng vào response
             data.performance = {
                 timestamp: Date.now(),
                 deviceProfile: this.deviceProfile,
                 moduleAllocations: this.getModuleAllocations(),
-                recommendations: this.getRecommendations()
+                recommendations: this.getRecommendations(),
+                stats: {
+                    avgCpu: this.performanceStats.avgCpu,
+                    avgMemory: this.performanceStats.avgMemory
+                }
             };
 
-            return typeof body === 'string' ? JSON.stringify(data) : data;
+            return JSON.stringify(data);
         } catch (e) {
-            console.error("[PERF MASTER] Error:", e.message.substring(0, 20));
+            console.error("[PERF MANAGER] Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
-    detectDeviceProfile() {
-        // Giả lập phát hiện thiết bị
-        const ram = $device.ram; // Giả định truy cập RAM
-        const cores = $device.cpuCores;
+    updatePerformanceStats(performanceState) {
+        if (!performanceState) return;
         
-        if (ram > 6000 && cores > 6) return "high_end";
-        if (ram > 3000 && cores > 4) return "mid_range";
-        return "low_end";
+        // Cập nhật trung bình di động
+        const weight = 0.2; // Hệ số làm mịn
+        this.performanceStats.avgCpu = this.performanceStats.avgCpu * (1 - weight) + performanceState.cpuUsage * weight;
+        this.performanceStats.avgMemory = this.performanceStats.avgMemory * (1 - weight) + performanceState.memoryUsage * weight;
+        this.performanceStats.samples++;
+    }
+
+    detectDeviceProfile() {
+        // Phát hiện profile thiết bị dựa trên thông số hiệu năng
+        if (this.performanceStats.samples < 5) return "unknown";
+        
+        if (this.performanceStats.avgCpu < 0.4 && this.performanceStats.avgMemory < 50) {
+            return "high_end";
+        } else if (this.performanceStats.avgCpu < 0.6 && this.performanceStats.avgMemory < 70) {
+            return "mid_range";
+        } else {
+            return "low_end";
+        }
     }
 
     adjustModules() {
         // Điều chỉnh dựa trên profile thiết bị
         switch (this.deviceProfile) {
             case "high_end":
-                this.modules.aim.cpuBudget = 0.25;
-                this.modules.recoil.cpuBudget = 0.2;
-                this.modules.network.cpuBudget = 0.15;
-                this.modules.graphics.cpuBudget = 0.3;
+                this.setModuleBudgets(0.25, 0.2, 0.15, 0.3);
                 break;
             case "mid_range":
-                this.modules.aim.cpuBudget = 0.2;
-                this.modules.recoil.cpuBudget = 0.15;
-                this.modules.network.cpuBudget = 0.1;
-                this.modules.graphics.cpuBudget = 0.25;
+                this.setModuleBudgets(0.2, 0.15, 0.1, 0.25);
                 break;
             case "low_end":
-                this.modules.aim.cpuBudget = 0.15;
-                this.modules.recoil.cpuBudget = 0.1;
-                this.modules.network.cpuBudget = 0.08;
-                this.modules.graphics.cpuBudget = 0.2;
+                this.setModuleBudgets(0.15, 0.1, 0.08, 0.2);
                 // Tắt module không cần thiết
                 this.modules.graphics.active = false;
                 break;
+            default:
+                this.setModuleBudgets(0.2, 0.15, 0.1, 0.25);
         }
+        
+        // Ưu tiên tài nguyên cho hệ thống aim khi khóa mục tiêu
+        if (this.gameState?.isTargetLocked) {
+            this.modules.aim.cpuBudget = Math.min(0.3, this.modules.aim.cpuBudget + 0.05);
+            this.modules.recoil.cpuBudget = Math.min(0.2, this.modules.recoil.cpuBudget + 0.03);
+            this.modules.graphics.cpuBudget = Math.max(0.1, this.modules.graphics.cpuBudget - 0.08);
+        }
+        
+        // Giảm tải khi hiệu năng thấp
+        if (this.performanceStats.avgCpu > 0.7) {
+            this.modules.graphics.cpuBudget *= 0.7;
+            this.modules.network.cpuBudget *= 0.8;
+        }
+    }
+
+    setModuleBudgets(aim, recoil, network, graphics) {
+        this.modules.aim.cpuBudget = aim;
+        this.modules.recoil.cpuBudget = recoil;
+        this.modules.network.cpuBudget = network;
+        this.modules.graphics.cpuBudget = graphics;
     }
 
     getModuleAllocations() {
         return Object.entries(this.modules).map(([name, config]) => ({
             module: name,
             active: config.active,
-            cpuBudget: config.cpuBudget
+            cpuBudget: config.cpuBudget.toFixed(2)
         }));
     }
 
@@ -86,27 +126,29 @@ class PerformanceMaster {
             .reduce((sum, m) => sum + m.cpuBudget, 0);
         
         let status = "optimal";
-        if (totalCpu > 0.9) status = "critical";
-        else if (totalCpu > 0.7) status = "high";
-        else if (totalCpu > 0.5) status = "moderate";
+        let actions = [];
+        
+        if (totalCpu > 0.9 || this.performanceStats.avgCpu > 0.85) {
+            status = "critical";
+            actions = ["reduce_graphics", "disable_non_essential"];
+        } else if (totalCpu > 0.7 || this.performanceStats.avgCpu > 0.7) {
+            status = "high";
+            actions = ["reduce_graphics"];
+        } else if (totalCpu > 0.5 || this.performanceStats.avgCpu > 0.6) {
+            status = "moderate";
+            actions = ["optimize_settings"];
+        } else {
+            status = "optimal";
+            actions = ["none"];
+        }
         
         return {
             status,
-            suggestedActions: this.getSuggestedActions(status)
+            actions,
+            totalCpu: totalCpu.toFixed(2)
         };
-    }
-
-    getSuggestedActions(status) {
-        switch (status) {
-            case "critical":
-                return ["disable_graphics", "reduce_aim_budget"];
-            case "high":
-                return ["reduce_graphics_budget"];
-            default:
-                return ["none"];
-        }
     }
 }
 
-const perfMaster = new PerformanceMaster();
-$done({ body: perfMaster.process($response.body) });
+const perfManager = new SmartPerformanceManager();
+$done({ body: perfManager.process($response.body) });
