@@ -5,23 +5,27 @@ class RecoilMasterSystem {
         this.sessionToken = "RC_" + Date.now().toString(36);
         this.stabilityLevel = 1.0;
         this.lastUpdate = Date.now();
+        this.performanceMode = "balanced";
     }
 
     process(body) {
         try {
-            let data = typeof body === 'string' ? JSON.parse(body) : body;
+            let data = JSON.parse(body);
             const weaponType = data.weaponType || 'default';
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
             
-            // Cập nhật độ ổn định dựa trên trạng thái game
+            // Cập nhật chế độ hiệu năng
+            if (data.performanceState) {
+                this.updatePerformanceMode(data.performanceState);
+            }
+            
             this.updateStability(data.gameState);
             
-            // Áp dụng kiểm soát giật tiên tiến
             data.recoilSystem = {
-                version: "5.0",
+                version: "7.0",
                 mode: "adaptive_ai",
-                horizontalCompensation: profile.horizontal * this.stabilityLevel,
-                verticalCompensation: profile.vertical * this.stabilityLevel,
+                horizontalCompensation: this.applyPerformanceFactor(profile.horizontal),
+                verticalCompensation: this.applyPerformanceFactor(profile.vertical),
                 patternElimination: "neural_network",
                 smoothingFactor: profile.smoothing,
                 realtimeAdjustment: true,
@@ -29,25 +33,51 @@ class RecoilMasterSystem {
                     token: this.sessionToken,
                     checksum: this.generateChecksum(),
                     behavior: this.getRecoilBehavior()
-                }
+                },
+                performanceMode: this.performanceMode
             };
             
-            // Áp dụng bổ sung khi đang bắn
-            if (data.gameState && data.gameState.isFiring) {
-                data.recoilSystem.fireStability = profile.fireStability * this.stabilityLevel;
+            if (data.gameState?.isFiring) {
+                data.recoilSystem.fireStability = this.applyPerformanceFactor(profile.fireStability);
             }
             
-            return typeof body === 'string' ? JSON.stringify(data) : data;
+            // Tích hợp với hệ thống aim
+            if (data.aimSystem?.lockStrength > 0.95) {
+                data.recoilSystem.stabilityBoost = 2.5;
+                data.recoilSystem.verticalCompensation *= 1.8;
+            }
+            
+            return JSON.stringify(data);
         } catch (e) {
             console.error("[RECOIL MASTER] Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
+    applyPerformanceFactor(value) {
+        switch (this.performanceMode) {
+            case "high": return value * 1.2;
+            case "balanced": return value;
+            case "low": return value * 0.8;
+            default: return value;
+        }
+    }
+
+    updatePerformanceMode(performanceState) {
+        if (!performanceState) return;
+        
+        if (performanceState.cpuUsage > 0.8 || performanceState.memoryUsage > 80) {
+            this.performanceMode = "low";
+        } else if (performanceState.cpuUsage > 0.6 || performanceState.memoryUsage > 70) {
+            this.performanceMode = "balanced";
+        } else {
+            this.performanceMode = "high";
+        }
+    }
+
     updateStability(gameState) {
         if (!gameState) return;
         
-        // Chỉ cập nhật mỗi 200ms
         if (Date.now() - this.lastUpdate < 200) return;
         this.lastUpdate = Date.now();
         
