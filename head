@@ -1,14 +1,15 @@
-// HEAD PROTECTION SYSTEM v3.0 (Ultimate Camouflage Edition)
+// HEAD PROTECTION SYSTEM v4.0 (Precision Headshot Edition)
 class HeadProtectionSystem {
     constructor() {
         this.protectionEnabled = true;
         this.protectionMode = "dynamic";
-        this.headHitboxOffset = { x: 0, y: -0.35, z: 0 };
+        this.headHitboxOffset = { x: 0, y: -0.4, z: 0 };
         this.realHeadPosition = { x: 0, y: 0, z: 0 };
         this.sessionToken = "HPS_" + Date.now().toString(36);
         this.lastUpdate = Date.now();
-        this.camouflageIntensity = 0.9; // Tăng độ ngụy trang
+        this.camouflageIntensity = 0.95; // Tăng độ ngụy trang
         this.adaptiveProtection = true;
+        this.headTracking = new HeadTrackingSystem(); // Hệ thống theo dõi đầu
     }
 
     process(body) {
@@ -21,6 +22,11 @@ class HeadProtectionSystem {
                 
                 if (data.playerHitboxes) {
                     data.playerHitboxes = this.maskRealHeadHitbox(data.playerHitboxes);
+                }
+                
+                // Theo dõi và dự đoán vị trí đầu
+                if (data.targets) {
+                    data.targets = this.headTracking.trackHeads(data.targets);
                 }
                 
                 data.headProtection = {
@@ -42,9 +48,9 @@ class HeadProtectionSystem {
     }
 
     calculateRealHeadPosition(playerPosition, stance) {
-        let yOffset = 0.95;
-        if (stance === 'crouching') yOffset = 0.70;
-        else if (stance === 'prone') yOffset = 0.35;
+        let yOffset = 1.0;
+        if (stance === 'crouching') yOffset = 0.75;
+        else if (stance === 'prone') yOffset = 0.4;
         
         return {
             x: playerPosition.x,
@@ -58,26 +64,26 @@ class HeadProtectionSystem {
         this.updateProtectionMode();
         
         if (this.protectionMode === "static") {
-            fakePosition.y -= 0.40;
+            fakePosition.y -= 0.45;
         } else if (this.protectionMode === "random") {
-            fakePosition.x += (Math.random() * 0.6 - 0.3);
-            fakePosition.y -= 0.25 + (Math.random() * 0.35);
-            fakePosition.z += (Math.random() * 0.6 - 0.3);
+            fakePosition.x += (Math.random() * 0.7 - 0.35);
+            fakePosition.y -= 0.3 + (Math.random() * 0.4);
+            fakePosition.z += (Math.random() * 0.7 - 0.35);
         } else {
-            const timeFactor = Date.now() / 800; // Tăng tốc độ di chuyển đầu giả
-            fakePosition.x += Math.sin(timeFactor * 1.8) * 0.18;
-            fakePosition.y -= 0.35 + Math.cos(timeFactor * 2.5) * 0.12;
-            fakePosition.z += Math.cos(timeFactor * 1.5) * 0.18;
+            const timeFactor = Date.now() / 600; // Tăng tốc độ di chuyển đầu giả
+            fakePosition.x += Math.sin(timeFactor * 2.0) * 0.2;
+            fakePosition.y -= 0.4 + Math.cos(timeFactor * 3.0) * 0.15;
+            fakePosition.z += Math.cos(timeFactor * 1.8) * 0.2;
         }
         
         return fakePosition;
     }
 
     updateProtectionMode() {
-        if (Date.now() - this.lastUpdate > 12000) { // Giảm thời gian chuyển đổi
+        if (Date.now() - this.lastUpdate > 10000) {
             const modes = ["dynamic", "static", "random"];
             this.protectionMode = modes[Math.floor(Math.random() * modes.length)];
-            this.camouflageIntensity = 0.75 + Math.random() * 0.25;
+            this.camouflageIntensity = 0.8 + Math.random() * 0.2;
             this.lastUpdate = Date.now();
         }
     }
@@ -88,11 +94,11 @@ class HeadProtectionSystem {
                 return {
                     ...hitbox,
                     position: {
-                        x: hitbox.position.x + (Math.random() * 0.25 - 0.125),
-                        y: hitbox.position.y - 0.30,
-                        z: hitbox.position.z + (Math.random() * 0.25 - 0.125)
+                        x: hitbox.position.x + (Math.random() * 0.3 - 0.15),
+                        y: hitbox.position.y - 0.35,
+                        z: hitbox.position.z + (Math.random() * 0.3 - 0.15)
                     },
-                    radius: hitbox.radius * 0.65, // Thu nhỏ hitbox
+                    radius: hitbox.radius * 0.6, // Thu nhỏ hitbox
                     camouflage: this.camouflageIntensity
                 };
             }
@@ -104,6 +110,27 @@ class HeadProtectionSystem {
         const crypto = require('crypto');
         const data = this.sessionToken + this.protectionMode;
         return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
+    }
+}
+
+class HeadTrackingSystem {
+    trackHeads(targets) {
+        return targets.map(target => {
+            const predictedHeadPosition = this.predictHeadMovement(target);
+            return {
+                ...target,
+                headHitbox: predictedHeadPosition
+            };
+        });
+    }
+
+    predictHeadMovement(target) {
+        const movementFactor = 1.1;
+        return {
+            x: target.position.x + (target.movement.x * movementFactor),
+            y: target.position.y + target.headHeight + (target.movement.y * movementFactor),
+            z: target.position.z + (target.movement.z * movementFactor)
+        };
     }
 }
 
