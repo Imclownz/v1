@@ -17,23 +17,20 @@ class SteadyCoreRecoilSystem {
             const weaponType = data.weaponType || 'default';
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
             
-            // Cập nhật trạng thái game
             if (data.gameState) {
                 this.updateStability(data.gameState);
                 this.updateCrosshairStability(data.gameState, weaponType);
             }
             
-            // Cập nhật hỗ trợ ngắm nếu có
             if (data.aimSystem) {
                 this.aimAssistLevel = data.aimSystem.lockStrength || 0;
             }
             
-            // Áp dụng kiểm soát giật tiên tiến
             data.recoilSystem = {
                 version: "SteadyCore-2.0",
                 mode: "adaptive_ai",
-                horizontalCompensation: this.calculateHorizontalComp(profile),
-                verticalCompensation: this.calculateVerticalComp(profile),
+                horizontalCompensation: this.calculateHorizontalComp(profile, data),
+                verticalCompensation: this.calculateVerticalComp(profile, data),
                 crosshairStabilization: this.crosshairStability,
                 patternElimination: "neural_network_v3",
                 smoothingFactor: profile.smoothing,
@@ -46,7 +43,6 @@ class SteadyCoreRecoilSystem {
                 weaponMemory: this.getWeaponMemory(weaponType)
             };
             
-            // Tăng cường khi bắn
             if (data.gameState?.isFiring) {
                 data.recoilSystem.fireStability = profile.fireStability * this.stabilityLevel;
                 data.recoilSystem.crosshairStabilization = this.applyFiringStability(
@@ -56,17 +52,13 @@ class SteadyCoreRecoilSystem {
                 );
             }
             
-            // Tích hợp với hệ thống aim
             if (this.aimAssistLevel > 0.9) {
                 data.recoilSystem.aimAssistBoost = 2.5;
                 data.recoilSystem.verticalCompensation *= 2.0;
                 data.recoilSystem.horizontalCompensation *= 1.5;
-                
-                // Áp dụng mẫu giật đặc biệt khi khóa mục tiêu
                 data.recoilSystem.recoilPattern = this.getRecoilPattern(weaponType, "lock_mode");
             }
             
-            // Cập nhật bộ nhớ vũ khí
             this.updateWeaponMemory(weaponType, data.recoilSystem);
             
             return JSON.stringify(data);
@@ -76,35 +68,36 @@ class SteadyCoreRecoilSystem {
         }
     }
 
-    calculateHorizontalComp(profile) {
-        // Giảm giật ngang dựa trên độ ổn định và loại vũ khí
-        return profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.5));
+    calculateHorizontalComp(profile, data) {
+        let comp = profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.5));
+        if (data.recoilSystem?.aimLockStrength) {
+            comp *= (1 - (data.recoilSystem.aimLockStrength * 0.3));
+        }
+        return comp;
     }
 
-    calculateVerticalComp(profile) {
-        // Giảm giật dọc mạnh hơn vì ảnh hưởng nhiều đến độ chính xác
-        return profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.7));
+    calculateVerticalComp(profile, data) {
+        let comp = profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.7));
+        if (data.recoilSystem?.aimLockStrength) {
+            comp *= (1 - (data.recoilSystem.aimLockStrength * 0.3));
+        }
+        return comp;
     }
 
     updateCrosshairStability(gameState, weaponType) {
         if (!gameState) return;
         
-        // Tính toán độ ổn định tâm ngắm dựa trên nhiều yếu tố
         const weaponProfile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
         let stability = weaponProfile.baseStability || 1.0;
         
-        // Yếu tố tư thế
         if (gameState.stance === 'crouching') stability *= 1.6;
         else if (gameState.stance === 'prone') stability *= 2.0;
         
-        // Yếu tố di chuyển
         if (gameState.isMoving) stability *= 0.7;
         if (gameState.isSprinting) stability *= 0.4;
         
-        // Yếu tố sức khỏe
         if (gameState.playerHealth < 30) stability *= 0.8;
         
-        // Tính toán độ ổn định tâm ngắm
         this.crosshairStability = {
             x: stability * 0.15,
             y: stability * 0.2,
@@ -113,8 +106,7 @@ class SteadyCoreRecoilSystem {
     }
 
     applyFiringStability(stability, profile, aimAssist) {
-        // Áp dụng ổn định đặc biệt khi bắn
-        const firingBoost = 1.0 + (aimAssist * 0.5);
+        const firingBoost = 1.0 + (aimAssist * 0.5) + (data.recoilSystem?.aimLockStrength || 0) * 0.5;
         return {
             x: stability.x * profile.firingStabilityX * firingBoost,
             y: stability.y * profile.firingStabilityY * firingBoost,
@@ -130,24 +122,19 @@ class SteadyCoreRecoilSystem {
     updateStability(gameState) {
         if (!gameState) return;
         
-        // Chỉ cập nhật mỗi 200ms
         if (Date.now() - this.lastUpdate < 200) return;
         this.lastUpdate = Date.now();
         
         let stability = 1.0;
         
-        // Yếu tố tư thế
         if (gameState.stance === 'crouching') stability *= 1.5;
         else if (gameState.stance === 'prone') stability *= 1.9;
         
-        // Yếu tố di chuyển
         if (gameState.isMoving) stability *= 0.75;
         if (gameState.isSprinting) stability *= 0.5;
         
-        // Yếu tố sức khỏe
         if (gameState.playerHealth < 30) stability *= 0.85;
         
-        // Giới hạn giá trị
         this.stabilityLevel = Math.max(0.2, Math.min(2.5, stability));
     }
 
@@ -160,12 +147,10 @@ class SteadyCoreRecoilSystem {
             };
         }
         
-        // Cập nhật bộ nhớ
         const memory = this.weaponMemory[weaponType];
         memory.usageCount++;
         memory.lastUsed = Date.now();
         
-        // Cập nhật độ ổn định trung bình
         memory.averageStability = {
             x: (memory.averageStability.x * (memory.usageCount - 1) + recoilData.crosshairStabilization.x) / memory.usageCount,
             y: (memory.averageStability.y * (memory.usageCount - 1) + recoilData.crosshairStabilization.y) / memory.usageCount,
