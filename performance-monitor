@@ -1,11 +1,11 @@
-// ADVANCED PERFORMANCE OPTIMIZER v5.0 (Combat Edition)
+// ADVANCED PERFORMANCE OPTIMIZER v6.0 (Ultra Smooth Edition)
 class AdvancedPerformanceOptimizer {
     constructor() {
         this.modules = {
-            aim: { active: true, priority: 0, cpuBudget: 0.45, memBudget: 25 }, // Ưu tiên aim
-            recoil: { active: true, priority: 1, cpuBudget: 0.30, memBudget: 18 },
-            network: { active: true, priority: 2, cpuBudget: 0.12, memBudget: 12 },
-            graphics: { active: true, priority: 3, cpuBudget: 0.10, memBudget: 20 }
+            aim: { active: true, priority: 0, cpuBudget: 0.50, memBudget: 30 }, // Ưu tiên aim
+            recoil: { active: true, priority: 1, cpuBudget: 0.35, memBudget: 20 },
+            network: { active: true, priority: 2, cpuBudget: 0.10, memBudget: 10 },
+            graphics: { active: true, priority: 3, cpuBudget: 0.08, memBudget: 15 }
         };
         this.lastAdjustment = Date.now();
         this.performanceStats = { cpu: 0, memory: 0, fps: 0, temp: 0 };
@@ -21,6 +21,7 @@ class AdvancedPerformanceOptimizer {
         this.memoryManager = new MemoryManager();
         this.gameState = null;
         this.thermalThrottleDetected = false;
+        this.networkOptimizer = new NetworkOptimizer(); // Tối ưu hóa mạng
     }
 
     process(body) {
@@ -36,7 +37,7 @@ class AdvancedPerformanceOptimizer {
             
             this.memoryManager.cleanup();
             
-            if (Date.now() - this.lastAdjustment > 1500 || this.performanceStats.cpu > 0.80) {
+            if (Date.now() - this.lastAdjustment > 1000 || this.performanceStats.cpu > 0.75) {
                 this.optimizeSystem();
                 this.lastAdjustment = Date.now();
             }
@@ -46,6 +47,9 @@ class AdvancedPerformanceOptimizer {
             if (data.graphicsSettings) {
                 data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
             }
+            
+            // Tối ưu hóa mạng
+            data.network = this.networkOptimizer.optimize(data.network);
             
             data.performance = {
                 timestamp: Date.now(),
@@ -64,7 +68,7 @@ class AdvancedPerformanceOptimizer {
     }
 
     updateStats(perf) {
-        const weight = 0.35;
+        const weight = 0.3;
         this.performanceStats.cpu = this.calcAvg(this.performanceStats.cpu, perf.cpuUsage, weight);
         this.performanceStats.memory = this.calcAvg(this.performanceStats.memory, perf.memoryUsage, weight);
         this.performanceStats.fps = this.calcAvg(this.performanceStats.fps, perf.fps, weight);
@@ -77,19 +81,19 @@ class AdvancedPerformanceOptimizer {
 
     optimizeSystem() {
         if (this.gameState?.isInCombat) {
-            this.modules.aim.cpuBudget = Math.min(0.50, this.modules.aim.cpuBudget + 0.08);
-            this.modules.recoil.cpuBudget = Math.min(0.35, this.modules.recoil.cpuBudget + 0.06);
-            this.modules.graphics.cpuBudget = Math.max(0.06, this.modules.graphics.cpuBudget - 0.07);
+            this.modules.aim.cpuBudget = Math.min(0.55, this.modules.aim.cpuBudget + 0.1);
+            this.modules.recoil.cpuBudget = Math.min(0.4, this.modules.recoil.cpuBudget + 0.08);
+            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.08);
         }
         
-        if (this.performanceStats.temp > 43) {
+        if (this.performanceStats.temp > 40) {
             this.thermalControl.activateCoolingMode();
-            this.modules.graphics.cpuBudget *= 0.65;
+            this.modules.graphics.cpuBudget *= 0.6;
             this.currentGraphicsPreset = "low";
             this.thermalThrottleDetected = true;
         }
         
-        if (this.gameState?.playerHealth < 25) {
+        if (this.gameState?.playerHealth < 20) {
             this.enableSurvivalMode();
         }
         
@@ -97,19 +101,19 @@ class AdvancedPerformanceOptimizer {
     }
 
     enableSurvivalMode() {
-        this.modules.aim.cpuBudget = 0.50;
-        this.modules.recoil.cpuBudget = 0.40;
+        this.modules.aim.cpuBudget = 0.55;
+        this.modules.recoil.cpuBudget = 0.45;
         this.currentGraphicsPreset = "minimal";
-        this.modules.graphics.memBudget = 12;
+        this.modules.graphics.memBudget = 10;
     }
 
     adjustGraphicsQuality() {
         const currentFpsTarget = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
         
-        if (this.performanceStats.fps < currentFpsTarget * 0.70) {
+        if (this.performanceStats.fps < currentFpsTarget * 0.65) {
             this.downgradeGraphics();
-        } else if (this.performanceStats.fps > currentFpsTarget * 1.30 && 
-                 this.performanceStats.cpu < 0.55 && !this.thermalThrottleDetected) {
+        } else if (this.performanceStats.fps > currentFpsTarget * 1.35 && 
+                 this.performanceStats.cpu < 0.5 && !this.thermalThrottleDetected) {
             this.upgradeGraphics();
         }
     }
@@ -132,7 +136,7 @@ class AdvancedPerformanceOptimizer {
         
         if (newSettings.textureQuality !== preset.textureQuality ||
             newSettings.shadowQuality !== preset.shadowQuality ||
-            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.10) {
+            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.05) {
             
             newSettings.textureQuality = preset.textureQuality;
             newSettings.shadowQuality = preset.shadowQuality;
@@ -163,9 +167,9 @@ class ThermalControlSystem {
     monitor(temp) {
         this.temperature = temp;
         
-        if (temp > 44 && !this.coolingMode) {
+        if (temp > 42 && !this.coolingMode) {
             this.activateCoolingMode();
-        } else if (temp < 38 && this.coolingMode) {
+        } else if (temp < 36 && this.coolingMode) {
             this.deactivateCoolingMode();
         }
     }
@@ -192,18 +196,18 @@ class MemoryManager {
     constructor() {
         this.memoryCache = new Map();
         this.lastCleanup = Date.now();
-        this.maxCacheSize = 40;
+        this.maxCacheSize = 30;
         this.memUsage = 0;
     }
 
     cleanup() {
-        if (Date.now() - this.lastCleanup < 8000) return;
+        if (Date.now() - this.lastCleanup < 5000) return;
         this.lastCleanup = Date.now();
         
         const now = Date.now();
         let count = 0;
         for (const [key, entry] of this.memoryCache) {
-            if (now - entry.lastAccessed > 25000) {
+            if (now - entry.lastAccessed > 20000) {
                 this.memoryCache.delete(key);
                 count++;
             }
@@ -222,6 +226,18 @@ class MemoryManager {
         return {
             cacheSize: this.memoryCache.size,
             memoryUsage: this.memUsage
+        };
+    }
+}
+
+class NetworkOptimizer {
+    optimize(networkData) {
+        return {
+            ...networkData,
+            protocol: "udp_priority",
+            compression: "ultra",
+            resendThreshold: 50,
+            jitterBuffer: 5
         };
     }
 }
