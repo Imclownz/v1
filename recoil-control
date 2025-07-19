@@ -1,4 +1,4 @@
-// steadycore-recoil-system.js
+// STEADYCORE RECOIL SYSTEM v4.0 (AI Stabilization)
 class SteadyCoreRecoilSystem {
     constructor() {
         this.weaponDatabase = this.getWeaponDatabase();
@@ -7,15 +7,19 @@ class SteadyCoreRecoilSystem {
         this.lastUpdate = Date.now();
         this.crosshairStability = { x: 0, y: 0, z: 0 };
         this.recoilPatterns = this.getRecoilPatterns();
-        this.weaponMemory = {};
         this.aimAssistLevel = 0;
+        this.ultraStabilizationMode = false;
+        this.weaponMemory = {};
     }
 
     process(body) {
         try {
+            const startTime = Date.now();
             let data = JSON.parse(body);
             const weaponType = data.weaponType || 'default';
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
+            
+            this.ultraStabilizationMode = data.aimSystem?.lockStrength > 0.98;
             
             if (data.gameState) {
                 this.updateStability(data.gameState);
@@ -27,90 +31,77 @@ class SteadyCoreRecoilSystem {
             }
             
             data.recoilSystem = {
-                version: "SteadyCore-2.0",
-                mode: "adaptive_ai",
-                horizontalCompensation: this.calculateHorizontalComp(profile, data),
-                verticalCompensation: this.calculateVerticalComp(profile, data),
+                version: "SteadyCore-4.0",
+                mode: "neural_adaptive",
+                horizontalCompensation: this.calculateHorizontalComp(profile),
+                verticalCompensation: this.calculateVerticalComp(profile),
                 crosshairStabilization: this.crosshairStability,
-                patternElimination: "neural_network_v3",
+                patternElimination: "ai_learning_v5",
                 smoothingFactor: profile.smoothing,
                 realtimeAdjustment: true,
+                ultraStabilization: this.ultraStabilizationMode,
                 security: {
                     token: this.sessionToken,
                     checksum: this.generateChecksum(),
                     behavior: this.getRecoilBehavior()
                 },
-                weaponMemory: this.getWeaponMemory(weaponType)
+                weaponProfile: this.getWeaponMemory(weaponType),
+                processingTime: Date.now() - startTime
             };
             
             if (data.gameState?.isFiring) {
-                data.recoilSystem.fireStability = profile.fireStability * this.stabilityLevel;
-                data.recoilSystem.crosshairStabilization = this.applyFiringStability(
-                    this.crosshairStability, 
-                    profile,
-                    this.aimAssistLevel
-                );
+                const fireStability = this.ultraStabilizationMode ? 
+                    profile.fireStability * 1.4 : 
+                    profile.fireStability * this.stabilityLevel;
+                    
+                data.recoilSystem.crosshairStabilization = {
+                    x: this.crosshairStability.x * profile.firingStabilityX * fireStability,
+                    y: this.crosshairStability.y * profile.firingStabilityY * fireStability,
+                    z: this.crosshairStability.z * profile.firingStabilityZ * fireStability
+                };
+                
+                if (this.ultraStabilizationMode) {
+                    data.recoilSystem.recoilPattern = this.getRecoilPattern(weaponType, "lock_mode");
+                }
+                
+                this.updateWeaponMemory(weaponType, data.recoilSystem.crosshairStabilization);
             }
-            
-            if (this.aimAssistLevel > 0.9) {
-                data.recoilSystem.aimAssistBoost = 2.5;
-                data.recoilSystem.verticalCompensation *= 2.0;
-                data.recoilSystem.horizontalCompensation *= 1.5;
-                data.recoilSystem.recoilPattern = this.getRecoilPattern(weaponType, "lock_mode");
-            }
-            
-            this.updateWeaponMemory(weaponType, data.recoilSystem);
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[STEADYCORE RECOIL] Error:", e.message.substring(0, 30));
+            console.error("[STEADYCORE RECOIL] Fast Error:", e.message.substring(0, 30));
             return body;
         }
     }
 
-    calculateHorizontalComp(profile, data) {
-        let comp = profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.5));
-        if (data.recoilSystem?.aimLockStrength) {
-            comp *= (1 - (data.recoilSystem.aimLockStrength * 0.3));
-        }
-        return comp;
+    calculateHorizontalComp(profile) {
+        let comp = profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.65));
+        return this.ultraStabilizationMode ? comp * 0.6 : comp;
     }
 
-    calculateVerticalComp(profile, data) {
-        let comp = profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.7));
-        if (data.recoilSystem?.aimLockStrength) {
-            comp *= (1 - (data.recoilSystem.aimLockStrength * 0.3));
-        }
-        return comp;
+    calculateVerticalComp(profile) {
+        let comp = profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.85));
+        return this.ultraStabilizationMode ? comp * 0.55 : comp;
     }
 
     updateCrosshairStability(gameState, weaponType) {
         if (!gameState) return;
         
-        const weaponProfile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
-        let stability = weaponProfile.baseStability || 1.0;
+        const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
+        let stability = profile.baseStability || 1.0;
         
-        if (gameState.stance === 'crouching') stability *= 1.6;
-        else if (gameState.stance === 'prone') stability *= 2.0;
+        if (gameState.stance === 'crouching') stability *= 1.8;
+        else if (gameState.stance === 'prone') stability *= 2.2;
         
-        if (gameState.isMoving) stability *= 0.7;
-        if (gameState.isSprinting) stability *= 0.4;
+        if (gameState.isMoving) stability *= 0.6;
+        if (gameState.isSprinting) stability *= 0.3;
         
-        if (gameState.playerHealth < 30) stability *= 0.8;
+        if (gameState.playerHealth < 30) stability *= 0.7;
         
         this.crosshairStability = {
-            x: stability * 0.15,
-            y: stability * 0.2,
-            z: stability * 0.05
-        };
-    }
-
-    applyFiringStability(stability, profile, aimAssist) {
-        const firingBoost = 1.0 + (aimAssist * 0.5) + (data.recoilSystem?.aimLockStrength || 0) * 0.5;
-        return {
-            x: stability.x * profile.firingStabilityX * firingBoost,
-            y: stability.y * profile.firingStabilityY * firingBoost,
-            z: stability.z * profile.firingStabilityZ * firingBoost
+            x: stability * 0.1,
+            y: stability * 0.15,
+            z: stability * 0.03
         };
     }
 
@@ -120,113 +111,58 @@ class SteadyCoreRecoilSystem {
     }
 
     updateStability(gameState) {
-        if (!gameState) return;
-        
-        if (Date.now() - this.lastUpdate < 200) return;
+        if (!gameState || Date.now() - this.lastUpdate < 150) return;
         this.lastUpdate = Date.now();
         
         let stability = 1.0;
         
-        if (gameState.stance === 'crouching') stability *= 1.5;
-        else if (gameState.stance === 'prone') stability *= 1.9;
+        if (gameState.stance === 'crouching') stability *= 1.7;
+        else if (gameState.stance === 'prone') stability *= 2.1;
         
-        if (gameState.isMoving) stability *= 0.75;
-        if (gameState.isSprinting) stability *= 0.5;
+        if (gameState.isMoving) stability *= 0.65;
+        if (gameState.isSprinting) stability *= 0.4;
         
-        if (gameState.playerHealth < 30) stability *= 0.85;
+        if (gameState.playerHealth < 30) stability *= 0.75;
         
-        this.stabilityLevel = Math.max(0.2, Math.min(2.5, stability));
-    }
-
-    updateWeaponMemory(weaponType, recoilData) {
-        if (!this.weaponMemory[weaponType]) {
-            this.weaponMemory[weaponType] = {
-                usageCount: 0,
-                lastUsed: Date.now(),
-                averageStability: recoilData.crosshairStabilization
-            };
-        }
-        
-        const memory = this.weaponMemory[weaponType];
-        memory.usageCount++;
-        memory.lastUsed = Date.now();
-        
-        memory.averageStability = {
-            x: (memory.averageStability.x * (memory.usageCount - 1) + recoilData.crosshairStabilization.x) / memory.usageCount,
-            y: (memory.averageStability.y * (memory.usageCount - 1) + recoilData.crosshairStabilization.y) / memory.usageCount,
-            z: (memory.averageStability.z * (memory.usageCount - 1) + recoilData.crosshairStabilization.z) / memory.usageCount
-        };
-    }
-
-    getWeaponMemory(weaponType) {
-        return this.weaponMemory[weaponType] || {
-            usageCount: 0,
-            lastUsed: 0,
-            averageStability: { x: 0, y: 0, z: 0 }
-        };
+        this.stabilityLevel = Math.max(0.3, Math.min(2.6, stability));
     }
 
     getWeaponDatabase() {
         return {
             default: {
-                horizontal: 0.05,
-                vertical: 0.08,
-                smoothing: 0.9,
-                fireStability: 0.94,
-                baseStability: 1.0,
-                firingStabilityX: 0.8,
-                firingStabilityY: 0.7,
-                firingStabilityZ: 0.9
+                horizontal: 0.04, vertical: 0.07, smoothing: 0.96,
+                fireStability: 0.98, baseStability: 1.15,
+                firingStabilityX: 0.9, firingStabilityY: 0.8, firingStabilityZ: 0.95
             },
             sniper: {
-                horizontal: 0.01,
-                vertical: 0.12,
-                smoothing: 0.97,
-                fireStability: 0.99,
-                baseStability: 1.5,
-                firingStabilityX: 0.9,
-                firingStabilityY: 0.85,
-                firingStabilityZ: 0.95
+                horizontal: 0.008, vertical: 0.10, smoothing: 0.99,
+                fireStability: 0.999, baseStability: 1.8,
+                firingStabilityX: 0.97, firingStabilityY: 0.94, firingStabilityZ: 0.99
             },
             ar: {
-                horizontal: 0.06,
-                vertical: 0.09,
-                smoothing: 0.88,
-                fireStability: 0.92,
-                baseStability: 0.9,
-                firingStabilityX: 0.75,
-                firingStabilityY: 0.65,
-                firingStabilityZ: 0.85
+                horizontal: 0.06, vertical: 0.095, smoothing: 0.92,
+                fireStability: 0.95, baseStability: 1.0,
+                firingStabilityX: 0.82, firingStabilityY: 0.72, firingStabilityZ: 0.9
             },
             smg: {
-                horizontal: 0.07,
-                vertical: 0.06,
-                smoothing: 0.85,
-                fireStability: 0.88,
-                baseStability: 0.8,
-                firingStabilityX: 0.7,
-                firingStabilityY: 0.6,
-                firingStabilityZ: 0.8
+                horizontal: 0.08, vertical: 0.06, smoothing: 0.9,
+                fireStability: 0.92, baseStability: 0.9,
+                firingStabilityX: 0.78, firingStabilityY: 0.68, firingStabilityZ: 0.88
             },
             shotgun: {
-                horizontal: 0.1,
-                vertical: 0.1,
-                smoothing: 0.8,
-                fireStability: 0.85,
-                baseStability: 0.7,
-                firingStabilityX: 0.65,
-                firingStabilityY: 0.55,
-                firingStabilityZ: 0.75
+                horizontal: 0.12, vertical: 0.11, smoothing: 0.85,
+                fireStability: 0.88, baseStability: 0.8,
+                firingStabilityX: 0.72, firingStabilityY: 0.62, firingStabilityZ: 0.82
             },
-            lmg: {
-                horizontal: 0.08,
-                vertical: 0.11,
-                smoothing: 0.82,
-                fireStability: 0.87,
-                baseStability: 1.2,
-                firingStabilityX: 0.78,
-                firingStabilityY: 0.68,
-                firingStabilityZ: 0.82
+            ak47: {
+                horizontal: 0.07, vertical: 0.13, smoothing: 0.89,
+                fireStability: 0.93, baseStability: 0.92,
+                firingStabilityX: 0.78, firingStabilityY: 0.68, firingStabilityZ: 0.86
+            },
+            m4a1: {
+                horizontal: 0.05, vertical: 0.09, smoothing: 0.94,
+                fireStability: 0.96, baseStability: 1.05,
+                firingStabilityX: 0.85, firingStabilityY: 0.76, firingStabilityZ: 0.92
             }
         };
     }
@@ -234,40 +170,64 @@ class SteadyCoreRecoilSystem {
     getRecoilPatterns() {
         return {
             default: {
-                default: [0.1, 0.2, 0.05, -0.1, -0.05, 0.15],
-                lock_mode: [0.05, 0.1, 0.02, -0.05, -0.02, 0.08]
+                default: [0.06, 0.12, 0.025, -0.06, -0.025, 0.09],
+                lock_mode: [0.02, 0.06, 0.006, -0.02, -0.006, 0.03]
             },
             sniper: {
-                default: [0.01, 0.3, 0.01, -0.01, -0.01, 0.02],
-                lock_mode: [0.005, 0.15, 0.005, -0.005, -0.005, 0.01]
+                default: [0.006, 0.20, 0.006, -0.006, -0.006, 0.01],
+                lock_mode: [0.001, 0.08, 0.001, -0.001, -0.001, 0.005]
             },
             ar: {
-                default: [0.15, 0.25, 0.1, -0.15, -0.1, 0.2],
-                lock_mode: [0.07, 0.12, 0.05, -0.07, -0.05, 0.1]
+                default: [0.12, 0.20, 0.08, -0.12, -0.08, 0.17],
+                lock_mode: [0.05, 0.09, 0.035, -0.05, -0.035, 0.08]
             },
-            smg: {
-                default: [0.2, 0.15, 0.08, -0.1, -0.08, 0.12],
-                lock_mode: [0.1, 0.08, 0.04, -0.05, -0.04, 0.06]
+            ak47: {
+                default: [0.15, 0.26, 0.10, -0.10, -0.06, 0.18],
+                lock_mode: [0.06, 0.10, 0.04, -0.05, -0.03, 0.08]
             },
-            shotgun: {
-                default: [0.3, 0.4, 0.2, -0.2, -0.15, 0.25],
-                lock_mode: [0.15, 0.2, 0.1, -0.1, -0.08, 0.12]
-            },
-            lmg: {
-                default: [0.12, 0.3, 0.07, -0.08, -0.06, 0.18],
-                lock_mode: [0.06, 0.15, 0.035, -0.04, -0.03, 0.09]
+            m4a1: {
+                default: [0.10, 0.17, 0.05, -0.08, -0.05, 0.12],
+                lock_mode: [0.04, 0.07, 0.02, -0.03, -0.02, 0.05]
             }
+        };
+    }
+
+    updateWeaponMemory(weaponType, stability) {
+        if (!this.weaponMemory[weaponType]) {
+            this.weaponMemory[weaponType] = {
+                usageCount: 0,
+                lastUsed: Date.now(),
+                avgStability: stability
+            };
+        }
+        
+        const memory = this.weaponMemory[weaponType];
+        memory.usageCount++;
+        memory.lastUsed = Date.now();
+        
+        memory.avgStability = {
+            x: (memory.avgStability.x * (memory.usageCount - 1) + stability.x) / memory.usageCount,
+            y: (memory.avgStability.y * (memory.usageCount - 1) + stability.y) / memory.usageCount,
+            z: (memory.avgStability.z * (memory.usageCount - 1) + stability.z) / memory.usageCount
+        };
+    }
+
+    getWeaponMemory(weaponType) {
+        return this.weaponMemory[weaponType] || {
+            usageCount: 0,
+            lastUsed: 0,
+            avgStability: { x: 0, y: 0, z: 0 }
         };
     }
 
     generateChecksum() {
         const crypto = require('crypto');
         const data = this.sessionToken + this.stabilityLevel;
-        return crypto.createHash('sha256').update(data).digest('hex');
+        return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
     }
 
     getRecoilBehavior() {
-        const behaviors = ["steady", "smooth", "controlled", "natural", "precise"];
+        const behaviors = ["steady", "smooth", "controlled"];
         return behaviors[Math.floor(Math.random() * behaviors.length)];
     }
 }
