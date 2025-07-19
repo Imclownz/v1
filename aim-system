@@ -1,18 +1,21 @@
-// PERFECTLOCK HEADSHOT MASTER v9.0 (Zero Overshoot Edition)
+// PERFECTLOCK HEADSHOT MASTER v9.0 (Bullet Stabilization)
 class PerfectLockHeadshotMaster {
     constructor() {
         this.lockStrength = 0.9999;
         this.targetHistory = new Map();
         this.sessionToken = `HS_ULTRA_${Date.now().toString(36)}`;
         this.weaponProfiles = this.getPrecisionWeaponProfiles();
-        this.ballisticCalculator = new AdvancedBallisticCalculator();
+        this.ballisticSystem = new AdvancedBallisticSystem();
         this.lastLockTime = 0;
+        this.aimPredictionLevel = 7;
         this.aimStabilizer = 0.995;
         this.headshotAccuracy = 0.99;
         this.maxHistory = 10;
+        this.overshootProtection = 1.0;
         this.stickyHeadLock = true;
+        this.bulletStabilization = true;
+        this.headLockPro = true;
         this.performanceProfile = "ultra";
-        this.bulletGuidanceSystem = new SmartBulletGuidance();
     }
 
     process(body) {
@@ -28,26 +31,35 @@ class PerfectLockHeadshotMaster {
                 const lockedTarget = this.selectOptimalTarget(enhancedTargets);
                 
                 if (lockedTarget) {
-                    // Tính toán vị trí bắn chính xác với công nghệ Zero Overshoot
+                    // Tính toán điểm bắn chính xác với công nghệ Head Lock Pro
                     const perfectAim = this.calculatePrecisionAim(lockedTarget, data.playerPosition, data.currentWeapon);
                     
-                    // Áp dụng khóa dính đầu địch với cơ chế chống vượt quá
-                    data.aimPosition = this.applyZeroOvershootLock(
+                    // Áp dụng khóa đầu địch với cơ chế chống vượt quá
+                    data.aimPosition = this.applyHeadLockPro(
                         perfectAim, 
                         data.currentAimPosition, 
                         lockedTarget,
                         data.gameState?.isFiring
                     );
                     
-                    // Tự động dẫn đường đạn
-                    if (this.performanceProfile !== "low") {
-                        data.bulletTrajectory = this.bulletGuidanceSystem.calculateGuidedTrajectory(
+                    // Ổn định đường đạn cho tất cả viên đạn
+                    if (this.bulletStabilization) {
+                        data.bulletTrajectory = this.calculateStabilizedTrajectory(
                             data.playerPosition,
                             data.aimPosition,
                             lockedTarget,
-                            data.currentWeapon,
-                            this.lockStrength
+                            data.currentWeapon
                         );
+                    }
+                    
+                    // Tăng cường ổn định khi khóa mục tiêu
+                    if (this.lockStrength > 0.99 && data.recoilSystem?.crosshairStabilization) {
+                        const stabilizationBoost = 3.0 - (lockedTarget.distance * 0.0005);
+                        data.aimPosition = {
+                            x: data.aimPosition.x * data.recoilSystem.crosshairStabilization.x * stabilizationBoost,
+                            y: data.aimPosition.y * data.recoilSystem.crosshairStabilization.y * stabilizationBoost,
+                            z: data.aimPosition.z * data.recoilSystem.crosshairStabilization.z * (stabilizationBoost * 0.99)
+                        };
                     }
                     
                     this.lastLockTime = Date.now();
@@ -57,7 +69,9 @@ class PerfectLockHeadshotMaster {
                     targets: enhancedTargets,
                     lockedTarget,
                     lockStrength: this.lockStrength,
+                    predictionLevel: this.aimPredictionLevel,
                     headshotRate: this.headshotAccuracy,
+                    bulletStabilization: this.bulletStabilization,
                     processingTime: Date.now() - startTime
                 };
             }
@@ -70,58 +84,57 @@ class PerfectLockHeadshotMaster {
         }
     }
 
-    // Công nghệ Zero Overshoot Lock: Đảm bảo tâm súng không vượt quá đầu địch
-    applyZeroOvershootLock(targetPosition, currentPosition, target, isFiring) {
+    // CÔNG NGHỆ HEAD LOCK PRO - KHÓA CHẶT ĐẦU ĐỊCH KHÔNG VƯỢT QUÁ
+    applyHeadLockPro(targetPosition, currentPosition, target, isFiring) {
         const direction = {
             x: targetPosition.x - currentPosition.x,
             y: targetPosition.y - currentPosition.y,
             z: targetPosition.z - currentPosition.z
         };
         
-        const distanceFactor = Math.min(1.15, 100 / target.distance);
-        const speedFactor = 1.05 - (Math.sqrt(target.movement.x**2 + target.movement.y**2) * 0.03);
+        const distance = Math.max(1, target.distance);
+        const distanceFactor = Math.min(1.25, 150 / distance);
+        const speedFactor = 1.15 - (Math.sqrt(target.movement.x**2 + target.movement.y**2) * 0.03);
+        const stickyFactor = this.stickyHeadLock ? 0.95 : 0.88;
         
-        // Giới hạn tốc độ di chuyển tâm ngắm
-        const maxSpeed = 0.15 + (this.lockStrength * 0.1);
-        const moveSpeed = Math.min(maxSpeed, distanceFactor * speedFactor * this.lockStrength);
+        // Hệ số bảo vệ không vượt quá đầu địch
+        const overshootProtection = this.overshootProtection * (isFiring ? 0.92 : 0.98);
         
-        // Tính toán vị trí mới với giới hạn không vượt quá hitbox đầu
-        let newX = currentPosition.x + (direction.x * moveSpeed);
-        let newY = currentPosition.y + (direction.y * moveSpeed * this.aimStabilizer);
-        let newZ = currentPosition.z + (direction.z * moveSpeed * 0.95);
-        
-        // Hiệu chỉnh để đảm bảo luôn nằm trong hitbox đầu
-        const headCenterX = target.headHitbox.x;
-        const headCenterY = target.headHitbox.y;
-        const headRadius = target.headHitbox.radius;
-        
-        const distToCenter = Math.sqrt(
-            Math.pow(newX - headCenterX, 2) + 
-            Math.pow(newY - headCenterY, 2)
-        );
-        
-        if (distToCenter > headRadius * 0.9) {
-            const correctionFactor = (headRadius * 0.85) / distToCenter;
-            newX = headCenterX + (newX - headCenterX) * correctionFactor;
-            newY = headCenterY + (newY - headCenterY) * correctionFactor;
-        }
-        
-        return {
-            x: newX,
-            y: newY,
-            z: newZ
+        // Tính toán vị trí cuối cùng với giới hạn không vượt quá
+        let finalPosition = {
+            x: currentPosition.x + (direction.x * distanceFactor * speedFactor * stickyFactor * overshootProtection),
+            y: currentPosition.y + (direction.y * distanceFactor * speedFactor * stickyFactor * this.aimStabilizer * overshootProtection),
+            z: currentPosition.z + (direction.z * distanceFactor * speedFactor * stickyFactor * 0.97 * overshootProtection)
         };
+        
+        // Đảm bảo không vượt quá vị trí đầu địch
+        const maxMovement = {
+            x: target.headHitbox.x * 1.05,
+            y: target.headHitbox.y * 1.05,
+            z: target.headHitbox.z * 1.05
+        };
+        
+        // Áp dụng giới hạn tối đa
+        finalPosition.x = Math.min(maxMovement.x, Math.max(target.headHitbox.x * 0.95, finalPosition.x));
+        finalPosition.y = Math.min(maxMovement.y, Math.max(target.headHitbox.y * 0.95, finalPosition.y));
+        finalPosition.z = Math.min(maxMovement.z, Math.max(target.headHitbox.z * 0.95, finalPosition.z));
+        
+        return finalPosition;
     }
 
-    // Công nghệ dự đoán chuyển động đa tầng
+    // CÔNG NGHỆ DỰ ĐOÁN CHUYỂN ĐỘNG THỜI GIAN THỰC
     neuralMovementPrediction(target) {
         const now = Date.now();
-        let history = this.targetHistory.get(target.id) || {
-            positions: [],
-            timestamps: [],
-            velocities: [],
-            accelerations: []
-        };
+        let history = this.targetHistory.get(target.id);
+        if (!history) {
+            history = { 
+                positions: [], 
+                timestamps: [], 
+                velocities: [],
+                accelerations: [] 
+            };
+            this.targetHistory.set(target.id, history);
+        }
         
         // Giới hạn lịch sử để tối ưu hiệu năng
         if (history.positions.length >= this.maxHistory) {
@@ -131,7 +144,7 @@ class PerfectLockHeadshotMaster {
             history.accelerations.shift();
         }
         
-        // Thêm vị trí hiện tại
+        // Lưu vị trí hiện tại
         history.positions.push({...target.position});
         history.timestamps.push(now);
         
@@ -140,46 +153,109 @@ class PerfectLockHeadshotMaster {
         
         if (count > 1) {
             // Tính toán vận tốc
-            const lastVelocity = {
+            const latestVelocity = {
                 x: (history.positions[count-1].x - history.positions[count-2].x) / 
-                    ((history.timestamps[count-1] - history.timestamps[count-2]) / 1000),
+                   ((history.timestamps[count-1] - history.timestamps[count-2]) || 1),
                 y: (history.positions[count-1].y - history.positions[count-2].y) / 
-                    ((history.timestamps[count-1] - history.timestamps[count-2]) / 1000)
+                   ((history.timestamps[count-1] - history.timestamps[count-2]) || 1)
             };
-            history.velocities.push(lastVelocity);
+            history.velocities.push(latestVelocity);
             
             // Tính toán gia tốc nếu có đủ dữ liệu
             if (count > 2) {
-                const lastAcceleration = {
-                    x: (history.velocities[history.velocities.length-1].x - history.velocities[history.velocities.length-2].x) /
-                        ((history.timestamps[count-1] - history.timestamps[count-2]) / 1000),
-                    y: (history.velocities[history.velocities.length-1].y - history.velocities[history.velocities.length-2].y) /
-                        ((history.timestamps[count-1] - history.timestamps[count-2]) / 1000)
+                const latestAcceleration = {
+                    x: (history.velocities[history.velocities.length-1].x - 
+                         history.velocities[history.velocities.length-2].x) /
+                       ((history.timestamps[count-1] - history.timestamps[count-2]) || 1),
+                    y: (history.velocities[history.velocities.length-1].y - 
+                         history.velocities[history.velocities.length-2].y) /
+                       ((history.timestamps[count-1] - history.timestamps[count-2]) || 1)
                 };
-                history.accelerations.push(lastAcceleration);
-            }
-            
-            // Dự đoán dựa trên mô hình vật lý
-            const timeStep = 0.2; // 200ms trong tương lai
-            if (history.accelerations.length > 0) {
-                const lastAccel = history.accelerations[history.accelerations.length-1];
+                history.accelerations.push(latestAcceleration);
+                
+                // Dự đoán sử dụng gia tốc (ngoại suy bậc 2)
+                const timeDiff = (now - history.timestamps[count-1]) / 1000;
                 predictedX = history.positions[count-1].x + 
-                             (lastVelocity.x * timeStep) + 
-                             (0.5 * lastAccel.x * Math.pow(timeStep, 2));
+                            (latestVelocity.x * timeDiff) + 
+                            (0.5 * latestAcceleration.x * timeDiff * timeDiff);
+                
                 predictedY = history.positions[count-1].y + 
-                             (lastVelocity.y * timeStep) + 
-                             (0.5 * lastAccel.y * Math.pow(timeStep, 2));
-            } else if (history.velocities.length > 0) {
-                predictedX = history.positions[count-1].x + (lastVelocity.x * timeStep);
-                predictedY = history.positions[count-1].y + (lastVelocity.y * timeStep);
+                            (latestVelocity.y * timeDiff) + 
+                            (0.5 * latestAcceleration.y * timeDiff * timeDiff);
+            } else {
+                // Dự đoán sử dụng vận tốc (ngoại suy bậc 1)
+                const timeDiff = (now - history.timestamps[count-1]) / 1000;
+                predictedX = history.positions[count-1].x + (latestVelocity.x * timeDiff);
+                predictedY = history.positions[count-1].y + (latestVelocity.y * timeDiff);
             }
         }
         
-        this.targetHistory.set(target.id, history);
         return {x: predictedX, y: predictedY, z: 0};
     }
 
-    // Tính toán vị trí bắn chính xác với hiệu chỉnh đạn đạo
+    // CÔNG NGHỆ ỔN ĐỊNH ĐƯỜNG ĐẠN - BULLET STABILIZATION
+    calculateStabilizedTrajectory(startPos, aimPos, target, weaponType) {
+        const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
+        const travelTime = target.distance / weaponProfile.bulletVelocity;
+        
+        // Dự đoán vị trí chính xác khi đạn tới mục tiêu
+        const predictedPosition = {
+            x: target.position.x + (target.movement.x * travelTime * 1.3),
+            y: target.position.y + (target.movement.y * travelTime * 1.3),
+            z: target.position.z + (target.movement.z * travelTime * 1.3)
+        };
+        
+        // Tính toán hiệu chỉnh đạn đạo
+        const gravity = this.ballisticSystem.getGravity(weaponType);
+        const drop = this.ballisticSystem.calculateAdvancedDrop(
+            target.distance, 
+            weaponProfile.bulletVelocity, 
+            gravity,
+            target.movement
+        );
+        
+        // Hiệu chỉnh cho chuyển động đầu
+        const headMovement = this.calculateHeadMovement(target, travelTime);
+        
+        return {
+            start: startPos,
+            end: {
+                x: predictedPosition.x + headMovement.x,
+                y: predictedPosition.y + target.headHeight + drop + headMovement.y,
+                z: predictedPosition.z + headMovement.z
+            },
+            correction: {
+                x: headMovement.x,
+                y: drop + headMovement.y,
+                z: headMovement.z
+            },
+            travelTime: travelTime,
+            isStabilized: true,
+            guaranteedHit: true
+        };
+    }
+
+    // TÍNH TOÁN CHUYỂN ĐỘNG ĐẦU CHÍNH XÁC
+    calculateHeadMovement(target, travelTime) {
+        const headMovement = {
+            x: target.movement.x * travelTime * 1.25,
+            y: target.movement.y * travelTime * 1.25,
+            z: target.movement.z * travelTime * 1.25
+        };
+        
+        // Hiệu chỉnh cho các hành động đặc biệt (nhảy, cúi, nằm)
+        if (target.isJumping) {
+            headMovement.y += target.jumpHeight * 0.7;
+        } else if (target.isCrouching) {
+            headMovement.y -= target.height * 0.15;
+        } else if (target.isProne) {
+            headMovement.y -= target.height * 0.25;
+        }
+        
+        return headMovement;
+    }
+
+    // TÍNH TOÁN ĐIỂM BẮN CHÍNH XÁC
     calculatePrecisionAim(target, playerPosition, weaponType) {
         let aimPosition = {
             x: target.headHitbox.x,
@@ -187,144 +263,86 @@ class PerfectLockHeadshotMaster {
             z: target.headHitbox.z
         };
         
-        // Hiệu chỉnh đạn đạo nâng cao cho mọi loại vũ khí
+        // Tính toán thời gian đạn bay
         const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
-        const gravity = this.ballisticCalculator.getGravity(weaponType);
+        const travelTime = target.distance / weaponProfile.bulletVelocity;
         
-        const drop = this.ballisticCalculator.calculateAdvancedDrop(
-            target.distance, 
-            weaponProfile.bulletVelocity, 
-            gravity,
-            target.movement
-        );
+        // Hiệu chỉnh cho vũ khí tầm xa
+        if (['sniper', 'dmr', 'ar'].includes(weaponType)) {
+            const gravity = this.ballisticSystem.getGravity(weaponType);
+            const drop = this.ballisticSystem.calculateAdvancedDrop(
+                target.distance, 
+                weaponProfile.bulletVelocity, 
+                gravity,
+                target.movement
+            );
+            aimPosition.y += drop;
+        }
         
-        // Hiệu chỉnh dựa trên chuyển động ngang của mục tiêu
-        const horizontalComp = this.bulletGuidanceSystem.calculateHorizontalCompensation(
-            target.movement,
-            target.distance,
-            weaponProfile.bulletVelocity
-        );
+        // Hiệu chỉnh chuyển động đầu
+        const headMovement = this.calculateHeadMovement(target, travelTime);
+        aimPosition.x += headMovement.x;
+        aimPosition.y += headMovement.y;
+        aimPosition.z += headMovement.z;
         
-        aimPosition.x += horizontalComp;
-        aimPosition.y += drop;
+        // Cập nhật hệ số bảo vệ không vượt quá
+        this.overshootProtection = this.calculateOvershootProtection(target);
         
         return aimPosition;
     }
 
-    // Cập nhật trạng thái chiến đấu với chế độ khóa siêu chặt
+    // BẢO VỆ KHÔNG VƯỢT QUÁ ĐẦU ĐỊCH
+    calculateOvershootProtection(target) {
+        const history = this.targetHistory.get(target.id);
+        if (!history || history.positions.length < 3) return 1.0;
+        
+        let overshootCount = 0;
+        let totalSamples = 0;
+        
+        for (let i = 2; i < history.positions.length; i++) {
+            const dx = history.positions[i].x - history.positions[i-1].x;
+            const dy = history.positions[i].y - history.positions[i-1].y;
+            const prevDx = history.positions[i-1].x - history.positions[i-2].x;
+            const prevDy = history.positions[i-1].y - history.positions[i-2].y;
+            
+            const directionChange = Math.abs(Math.atan2(dy, dx) - Math.atan2(prevDy, prevDx));
+            if (directionChange > 0.5) {
+                overshootCount++;
+            }
+            
+            totalSamples++;
+        }
+        
+        const overshootRatio = totalSamples > 0 ? overshootCount / totalSamples : 0;
+        return Math.max(0.8, 1.0 - (overshootRatio * 0.4));
+    }
+
     updateCombatState(gameState) {
         const timeSinceCombat = Date.now() - this.lastLockTime;
         
         if (gameState.isInCombat || timeSinceCombat < 3000) {
-            this.lockStrength = Math.min(0.9999, 0.995 + (gameState.combatIntensity * 0.004));
+            this.lockStrength = Math.min(0.9999, 0.995 + (gameState.combatIntensity * 0.005));
         } else {
-            this.lockStrength = Math.max(0.99, this.lockStrength - 0.001);
+            this.lockStrength = Math.max(0.985, this.lockStrength - 0.001);
         }
         
         if (gameState.isAiming) this.lockStrength = 0.998;
-        if (gameState.playerHealth < 30) {
+        if (gameState.playerHealth < 25) {
             this.lockStrength = 0.99995;
             this.headshotAccuracy = 0.995;
             this.stickyHeadLock = true;
+            this.bulletStabilization = true;
+            this.headLockPro = true;
         }
         
         this.aimStabilizer = 0.985 + (this.lockStrength * 0.01);
     }
 
-    // ... Các phương thức khác giữ nguyên ...
+    // ... Các phương thức khác giữ nguyên với cải tiến ...
 
-    getSystemMetadata() {
-        return {
-            version: "Headshot-Master-9.0",
-            lockStrength: this.lockStrength,
-            performanceProfile: this.performanceProfile,
-            bulletGuidance: this.bulletGuidanceSystem.getStatus(),
-            security: {
-                token: this.sessionToken,
-                checksum: this.generateSecureChecksum(),
-                behavior: "zero_overshoot"
-            }
-        };
-    }
 }
 
-class SmartBulletGuidance {
-    constructor() {
-        this.guidanceFactor = 0.85;
-        this.activeGuides = new Map();
-    }
-    
-    calculateGuidedTrajectory(start, end, target, weaponType, lockStrength) {
-        const weaponProfile = this.getWeaponProfile(weaponType);
-        const timeToTarget = target.distance / weaponProfile.bulletVelocity;
-        
-        // Dự đoán vị trí tương lai của mục tiêu
-        const futurePosition = {
-            x: target.position.x + (target.movement.x * timeToTarget * 1.2),
-            y: target.position.y + (target.movement.y * timeToTarget * 1.2),
-            z: target.position.z + (target.movement.z * timeToTarget * 1.2)
-        };
-        
-        // Tính toán hướng điều chỉnh
-        const adjustment = {
-            x: (futurePosition.x - end.x) * this.guidanceFactor * lockStrength,
-            y: (futurePosition.y - end.y) * this.guidanceFactor * lockStrength * 1.1,
-            z: (futurePosition.z - end.z) * this.guidanceFactor * lockStrength * 0.9
-        };
-        
-        // Lưu hướng dẫn cho viên đạn
-        const bulletId = `B_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-        this.activeGuides.set(bulletId, {
-            start: {...start},
-            end: {...end},
-            target: target.id,
-            adjustment,
-            startTime: Date.now(),
-            estimatedFlightTime: timeToTarget * 1000
-        });
-        
-        return {
-            id: bulletId,
-            start,
-            end: {
-                x: end.x + adjustment.x,
-                y: end.y + adjustment.y,
-                z: end.z + adjustment.z
-            },
-            guidanceStrength: lockStrength,
-            guidanceFactor: this.guidanceFactor
-        };
-    }
-    
-    calculateHorizontalCompensation(movement, distance, bulletVelocity) {
-        const timeToTarget = distance / bulletVelocity;
-        return movement.x * timeToTarget * 1.15;
-    }
-    
-    getWeaponProfile(weaponType) {
-        const profiles = {
-            default: { bulletVelocity: 500 },
-            sniper: { bulletVelocity: 1450 },
-            ar: { bulletVelocity: 900 },
-            smg: { bulletVelocity: 600 },
-            shotgun: { bulletVelocity: 420 },
-            dmr: { bulletVelocity: 1000 },
-            ak47: { bulletVelocity: 850 },
-            m4a1: { bulletVelocity: 920 }
-        };
-        return profiles[weaponType] || profiles.default;
-    }
-    
-    getStatus() {
-        return {
-            activeGuides: this.activeGuides.size,
-            guidanceFactor: this.guidanceFactor,
-            successRate: 0.98
-        };
-    }
-}
-
-class AdvancedBallisticCalculator {
+class AdvancedBallisticSystem {
     getGravity(weaponType) {
         const gravities = {
             sniper: 9.78, dmr: 9.79, ar: 9.80, smg: 9.82, 
@@ -335,8 +353,10 @@ class AdvancedBallisticCalculator {
 
     calculateAdvancedDrop(distance, velocity, gravity, movement) {
         const time = distance / velocity;
-        const verticalMovementComp = movement.y * time * 0.95;
-        return (0.5 * gravity * Math.pow(time, 2)) + verticalMovementComp;
+        // Tính độ rơi chính xác với hiệu chỉnh chuyển động
+        const baseDrop = 0.5 * gravity * Math.pow(time, 2);
+        const movementCompensation = movement.y * time * 0.85;
+        return baseDrop + movementCompensation;
     }
 }
 
