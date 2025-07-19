@@ -1,0 +1,56 @@
+// INTELLIGENT MEMORY MANAGER v4.0
+class IntelligentMemoryManager {
+    constructor() {
+        this.cache = new Map();
+        this.maxCacheSize = 40;
+        this.cleanupInterval = 8000;
+        this.lastCleanup = 0;
+    }
+
+    process(body) {
+        try {
+            const data = JSON.parse(body);
+            this.cleanup();
+            
+            // Tối ưu dữ liệu mục tiêu
+            if (data.targets && data.targets.length > 10) {
+                data.targets = this.optimizeTargets(data.targets);
+            }
+            
+            return JSON.stringify(data);
+        } catch (e) {
+            console.error("[MEM MANAGER] Error:", e.message);
+            return body;
+        }
+    }
+
+    optimizeTargets(targets) {
+        return targets
+            .filter(target => target.visible && target.distance < 200)
+            .sort((a, b) => b.threatLevel - a.threatLevel)
+            .slice(0, 8);
+    }
+
+    cleanup() {
+        const now = Date.now();
+        if (now - this.lastCleanup < this.cleanupInterval) return;
+        
+        // Xóa cache cũ
+        for (const [key, entry] of this.cache) {
+            if (now - entry.lastAccess > 30000) {
+                this.cache.delete(key);
+            }
+        }
+        
+        // Giới hạn kích thước cache
+        if (this.cache.size > this.maxCacheSize) {
+            const keys = [...this.cache.keys()].slice(0, this.cache.size - this.maxCacheSize);
+            keys.forEach(key => this.cache.delete(key));
+        }
+        
+        this.lastCleanup = now;
+    }
+}
+
+const memManager = new IntelligentMemoryManager();
+$done({ body: memManager.process($response.body) });
