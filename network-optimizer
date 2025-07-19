@@ -1,24 +1,24 @@
-// ULTIMATE NETWORK STEALTH v5.0 (Low Latency Edition)
+// ULTIMATE NETWORK STEALTH v6.0 (Ultra Low Latency Edition)
 class UltimateNetworkStealth {
     constructor() {
         this.NETWORK_PROFILES = {
             BALANCED: {
                 protocol: "hybrid",
                 compression: "medium",
-                resendThreshold: 140,
-                jitterBuffer: 18
+                resendThreshold: 130,
+                jitterBuffer: 15
             },
             COMPETITIVE: {
                 protocol: "udp_priority",
-                compression: "high",
-                resendThreshold: 90,
-                jitterBuffer: 8
+                compression: "ultra", // Tăng nén để giảm latency
+                resendThreshold: 80,
+                jitterBuffer: 6
             },
             STEALTH: {
                 protocol: "tcp_secure",
                 compression: "low",
-                resendThreshold: 180,
-                jitterBuffer: 25
+                resendThreshold: 170,
+                jitterBuffer: 22
             }
         };
         this.currentProfile = this.NETWORK_PROFILES.COMPETITIVE;
@@ -58,10 +58,10 @@ class UltimateNetworkStealth {
                 processingTime: Date.now() - startTime
             };
             
-            if (data.aimSystem?.lockStrength > 0.96) {
+            if (data.aimSystem?.lockStrength > 0.97) {
                 data.network.protocol = "udp_priority";
                 data.network.compression = "ultra";
-                data.network.resendThreshold = 70;
+                data.network.resendThreshold = 60; // Giảm threshold để tăng tốc
             }
             
             return JSON.stringify(data);
@@ -72,21 +72,21 @@ class UltimateNetworkStealth {
     }
 
     autoSelectProfile(metrics, securityStatus) {
-        if (!metrics || Date.now() - this.lastProfileSwitch < 4000) return;
+        if (!metrics || Date.now() - this.lastProfileSwitch < 3500) return;
         
-        if (securityStatus?.riskLevel > 0.7) {
+        if (securityStatus?.riskLevel > 0.65) {
             this.currentProfile = this.NETWORK_PROFILES.STEALTH;
             this.lastProfileSwitch = Date.now();
             return;
         }
         
-        if (metrics.aimIntensity > 0.8) {
+        if (metrics.aimIntensity > 0.85) {
             this.currentProfile = this.NETWORK_PROFILES.COMPETITIVE;
             this.lastProfileSwitch = Date.now();
             return;
         }
         
-        if (metrics.isCellular || metrics.ping > 150) {
+        if (metrics.isCellular || metrics.ping > 140) {
             this.currentProfile = this.NETWORK_PROFILES.STEALTH;
             this.lastProfileSwitch = Date.now();
             return;
@@ -96,7 +96,7 @@ class UltimateNetworkStealth {
     }
 
     rotateBehavior() {
-        if (Date.now() - this.lastBehaviorChange < 300000 || Math.random() < 0.75) return;
+        if (Date.now() - this.lastBehaviorChange < 250000 || Math.random() < 0.70) return;
         
         const currentIdx = this.behaviorProfiles.indexOf(this.currentBehavior);
         const nextIdx = (currentIdx + 1) % this.behaviorProfiles.length;
@@ -106,9 +106,9 @@ class UltimateNetworkStealth {
 
     getBehaviorProfiles() {
         return [
-            { name: "casual", reactionTime: { min: 220, max: 400 }, accuracy: 0.7, movement: "normal" },
-            { name: "regular", reactionTime: { min: 180, max: 320 }, accuracy: 0.82, movement: "fluid" },
-            { name: "pro", reactionTime: { min: 140, max: 280 }, accuracy: 0.9, movement: "precise" }
+            { name: "casual", reactionTime: { min: 200, max: 380 }, accuracy: 0.72, movement: "normal" },
+            { name: "regular", reactionTime: { min: 160, max: 300 }, accuracy: 0.85, movement: "fluid" },
+            { name: "pro", reactionTime: { min: 120, max: 260 }, accuracy: 0.92, movement: "precise" }
         ];
     }
 
@@ -116,9 +116,9 @@ class UltimateNetworkStealth {
         const profile = this.currentBehavior;
         return {
             reactionTime: profile.reactionTime.min + Math.random() * (profile.reactionTime.max - profile.reactionTime.min),
-            accuracy: profile.accuracy + (Math.random() * 0.08 - 0.04),
+            accuracy: profile.accuracy + (Math.random() * 0.06 - 0.03),
             movementPattern: profile.movement,
-            inputVariance: Math.random() * 0.12
+            inputVariance: Math.random() * 0.10
         };
     }
 
