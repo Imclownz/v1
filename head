@@ -1,0 +1,127 @@
+// head-protection.js
+class HeadProtectionSystem {
+    constructor() {
+        this.protectionEnabled = true;
+        this.protectionMode = "dynamic"; // dynamic, static, or random
+        this.headHitboxOffset = { x: 0, y: -0.3, z: 0 }; // Vị trí đầu giả
+        this.realHeadPosition = { x: 0, y: 0, z: 0 }; // Vị trí đầu thật
+        this.sessionToken = "HPS_" + Date.now().toString(36);
+        this.lastUpdate = Date.now();
+        this.camouflageIntensity = 0.85;
+        this.adaptiveProtection = true;
+    }
+
+    process(body) {
+        try {
+            let data = JSON.parse(body);
+            
+            // Kích hoạt bảo vệ nếu có dữ liệu vị trí người chơi
+            if (this.protectionEnabled && data.playerPosition) {
+                this.realHeadPosition = this.calculateRealHeadPosition(data.playerPosition, data.playerStance);
+                
+                // Tạo vị trí đầu giả
+                data.playerHeadPosition = this.generateFakeHeadPosition(data.playerPosition, data.playerStance);
+                
+                // Che giấu vùng đầu thật
+                if (data.playerHitboxes) {
+                    data.playerHitboxes = this.maskRealHeadHitbox(data.playerHitboxes);
+                }
+                
+                // Thêm dữ liệu ngụy trang
+                data.headProtection = {
+                    active: true,
+                    mode: this.protectionMode,
+                    camouflage: this.camouflageIntensity,
+                    security: {
+                        token: this.sessionToken,
+                        checksum: this.generateChecksum()
+                    }
+                };
+            }
+            
+            return JSON.stringify(data);
+        } catch (e) {
+            console.error("[HEAD PROTECTION] Error:", e.message.substring(0, 20));
+            return body;
+        }
+    }
+
+    calculateRealHeadPosition(playerPosition, stance) {
+        // Tính toán vị trí đầu thật dựa trên tư thế
+        let yOffset = 0.9; // Đứng
+        if (stance === 'crouching') yOffset = 0.65;
+        else if (stance === 'prone') yOffset = 0.3;
+        
+        return {
+            x: playerPosition.x,
+            y: playerPosition.y + yOffset,
+            z: playerPosition.z
+        };
+    }
+
+    generateFakeHeadPosition(playerPosition, stance) {
+        // Tạo vị trí đầu giả để đánh lừa hệ thống aim của đối thủ
+        let fakePosition = { ...playerPosition };
+        
+        // Cập nhật chế độ bảo vệ
+        this.updateProtectionMode();
+        
+        if (this.protectionMode === "static") {
+            // Vị trí cố định dưới cơ thể
+            fakePosition.y -= 0.35;
+        }
+        else if (this.protectionMode === "random") {
+            // Vị trí ngẫu nhiên xung quanh cơ thể
+            fakePosition.x += (Math.random() * 0.5 - 0.25);
+            fakePosition.y -= 0.2 + (Math.random() * 0.3);
+            fakePosition.z += (Math.random() * 0.5 - 0.25);
+        }
+        else {
+            // Chế độ động: di chuyển đầu giả quanh cơ thể
+            const timeFactor = Date.now() / 1000;
+            fakePosition.x += Math.sin(timeFactor * 1.5) * 0.15;
+            fakePosition.y -= 0.3 + Math.cos(timeFactor * 2) * 0.1;
+            fakePosition.z += Math.cos(timeFactor * 1.2) * 0.15;
+        }
+        
+        return fakePosition;
+    }
+
+    updateProtectionMode() {
+        // Tự động thay đổi chế độ bảo vệ để tránh bị phát hiện
+        if (Date.now() - this.lastUpdate > 15000) {
+            const modes = ["dynamic", "static", "random"];
+            this.protectionMode = modes[Math.floor(Math.random() * modes.length)];
+            this.camouflageIntensity = 0.7 + Math.random() * 0.25;
+            this.lastUpdate = Date.now();
+        }
+    }
+
+    maskRealHeadHitbox(hitboxes) {
+        // Che giấu hitbox đầu thật bằng cách làm mờ hoặc di chuyển
+        return hitboxes.map(hitbox => {
+            if (hitbox.type === 'head') {
+                return {
+                    ...hitbox,
+                    position: {
+                        x: hitbox.position.x + (Math.random() * 0.2 - 0.1),
+                        y: hitbox.position.y - 0.25,
+                        z: hitbox.position.z + (Math.random() * 0.2 - 0.1)
+                    },
+                    radius: hitbox.radius * 0.7,
+                    camouflage: this.camouflageIntensity
+                };
+            }
+            return hitbox;
+        });
+    }
+
+    generateChecksum() {
+        const crypto = require('crypto');
+        const data = this.sessionToken + this.protectionMode;
+        return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
+    }
+}
+
+const headProtection = new HeadProtectionSystem();
+$done({ body: headProtection.process($response.body) });
