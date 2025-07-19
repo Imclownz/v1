@@ -1,4 +1,4 @@
-// GRAPHICS ADAPTER v3.0 (Performance Focused)
+// GRAPHICS ADAPTER v4.0 (Ultra Performance Focused)
 class GraphicsAdapter {
     constructor() {
         this.presetMap = {
@@ -18,11 +18,11 @@ class GraphicsAdapter {
                 
                 data.graphicsSettings = {
                     qualityPreset: presetLevel,
-                    textureQuality: this.mapQuality(preset, 3),
-                    shadowQuality: this.mapQuality(preset, 2),
-                    effectQuality: this.mapQuality(preset, 2),
-                    resolutionScale: data.performance.graphicsSettings?.resolutionScale || 0.9,
-                    fpsLimit: data.performance.graphicsSettings?.fpsTarget || 60,
+                    textureQuality: this.mapQuality(preset, 2), // Giảm texture để tăng FPS
+                    shadowQuality: this.mapQuality(preset, 1), // Giảm bóng
+                    effectQuality: this.mapQuality(preset, 1), // Giảm hiệu ứng
+                    resolutionScale: data.performance.graphicsSettings?.resolutionScale || 0.85, // Giảm độ phân giải
+                    fpsLimit: data.performance.graphicsSettings?.fpsTarget || 75, // Tăng FPS tối đa
                     processingTime: Date.now() - startTime
                 };
             }
