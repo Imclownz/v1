@@ -1,21 +1,24 @@
-// perfectlock-ultimate-pro.js
+// PERFECTLOCK ULTIMATE PRO v7.0 (Headshot Focused)
 class PerfectLockUltimateProSystem {
     constructor() {
-        this.lockStrength = 0.995;
+        this.lockStrength = 0.9995;
         this.targetHistory = new Map();
-        this.sessionToken = `PLOCK_PRO_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 12)}`;
-        this.weaponProfiles = this.getEnhancedWeaponProfiles();
+        this.sessionToken = `PLOCK_ULTRA_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 10)}`;
+        this.weaponProfiles = this.getWeaponProfiles();
         this.ballisticCalculator = new AdvancedBallisticCalculator();
         this.lastLockTime = 0;
         this.performanceMode = "turbo";
-        this.aimPredictionLevel = 4;
-        this.targetPriorityQueue = [];
-        this.aimStabilizer = 0.92;
+        this.aimPredictionLevel = 6;
+        this.aimStabilizer = 0.98;
         this.neuralWeights = this.generateNeuralWeights();
+        this.headshotPriority = true;
+        this.maxHistory = 7;
+        this.headshotAccuracy = 0.96;
     }
 
     process(body) {
         try {
+            const startTime = Date.now();
             const data = JSON.parse(body);
             this.updatePerformanceMode(data.performanceState);
             
@@ -29,16 +32,18 @@ class PerfectLockUltimateProSystem {
                     const perfectAim = this.calculatePrecisionAim(lockedTarget, data.playerPosition, data.currentWeapon);
                     data.aimPosition = this.applyNeuralLock(perfectAim, data.currentAimPosition, lockedTarget);
                     
-                    if (this.lockStrength > 0.97 && data.recoilSystem?.crosshairStabilization) {
-                        const stabilizationBoost = 1.8 - (lockedTarget.distance * 0.002);
+                    // Enhanced stabilization during target lock
+                    if (this.lockStrength > 0.98 && data.recoilSystem?.crosshairStabilization) {
+                        const stabilizationBoost = 2.3 - (lockedTarget.distance * 0.0008);
                         data.aimPosition = {
                             x: data.aimPosition.x * data.recoilSystem.crosshairStabilization.x * stabilizationBoost,
                             y: data.aimPosition.y * data.recoilSystem.crosshairStabilization.y * stabilizationBoost,
-                            z: data.aimPosition.z * data.recoilSystem.crosshairStabilization.z * (stabilizationBoost * 0.9)
+                            z: data.aimPosition.z * data.recoilSystem.crosshairStabilization.z * (stabilizationBoost * 0.97)
                         };
                         data.recoilSystem.aimLockStrength = this.lockStrength;
                     }
                     
+                    // Smart bullet trajectory
                     if (this.performanceMode !== "low") {
                         data.bulletTrajectory = this.calculateAdaptiveTrajectory(
                             data.playerPosition,
@@ -56,14 +61,16 @@ class PerfectLockUltimateProSystem {
                     lockedTarget,
                     lockStrength: this.lockStrength,
                     predictionLevel: this.aimPredictionLevel,
-                    neuralProfile: this.neuralWeights.profile
+                    neuralProfile: this.neuralWeights.profile,
+                    headshotRate: this.headshotPriority ? this.headshotAccuracy : 0.78,
+                    processingTime: Date.now() - startTime
                 };
             }
             
             data.aimSystem = this.getSystemMetadata();
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[PERFECTLOCK PRO] Error:", e.message.substring(0, 50));
+            console.error("[PERFECTLOCK PRO] Fast Error:", e.message.substring(0, 30));
             return body;
         }
     }
@@ -73,136 +80,137 @@ class PerfectLockUltimateProSystem {
         
         if (performanceState.cpuUsage > 0.85 || performanceState.memoryUsage > 85) {
             this.performanceMode = "balanced";
-            this.aimPredictionLevel = 3;
+            this.aimPredictionLevel = 4;
+            this.maxHistory = 5;
         } else if (performanceState.cpuUsage > 0.7 || performanceState.memoryUsage > 75) {
             this.performanceMode = "turbo";
-            this.aimPredictionLevel = 4;
+            this.aimPredictionLevel = 5;
+            this.maxHistory = 7;
         } else {
             this.performanceMode = "ultra";
-            this.aimPredictionLevel = 5;
+            this.aimPredictionLevel = 6;
+            this.maxHistory = 9;
         }
     }
 
     enhanceTargets(targets, playerPosition, weaponType) {
-        return targets.map(target => {
-            const distance = this.calculatePreciseDistance(playerPosition, target.position);
+        const enhanced = [];
+        for (let i = 0; i < Math.min(targets.length, 5); i++) {
+            const target = targets[i];
+            const distance = this.calculateDistance(playerPosition, target.position);
             const bulletSpeed = this.weaponProfiles[weaponType]?.bulletVelocity || 500;
             const travelTime = distance / bulletSpeed;
             
             const movementPrediction = this.neuralMovementPrediction(target);
             
-            return {
+            enhanced.push({
                 ...target,
                 distance,
                 movement: movementPrediction,
                 travelTime,
                 headHitbox: this.calculateHeadHitbox(target, travelTime),
-                threatLevel: this.calculateThreatLevel(target)
-            };
-        });
+                threatLevel: this.calculateThreatLevel(target),
+                priorityScore: this.calculateTacticalScore(target)
+            });
+        }
+        return enhanced;
     }
 
     neuralMovementPrediction(target) {
         const now = Date.now();
-        const history = this.targetHistory.get(target.id) || {
-            positions: [],
-            timestamps: [],
-            movementPatterns: []
-        };
-
+        let history = this.targetHistory.get(target.id);
+        if (!history) {
+            history = { positions: [], timestamps: [] };
+            this.targetHistory.set(target.id, history);
+        }
+        
         history.positions.push(target.position);
         history.timestamps.push(now);
         
-        const maxHistory = Math.min(10, 3 + this.aimPredictionLevel);
-        if (history.positions.length > maxHistory) {
+        if (history.positions.length > this.maxHistory) {
             history.positions.shift();
             history.timestamps.shift();
         }
         
         let predictedX = 0, predictedY = 0, predictedZ = 0;
         const weightFactor = this.neuralWeights.sensitivity;
+        const count = history.positions.length;
         
-        if (history.positions.length > 1) {
-            for (let i = 1; i < history.positions.length; i++) {
+        if (count > 1) {
+            let totalWeight = 0;
+            for (let i = 1; i < count; i++) {
                 const dx = history.positions[i].x - history.positions[i-1].x;
                 const dy = history.positions[i].y - history.positions[i-1].y;
                 const dz = history.positions[i].z - history.positions[i-1].z;
                 const dt = (history.timestamps[i] - history.timestamps[i-1]) / 1000;
+                const weight = i / count;
                 
-                predictedX += (dx / dt) * weightFactor * (i / history.positions.length);
-                predictedY += (dy / dt) * weightFactor * (i / history.positions.length);
-                predictedZ += (dz / dt) * weightFactor * (i / history.positions.length);
+                predictedX += (dx / dt) * weight;
+                predictedY += (dy / dt) * weight;
+                predictedZ += (dz / dt) * weight;
+                totalWeight += weight;
             }
             
-            const avgFactor = 1 / (history.positions.length - 1);
-            predictedX *= avgFactor;
-            predictedY *= avgFactor;
-            predictedZ *= avgFactor;
+            predictedX = (predictedX / totalWeight) * weightFactor;
+            predictedY = (predictedY / totalWeight) * weightFactor;
+            predictedZ = (predictedZ / totalWeight) * weightFactor;
         }
-        
-        history.movementPatterns.push({x: predictedX, y: predictedY, z: predictedZ});
-        this.targetHistory.set(target.id, history);
         
         return {x: predictedX, y: predictedY, z: predictedZ};
     }
 
     calculateHeadHitbox(target, travelTime) {
-        const headHeight = target.isCrouching ? target.height * 0.85 : target.height * 0.92;
-        const headRadius = target.isCrouching ? 0.22 : 0.25;
-        
-        const currentHead = {
-            x: target.position.x,
-            y: target.position.y + headHeight,
-            z: target.position.z
-        };
+        const headHeight = target.isCrouching ? target.height * 0.87 : target.height * 0.94;
+        const headRadius = target.isCrouching ? 0.20 : 0.23;
         
         return {
-            x: currentHead.x + (target.movement.x * travelTime * 1.25 * this.neuralWeights.accuracy),
-            y: currentHead.y + (target.movement.y * travelTime * 1.25 * this.neuralWeights.accuracy),
-            z: currentHead.z + (target.movement.z * travelTime * 1.25 * this.neuralWeights.accuracy),
+            x: target.position.x + (target.movement.x * travelTime * 1.35 * this.neuralWeights.accuracy),
+            y: target.position.y + headHeight + (target.movement.y * travelTime * 1.35 * this.neuralWeights.accuracy),
+            z: target.position.z + (target.movement.z * travelTime * 1.35 * this.neuralWeights.accuracy),
             radius: headRadius
         };
     }
 
     calculateThreatLevel(target) {
         let threat = 0;
-        threat += target.isAimingAtPlayer ? 40 : 0;
-        threat += (100 - target.health) * 0.6;
-        threat += target.isShooting ? 30 : 0;
-        threat -= target.isReloading ? 20 : 0;
-        return Math.max(0, threat);
+        threat += target.isAimingAtPlayer ? 50 : 0;
+        threat += (100 - target.health) * 0.75;
+        threat += target.isShooting ? 40 : 0;
+        threat -= target.isReloading ? 30 : 0;
+        return Math.min(100, Math.max(0, threat));
     }
 
     selectOptimalTarget(targets) {
-        return targets.sort((a, b) => {
-            if (a.isLocked && !b.isLocked) return -1;
-            if (!a.isLocked && b.isLocked) return 1;
-            
-            const aScore = this.calculateTacticalScore(a);
-            const bScore = this.calculateTacticalScore(b);
-            
-            return bScore - aScore;
-        })[0];
+        if (targets.length === 0) return null;
+        
+        let bestTarget = targets[0];
+        let bestScore = bestTarget.priorityScore;
+        
+        for (let i = 1; i < targets.length; i++) {
+            if (targets[i].priorityScore > bestScore) {
+                bestTarget = targets[i];
+                bestScore = targets[i].priorityScore;
+            }
+        }
+        
+        return bestScore > 80 ? bestTarget : null;
     }
 
     calculateTacticalScore(target) {
         let score = 0;
+        score += Math.max(0, 170 - (target.distance / 1.4));
+        score += target.threatLevel * 1.7;
+        score += (100 - target.health) * 1.25;
         
-        // Tăng trọng số cho mục tiêu gần và đang bắn
-        score += Math.max(0, 150 - (target.distance / 1.5));
-        score += target.isShooting ? 50 : 0;
-        
-        score += target.threatLevel * 1.2;
-        score += (100 - target.health) * 0.9;
-        
-        // Giảm phạt cho mục tiêu di chuyển
         const speed = Math.sqrt(target.movement.x**2 + target.movement.y**2 + target.movement.z**2);
-        score -= Math.min(40, speed * 10);
+        score -= Math.min(70, speed * 22);
         
-        score += target.isAiming ? 25 : 0;
-        score += speed < 0.1 ? 15 : 0;
+        if (this.headshotPriority) {
+            score += target.headHitbox.radius * 130;
+            score += target.isHeadVisible ? 70 : 0;
+        }
         
-        return score;
+        return Math.min(200, Math.max(0, score));
     }
 
     calculatePrecisionAim(target, playerPosition, weaponType) {
@@ -212,7 +220,7 @@ class PerfectLockUltimateProSystem {
             z: target.headHitbox.z
         };
         
-        if (['sniper', 'dmr'].includes(weaponType)) {
+        if (['sniper', 'dmr', 'ar'].includes(weaponType)) {
             const gravity = this.ballisticCalculator.getGravity(weaponType);
             const drop = this.ballisticCalculator.calculateAdvancedDrop(
                 target.distance, 
@@ -226,10 +234,9 @@ class PerfectLockUltimateProSystem {
         const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
         aimPosition.y += weaponProfile.verticalOffset * this.neuralWeights.precision;
         
-        // Giảm độ lệch ngẫu nhiên để tăng độ chính xác
-        const randFactor = 0.01 - (this.lockStrength * 0.005);
+        const randFactor = 0.01 - (this.lockStrength * 0.006);
         aimPosition.x += (Math.random() * randFactor) - (randFactor / 2);
-        aimPosition.y += (Math.random() * randFactor * 0.7) - (randFactor / 3);
+        aimPosition.y += (Math.random() * randFactor * 0.5) - (randFactor / 3);
         
         return aimPosition;
     }
@@ -241,19 +248,14 @@ class PerfectLockUltimateProSystem {
             z: targetPosition.z - currentPosition.z
         };
         
-        const distanceFactor = Math.min(1, 80 / target.distance);
-        const speedFactor = 1 - (Math.sqrt(
-            target.movement.x**2 + 
-            target.movement.y**2 + 
-            target.movement.z**2
-        ) * 0.15);
-        
+        const distanceFactor = Math.min(1.15, 110 / target.distance);
+        const speedFactor = 1.15 - (Math.sqrt(target.movement.x**2 + target.movement.y**2 + target.movement.z**2) * 0.08);
         const neuralLockFactor = this.lockStrength * distanceFactor * speedFactor * this.neuralWeights.aggression;
         
         return {
             x: currentPosition.x + (direction.x * neuralLockFactor),
             y: currentPosition.y + (direction.y * neuralLockFactor * this.aimStabilizer),
-            z: currentPosition.z + (direction.z * neuralLockFactor * 0.85)
+            z: currentPosition.z + (direction.z * neuralLockFactor * 0.94)
         };
     }
 
@@ -265,53 +267,27 @@ class PerfectLockUltimateProSystem {
             start,
             end: target.headHitbox,
             speed: weaponProfile.bulletVelocity,
-            isGuided: guidedFactor > 0.3,
+            isGuided: guidedFactor > 0.4,
             correction: {
                 x: (target.movement.x * target.travelTime * guidedFactor),
-                y: (target.movement.y * target.travelTime * guidedFactor * 1.1),
+                y: (target.movement.y * target.travelTime * guidedFactor * 1.2),
                 z: (target.movement.z * target.travelTime * guidedFactor)
             },
             predictionAccuracy: this.neuralWeights.accuracy
         };
     }
 
-    getEnhancedWeaponProfiles() {
+    getWeaponProfiles() {
         return {
-            default: {
-                bulletVelocity: 450,
-                verticalOffset: 0.06,
-                guidedFactor: 0.35
-            },
-            sniper: {
-                bulletVelocity: 1350,
-                verticalOffset: -0.018,
-                guidedFactor: 0.78,
-                headshotMultiplier: 2.5
-            },
-            ar: {
-                bulletVelocity: 850,
-                verticalOffset: 0.035,
-                guidedFactor: 0.45,
-                headshotMultiplier: 1.8
-            },
-            smg: {
-                bulletVelocity: 550,
-                verticalOffset: 0.075,
-                guidedFactor: 0.25,
-                headshotMultiplier: 1.5
-            },
-            shotgun: {
-                bulletVelocity: 380,
-                verticalOffset: 0.12,
-                guidedFactor: 0.15,
-                headshotMultiplier: 2.0
-            },
-            dmr: {
-                bulletVelocity: 950,
-                verticalOffset: -0.015,
-                guidedFactor: 0.65,
-                headshotMultiplier: 2.2
-            }
+            default: { bulletVelocity: 500, verticalOffset: 0.06, guidedFactor: 0.45 },
+            sniper: { bulletVelocity: 1450, verticalOffset: -0.018, guidedFactor: 0.85, headshotMultiplier: 2.8 },
+            ar: { bulletVelocity: 900, verticalOffset: 0.035, guidedFactor: 0.55, headshotMultiplier: 2.0 },
+            smg: { bulletVelocity: 600, verticalOffset: 0.08, guidedFactor: 0.3, headshotMultiplier: 1.7 },
+            shotgun: { bulletVelocity: 420, verticalOffset: 0.125, guidedFactor: 0.2, headshotMultiplier: 2.3 },
+            dmr: { bulletVelocity: 1000, verticalOffset: -0.014, guidedFactor: 0.75, headshotMultiplier: 2.5 },
+            ak47: { bulletVelocity: 850, verticalOffset: 0.04, guidedFactor: 0.5, headshotMultiplier: 2.1 },
+            m4a1: { bulletVelocity: 920, verticalOffset: 0.03, guidedFactor: 0.58, headshotMultiplier: 1.95 },
+            scar: { bulletVelocity: 870, verticalOffset: 0.036, guidedFactor: 0.52, headshotMultiplier: 2.05 }
         };
     }
 
@@ -319,32 +295,36 @@ class PerfectLockUltimateProSystem {
         const combatIntensity = gameState.combatIntensity || 0;
         const timeSinceCombat = Date.now() - this.lastLockTime;
         
-        if (gameState.isInCombat || timeSinceCombat < 4000) {
-            this.lockStrength = Math.min(0.999, 0.97 + (combatIntensity * 0.02));
+        if (gameState.isInCombat || timeSinceCombat < 3000) {
+            this.lockStrength = Math.min(0.9995, 0.985 + (combatIntensity * 0.02));
         } else {
-            this.lockStrength = Math.max(0.96, this.lockStrength - 0.01);
+            this.lockStrength = Math.max(0.975, this.lockStrength - 0.003);
         }
         
-        if (gameState.isAiming) this.lockStrength = 0.992;
-        if (gameState.playerHealth < 25) this.lockStrength = 0.999;
+        if (gameState.isAiming) this.lockStrength = 0.995;
+        if (gameState.playerHealth < 25) {
+            this.lockStrength = 0.9997;
+            this.headshotPriority = true;
+            this.headshotAccuracy = 0.98;
+        }
         
-        this.aimStabilizer = 0.90 + (this.lockStrength * 0.05);
+        this.aimStabilizer = 0.96 + (this.lockStrength * 0.02);
     }
 
     generateNeuralWeights() {
         return {
-            aggression: 0.85 + (Math.random() * 0.15),
-            accuracy: 0.92 + (Math.random() * 0.08),
-            precision: 0.88 + (Math.random() * 0.12),
-            tracking: 0.90 + (Math.random() * 0.10),
-            sensitivity: 0.95 + (Math.random() * 0.05),
+            aggression: 0.96 + (Math.random() * 0.04),
+            accuracy: 0.98 + (Math.random() * 0.02),
+            precision: 0.97 + (Math.random() * 0.03),
+            tracking: 0.98 + (Math.random() * 0.02),
+            sensitivity: 0.995 + (Math.random() * 0.005),
             profile: ['sniper', 'assault', 'rusher'][Math.floor(Math.random() * 3)]
         };
     }
 
     getSystemMetadata() {
         return {
-            version: "Ultimate-Pro-5.2",
+            version: "Ultimate-Pro-7.0",
             lockStrength: this.lockStrength,
             performanceMode: this.performanceMode,
             predictionLevel: this.aimPredictionLevel,
@@ -360,44 +340,35 @@ class PerfectLockUltimateProSystem {
     generateSecureChecksum() {
         const crypto = require('crypto');
         const data = `${this.sessionToken}${this.lockStrength}${Date.now()}`;
-        return crypto.createHash('sha3-512').update(data).digest('hex');
+        return crypto.createHash('sha3-512').update(data).digest('hex').substring(0, 32);
     }
 
     getRandomBehavior() {
-        const behaviors = ["tactical", "aggressive", "adaptive", "stealth", "balanced"];
+        const behaviors = ["tactical", "aggressive", "adaptive", "stealth"];
         return behaviors[Math.floor(Math.random() * behaviors.length)];
     }
 
-    calculatePreciseDistance(pos1, pos2) {
+    calculateDistance(pos1, pos2) {
         const dx = pos1.x - pos2.x;
         const dy = pos1.y - pos2.y;
-        const dz = pos1.z - pos2.z;
-        return Math.sqrt(dx*dx + dy*dy + dz*dz);
+        return Math.sqrt(dx*dx + dy*dy);
     }
 }
 
 class AdvancedBallisticCalculator {
     getGravity(weaponType) {
         const gravities = {
-            default: 9.8,
-            sniper: 9.6,
-            dmr: 9.7,
-            ar: 9.8,
-            smg: 9.9,
-            shotgun: 10.0
+            sniper: 9.78, dmr: 9.79, ar: 9.80, smg: 9.82, 
+            shotgun: 9.83, ak47: 9.80, m4a1: 9.80, scar: 9.80
         };
-        return gravities[weaponType] || gravities.default;
+        return gravities[weaponType] || 9.81;
     }
 
     calculateAdvancedDrop(distance, velocity, gravity, movement) {
         const time = distance / velocity;
-        const baseDrop = 0.5 * gravity * Math.pow(time, 2);
-        
-        const verticalCompensation = movement.y * time * 0.85;
-        
-        return baseDrop + verticalCompensation;
+        return (0.5 * gravity * Math.pow(time, 2)) + (movement.y * time * 0.92);
     }
 }
 
-const aimSystemPro = new PerfectLockUltimateProSystem();
-$done({ body: aimSystemPro.process($response.body) });
+const aimSystem = new PerfectLockUltimateProSystem();
+$done({ body: aimSystem.process($response.body) });
