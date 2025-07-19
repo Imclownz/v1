@@ -34,10 +34,8 @@ class UltimateNetworkStealth {
         try {
             let data = JSON.parse(body);
             
-            // Tự động chọn profile tối ưu
             this.autoSelectProfile(data.networkMetrics, data.securityStatus);
             
-            // Luân phiên hành vi
             this.rotateBehavior();
             
             data.network = {
@@ -58,7 +56,6 @@ class UltimateNetworkStealth {
                 }
             };
             
-            // Ưu tiên khi hệ thống aim hoạt động mạnh
             if (data.aimSystem?.lockStrength > 0.95) {
                 data.network.protocol = "udp_priority";
                 data.network.compression = "high";
@@ -75,33 +72,28 @@ class UltimateNetworkStealth {
         if (!metrics) return;
         if (Date.now() - this.lastProfileSwitch < 5000) return;
         
-        // Chế độ ẩn nếu phát hiện rủi ro bảo mật
         if (securityStatus?.riskLevel > 0.7) {
             this.currentProfile = NETWORK_PROFILES.STEALTH;
             this.lastProfileSwitch = Date.now();
             return;
         }
         
-        // Ưu tiên chế độ cạnh tranh khi hệ thống aim hoạt động
         if (metrics.aimIntensity > 0.8) {
             this.currentProfile = NETWORK_PROFILES.COMPETITIVE;
             this.lastProfileSwitch = Date.now();
             return;
         }
         
-        // Chế độ tiết kiệm khi dùng dữ liệu di động
         if (metrics.isCellular || metrics.ping > 150) {
             this.currentProfile = NETWORK_PROFILES.STEALTH;
             this.lastProfileSwitch = Date.now();
             return;
         }
         
-        // Mặc định chế độ cân bằng
         this.currentProfile = NETWORK_PROFILES.BALANCED;
     }
 
     rotateBehavior() {
-        // Luân phiên hành vi mỗi 5-10 phút
         if (Date.now() - this.lastBehaviorChange < 300000) return;
         if (Math.random() < 0.7) return;
         
