@@ -1,12 +1,17 @@
-// FREE FIRE RECOIL STABILIZER v6.5
+// FREE FIRE RECOIL STABILIZER v7.0
 class FreeFireRecoilStabilizer {
     constructor() {
         this.weaponDatabase = this.getFreeFireWeaponDB();
         this.sessionToken = "FFRS_" + Date.now().toString(36);
         this.stabilityLevel = 1.0;
         this.adaptiveCompensation = 0.96; // Bù giật thích nghi
-        this.recoilPatterns = this.getFreeFireRecoilPatterns();
+        this.recoilPatterns = {
+            ak47: [0.12, 0.25, 0.08, -0.10, -0.05, 0.15], // Mẫu giật thực tế AK Free Fire 
+            m4a1: [0.09, 0.16, 0.04, -0.07, -0.04, 0.11],
+            default: [0.05, 0.1, 0.03, -0.04, -0.02, 0.07]
+        };
         this.lastFireTime = 0;
+        this.bulletCounter = 0;
     }
 
     process(body) {
@@ -18,12 +23,16 @@ class FreeFireRecoilStabilizer {
             
             // Phát hiện trạng thái bắn
             const isFiring = data.gameState?.isFiring;
-            const fireRate = isFiring ? this.calculateFireRate() : 1.0;
+            if (isFiring) {
+                this.bulletCounter++;
+            } else {
+                this.bulletCounter = 0;
+            }
             
             data.recoilSystem = {
-                version: "Stabilizer-6.5",
-                horizontalCompensation: this.calculateHorizontalComp(profile) * this.adaptiveCompensation * fireRate,
-                verticalCompensation: this.calculateVerticalComp(profile) * this.adaptiveCompensation * fireRate,
+                version: "Stabilizer-7.0",
+                horizontalCompensation: this.calculateHorizontalComp(profile) * this.adaptiveCompensation,
+                verticalCompensation: this.calculateVerticalComp(profile) * this.adaptiveCompensation,
                 crosshairStabilization: this.calculateCrosshairStability(profile, isFiring),
                 patternElimination: "freefire_adaptive",
                 smoothingFactor: 0.985,
@@ -33,6 +42,18 @@ class FreeFireRecoilStabilizer {
                 },
                 processingTime: performance.now() - startTime
             };
+            
+            // Bù giật theo từng viên đạn nếu đang bắn
+            if (isFiring) {
+                const comp = this.calculatePerBulletComp(weaponType, this.bulletCounter);
+                data.recoilSystem.horizontalCompensation += comp.x;
+                data.recoilSystem.verticalCompensation += comp.y;
+                
+                // TỐI ƯU: Giảm 40% giật dọc khi bắn >5 viên 
+                if (this.bulletCounter > 5) {
+                    data.recoilSystem.verticalCompensation *= 0.6;
+                }
+            }
             
             // Cập nhật thời gian bắn
             if (isFiring) this.lastFireTime = performance.now();
@@ -86,14 +107,14 @@ class FreeFireRecoilStabilizer {
         };
     }
 
-    // TÍNH TỐC ĐỘ BẮN
-    calculateFireRate() {
-        if (this.lastFireTime === 0) return 1.0;
-        
-        const timeSinceLastShot = performance.now() - this.lastFireTime;
-        if (timeSinceLastShot < 100) return 0.9;
-        if (timeSinceLastShot < 200) return 0.95;
-        return 1.0;
+    // CẢI TIẾN: Bù giật theo từng viên đạn 
+    calculatePerBulletComp(weaponType, bulletCount) {
+        const pattern = this.recoilPatterns[weaponType] || this.recoilPatterns.default;
+        const index = bulletCount % pattern.length;
+        return {
+            x: pattern[index] * -0.85, // Đảo ngược hướng giật
+            y: pattern[index] * -1.2    // Ưu tiên bù giật dọc
+        };
     }
 
     getFreeFireWeaponDB() {
@@ -103,14 +124,6 @@ class FreeFireRecoilStabilizer {
             ak47: {horizontalBase: 0.065, verticalBase: 0.125, baseStability: 0.95},
             m4a1: {horizontalBase: 0.048, verticalBase: 0.085, baseStability: 1.1},
             shotgun: {horizontalBase: 0.075, verticalBase: 0.135, baseStability: 0.85}
-        };
-    }
-
-    getFreeFireRecoilPatterns() {
-        return {
-            ak47: [0.12, 0.25, 0.08, -0.10, -0.05, 0.15],
-            m4a1: [0.09, 0.16, 0.04, -0.07, -0.04, 0.11],
-            sniper: [0.006, 0.20, 0.006, -0.006, -0.006, 0.01]
         };
     }
 
