@@ -1,246 +1,113 @@
-// ADVANCED PERFORMANCE OPTIMIZER v6.0 (Ultra Smooth Edition)
-class AdvancedPerformanceOptimizer {
+// FREE FIRE PERFORMANCE OPTIMIZER v5.5
+class FreeFirePerformanceOptimizer {
     constructor() {
         this.modules = {
-            aim: { active: true, priority: 0, cpuBudget: 0.50, memBudget: 30 }, // Ưu tiên aim
-            recoil: { active: true, priority: 1, cpuBudget: 0.35, memBudget: 20 },
-            network: { active: true, priority: 2, cpuBudget: 0.10, memBudget: 10 },
-            graphics: { active: true, priority: 3, cpuBudget: 0.08, memBudget: 15 }
+            aim: { cpu: 48, mem: 28, active: true },
+            recoil: { cpu: 25, mem: 18, active: true },
+            network: { cpu: 12, mem: 10, active: true },
+            graphics: { cpu: 10, mem: 8, active: true }
         };
-        this.lastAdjustment = Date.now();
-        this.performanceStats = { cpu: 0, memory: 0, fps: 0, temp: 0 };
-        this.graphicsPresets = {
-            ultra: { textureQuality: "ultra", shadowQuality: "high", effectsQuality: "high", resolutionScale: 1.0, fpsTarget: 120 },
-            high: { textureQuality: "high", shadowQuality: "medium", effectsQuality: "medium", resolutionScale: 0.95, fpsTarget: 90 },
-            balanced: { textureQuality: "medium", shadowQuality: "low", effectsQuality: "medium", resolutionScale: 0.9, fpsTarget: 75 },
-            low: { textureQuality: "low", shadowQuality: "off", effectsQuality: "low", resolutionScale: 0.8, fpsTarget: 60 },
-            minimal: { textureQuality: "very_low", shadowQuality: "off", effectsQuality: "off", resolutionScale: 0.7, fpsTarget: 45 }
+        this.qualitySettings = {
+            texture: "low",
+            shadows: "off",
+            effects: "minimal",
+            resolution: 0.85,
+            fpsTarget: 90
         };
-        this.currentGraphicsPreset = "balanced";
-        this.thermalControl = new ThermalControlSystem();
-        this.memoryManager = new MemoryManager();
-        this.gameState = null;
-        this.thermalThrottleDetected = false;
-        this.networkOptimizer = new NetworkOptimizer(); // Tối ưu hóa mạng
+        this.thermalControl = new ThermalController();
+        this.aimBoostMode = false;
     }
 
     process(body) {
         try {
-            const startTime = Date.now();
+            const startTime = performance.now();
             let data = JSON.parse(body);
             
-            this.gameState = data.gameState || this.gameState;
-            
-            if (data.performanceState) {
-                this.updateStats(data.performanceState);
+            // Kích hoạt chế độ Aim Boost khi chiến đấu
+            if (data.gameState?.isInCombat) {
+                this.activateAimBoost();
+            } else {
+                this.deactivateAimBoost();
             }
             
-            this.memoryManager.cleanup();
-            
-            if (Date.now() - this.lastAdjustment > 1000 || this.performanceStats.cpu > 0.75) {
-                this.optimizeSystem();
-                this.lastAdjustment = Date.now();
+            // Kiểm tra nhiệt độ
+            if (data.performanceState?.temperature > 45) {
+                this.thermalControl.activateCooling();
+                this.reduceQuality();
             }
-            
-            this.thermalControl.monitor(this.performanceStats.temp);
-            
-            if (data.graphicsSettings) {
-                data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
-            }
-            
-            // Tối ưu hóa mạng
-            data.network = this.networkOptimizer.optimize(data.network);
             
             data.performance = {
-                timestamp: Date.now(),
-                moduleAllocations: this.getModuleAllocations(),
-                stats: this.performanceStats,
+                modules: this.modules,
+                quality: this.qualitySettings,
                 thermalStatus: this.thermalControl.getStatus(),
-                memoryUsage: this.memoryManager.getUsage(),
-                processingTime: Date.now() - startTime
+                processingTime: performance.now() - startTime
             };
 
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[PERF OPTIMIZER] Fast Error:", e.message.substring(0, 20));
+            console.error("[PERF OPTIMIZER] FreeFire Error:", e.message.substring(0,20));
             return body;
         }
     }
 
-    updateStats(perf) {
-        const weight = 0.3;
-        this.performanceStats.cpu = this.calcAvg(this.performanceStats.cpu, perf.cpuUsage, weight);
-        this.performanceStats.memory = this.calcAvg(this.performanceStats.memory, perf.memoryUsage, weight);
-        this.performanceStats.fps = this.calcAvg(this.performanceStats.fps, perf.fps, weight);
-        this.performanceStats.temp = perf.temperature || this.performanceStats.temp;
-    }
-
-    calcAvg(current, newVal, weight) {
-        return isNaN(current) ? newVal : (current * (1 - weight) + newVal * weight);
-    }
-
-    optimizeSystem() {
-        if (this.gameState?.isInCombat) {
-            this.modules.aim.cpuBudget = Math.min(0.55, this.modules.aim.cpuBudget + 0.1);
-            this.modules.recoil.cpuBudget = Math.min(0.4, this.modules.recoil.cpuBudget + 0.08);
-            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.08);
-        }
-        
-        if (this.performanceStats.temp > 40) {
-            this.thermalControl.activateCoolingMode();
-            this.modules.graphics.cpuBudget *= 0.6;
-            this.currentGraphicsPreset = "low";
-            this.thermalThrottleDetected = true;
-        }
-        
-        if (this.gameState?.playerHealth < 20) {
-            this.enableSurvivalMode();
-        }
-        
-        this.adjustGraphicsQuality();
-    }
-
-    enableSurvivalMode() {
-        this.modules.aim.cpuBudget = 0.55;
-        this.modules.recoil.cpuBudget = 0.45;
-        this.currentGraphicsPreset = "minimal";
-        this.modules.graphics.memBudget = 10;
-    }
-
-    adjustGraphicsQuality() {
-        const currentFpsTarget = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
-        
-        if (this.performanceStats.fps < currentFpsTarget * 0.65) {
-            this.downgradeGraphics();
-        } else if (this.performanceStats.fps > currentFpsTarget * 1.35 && 
-                 this.performanceStats.cpu < 0.5 && !this.thermalThrottleDetected) {
-            this.upgradeGraphics();
+    // KÍCH HOẠT CHẾ ĐỘ AIM BOOST
+    activateAimBoost() {
+        if (!this.aimBoostMode) {
+            this.modules.aim.cpu = 55;
+            this.modules.recoil.cpu = 30;
+            this.modules.graphics.cpu = 5;
+            this.qualitySettings.effects = "off";
+            this.qualitySettings.resolution = 0.8;
+            this.aimBoostMode = true;
         }
     }
 
-    downgradeGraphics() {
-        const presets = ["ultra", "high", "balanced", "low", "minimal"];
-        const idx = presets.indexOf(this.currentGraphicsPreset);
-        if (idx < presets.length - 1) this.currentGraphicsPreset = presets[idx + 1];
-    }
-
-    upgradeGraphics() {
-        const presets = ["ultra", "high", "balanced", "low", "minimal"];
-        const idx = presets.indexOf(this.currentGraphicsPreset);
-        if (idx > 0) this.currentGraphicsPreset = presets[idx - 1];
-    }
-
-    applyGraphicsSettings(current) {
-        const preset = this.graphicsPresets[this.currentGraphicsPreset];
-        const newSettings = { ...current };
-        
-        if (newSettings.textureQuality !== preset.textureQuality ||
-            newSettings.shadowQuality !== preset.shadowQuality ||
-            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.05) {
-            
-            newSettings.textureQuality = preset.textureQuality;
-            newSettings.shadowQuality = preset.shadowQuality;
-            newSettings.effectsQuality = preset.effectsQuality;
-            newSettings.resolutionScale = preset.resolutionScale;
-            newSettings.fpsTarget = preset.fpsTarget;
+    // TẮT CHẾ ĐỘ AIM BOOST
+    deactivateAimBoost() {
+        if (this.aimBoostMode) {
+            this.modules.aim.cpu = 48;
+            this.modules.recoil.cpu = 25;
+            this.modules.graphics.cpu = 10;
+            this.qualitySettings.effects = "minimal";
+            this.qualitySettings.resolution = 0.85;
+            this.aimBoostMode = false;
         }
-        
-        return newSettings;
     }
 
-    getModuleAllocations() {
-        return Object.entries(this.modules).map(([name, config]) => ({
-            module: name,
-            cpuBudget: config.cpuBudget.toFixed(2),
-            memBudget: config.memBudget
-        }));
+    // GIẢM CHẤT LƯỢNG KHI NHIỆT CAO
+    reduceQuality() {
+        this.qualitySettings.texture = "very_low";
+        this.qualitySettings.shadows = "off";
+        this.qualitySettings.effects = "off";
+        this.qualitySettings.resolution = 0.75;
+        this.qualitySettings.fpsTarget = 60;
     }
 }
 
-class ThermalControlSystem {
+class ThermalController {
     constructor() {
-        this.temperature = 0;
-        this.coolingMode = false;
-        this.lastCoolingActivation = 0;
+        this.coolingActive = false;
+        this.lastActivation = 0;
     }
-
-    monitor(temp) {
-        this.temperature = temp;
-        
-        if (temp > 42 && !this.coolingMode) {
-            this.activateCoolingMode();
-        } else if (temp < 36 && this.coolingMode) {
-            this.deactivateCoolingMode();
+    
+    activateCooling() {
+        if (!this.coolingActive) {
+            this.coolingActive = true;
+            this.lastActivation = performance.now();
         }
     }
-
-    activateCoolingMode() {
-        this.coolingMode = true;
-        this.lastCoolingActivation = Date.now();
+    
+    deactivateCooling() {
+        this.coolingActive = false;
     }
-
-    deactivateCoolingMode() {
-        this.coolingMode = false;
-    }
-
+    
     getStatus() {
         return {
-            temperature: this.temperature,
-            coolingActive: this.coolingMode,
-            since: this.lastCoolingActivation
+            active: this.coolingActive,
+            since: this.lastActivation
         };
     }
 }
 
-class MemoryManager {
-    constructor() {
-        this.memoryCache = new Map();
-        this.lastCleanup = Date.now();
-        this.maxCacheSize = 30;
-        this.memUsage = 0;
-    }
-
-    cleanup() {
-        if (Date.now() - this.lastCleanup < 5000) return;
-        this.lastCleanup = Date.now();
-        
-        const now = Date.now();
-        let count = 0;
-        for (const [key, entry] of this.memoryCache) {
-            if (now - entry.lastAccessed > 20000) {
-                this.memoryCache.delete(key);
-                count++;
-            }
-        }
-        
-        if (this.memoryCache.size > this.maxCacheSize) {
-            const keys = [...this.memoryCache.keys()].slice(0, this.memoryCache.size - this.maxCacheSize);
-            keys.forEach(key => this.memoryCache.delete(key));
-            count += keys.length;
-        }
-        
-        this.memUsage = this.memoryCache.size;
-    }
-
-    getUsage() {
-        return {
-            cacheSize: this.memoryCache.size,
-            memoryUsage: this.memUsage
-        };
-    }
-}
-
-class NetworkOptimizer {
-    optimize(networkData) {
-        return {
-            ...networkData,
-            protocol: "udp_priority",
-            compression: "ultra",
-            resendThreshold: 50,
-            jitterBuffer: 5
-        };
-    }
-}
-
-const perfOptimizer = new AdvancedPerformanceOptimizer();
+const perfOptimizer = new FreeFirePerformanceOptimizer();
 $done({ body: perfOptimizer.process($response.body) });
