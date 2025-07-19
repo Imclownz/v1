@@ -1,76 +1,39 @@
-// ultimate-performance-manager.js
+// ULTIMATE PERFORMANCE MANAGER v3.5 (Turbo Optimized)
 class UltimatePerformanceManager {
     constructor() {
         this.modules = {
-            aim: { active: true, priority: 1, cpuBudget: 0.2 },
-            recoil: { active: true, priority: 2, cpuBudget: 0.15 },
-            network: { active: true, priority: 3, cpuBudget: 0.1 },
-            graphics: { active: true, priority: 4, cpuBudget: 0.25 }
+            aim: { active: true, priority: 0, cpuBudget: 0.35 },
+            recoil: { active: true, priority: 1, cpuBudget: 0.25 },
+            network: { active: true, priority: 2, cpuBudget: 0.15 },
+            graphics: { active: true, priority: 3, cpuBudget: 0.15 }
         };
         this.lastAdjustment = Date.now();
         this.deviceProfile = "unknown";
         this.performanceStats = {
-            avgCpu: 0,
-            avgMemory: 0,
-            avgFps: 0,
-            avgTemp: 0,
-            samples: 0
+            avgCpu: 0, avgMemory: 0, avgFps: 0, avgTemp: 0, samples: 0
         };
         this.graphicsPresets = {
-            ultra: {
-                textureQuality: "ultra",
-                shadowQuality: "high",
-                effectsQuality: "high",
-                resolutionScale: 1.0,
-                fpsTarget: 120
-            },
-            high: {
-                textureQuality: "high",
-                shadowQuality: "medium",
-                effectsQuality: "medium",
-                resolutionScale: 0.9,
-                fpsTarget: 90
-            },
-            balanced: {
-                textureQuality: "medium",
-                shadowQuality: "low",
-                effectsQuality: "medium",
-                resolutionScale: 0.85,
-                fpsTarget: 60
-            },
-            low: {
-                textureQuality: "low",
-                shadowQuality: "off",
-                effectsQuality: "low",
-                resolutionScale: 0.75,
-                fpsTarget: 45
-            },
-            minimal: {
-                textureQuality: "very_low",
-                shadowQuality: "off",
-                effectsQuality: "off",
-                resolutionScale: 0.6,
-                fpsTarget: 30
-            }
+            ultra: { textureQuality: "ultra", shadowQuality: "high", effectsQuality: "high", resolutionScale: 1.0, fpsTarget: 120 },
+            high: { textureQuality: "high", shadowQuality: "medium", effectsQuality: "medium", resolutionScale: 0.95, fpsTarget: 90 },
+            balanced: { textureQuality: "medium", shadowQuality: "low", effectsQuality: "medium", resolutionScale: 0.9, fpsTarget: 75 },
+            low: { textureQuality: "low", shadowQuality: "off", effectsQuality: "low", resolutionScale: 0.8, fpsTarget: 60 },
+            minimal: { textureQuality: "very_low", shadowQuality: "off", effectsQuality: "off", resolutionScale: 0.7, fpsTarget: 45 }
         };
         this.currentGraphicsPreset = "balanced";
         this.thermalThrottleDetected = false;
+        this.survivalMode = false;
     }
 
     process(body) {
         try {
+            const startTime = Date.now();
             let data = JSON.parse(body);
             
-            if (data.gameState) {
-                this.gameState = data.gameState;
-            }
-            
-            if (data.performanceState) {
-                this.updatePerformanceStats(data.performanceState);
-            }
+            if (data.gameState) this.gameState = data.gameState;
+            if (data.performanceState) this.updatePerformanceStats(data.performanceState);
             
             const now = Date.now();
-            if (now - this.lastAdjustment > 5000 || 
+            if (now - this.lastAdjustment > 4000 || 
                 (data.performanceState && (data.performanceState.cpuUsage > 0.85 || data.performanceState.memoryUsage > 85))) {
                 this.adjustSystem();
                 this.lastAdjustment = now;
@@ -80,64 +43,59 @@ class UltimatePerformanceManager {
                 data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
             }
             
+            this.survivalMode = this.gameState?.playerHealth < 30;
+            if (this.survivalMode) this.enableSurvivalMode();
+            
             data.performance = {
                 timestamp: now,
                 deviceProfile: this.deviceProfile,
                 graphicsPreset: this.currentGraphicsPreset,
                 moduleAllocations: this.getModuleAllocations(),
-                recommendations: this.getRecommendations(),
                 stats: {
                     avgCpu: this.performanceStats.avgCpu,
                     avgMemory: this.performanceStats.avgMemory,
                     avgFps: this.performanceStats.avgFps,
                     avgTemp: this.performanceStats.avgTemp
-                }
+                },
+                survivalMode: this.survivalMode,
+                processingTime: Date.now() - startTime
             };
 
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[ULTIMATE PERF] Error:", e.message.substring(0, 20));
+            console.error("[PERF MANAGER] Fast Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
-    updatePerformanceStats(performanceState) {
-        if (!performanceState) return;
+    updatePerformanceStats(perf) {
+        if (!perf) return;
         
-        const weight = 0.3;
+        const weight = 0.35;
+        this.performanceStats.avgCpu = this.calcAvg(this.performanceStats.avgCpu, perf.cpuUsage, weight);
+        this.performanceStats.avgMemory = this.calcAvg(this.performanceStats.avgMemory, perf.memoryUsage, weight);
+        this.performanceStats.avgFps = this.calcAvg(this.performanceStats.avgFps, perf.fps, weight);
         
-        this.performanceStats.avgCpu = this.calculateMovingAverage(
-            this.performanceStats.avgCpu, performanceState.cpuUsage, weight
-        );
-        this.performanceStats.avgMemory = this.calculateMovingAverage(
-            this.performanceStats.avgMemory, performanceState.memoryUsage, weight
-        );
-        this.performanceStats.avgFps = this.calculateMovingAverage(
-            this.performanceStats.avgFps, performanceState.fps, weight
-        );
-        
-        if (performanceState.temperature) {
-            this.performanceStats.avgTemp = this.calculateMovingAverage(
-                this.performanceStats.avgTemp, performanceState.temperature, weight
-            );
+        if (perf.temperature) {
+            this.performanceStats.avgTemp = this.calcAvg(this.performanceStats.avgTemp, perf.temperature, weight);
         }
         
         this.performanceStats.samples++;
         
-        if (this.performanceStats.samples >= 5 && this.deviceProfile === "unknown") {
+        if (this.performanceStats.samples >= 3 && this.deviceProfile === "unknown") {
             this.detectDeviceProfile();
         }
     }
 
-    calculateMovingAverage(current, newValue, weight) {
-        return current * (1 - weight) + newValue * weight;
+    calcAvg(current, newVal, weight) {
+        return current * (1 - weight) + newVal * weight;
     }
 
     detectDeviceProfile() {
-        if (this.performanceStats.avgCpu < 0.4 && this.performanceStats.avgMemory < 50) {
+        if (this.performanceStats.avgCpu < 0.35 && this.performanceStats.avgMemory < 45) {
             this.deviceProfile = "high_end";
             this.currentGraphicsPreset = "high";
-        } else if (this.performanceStats.avgCpu < 0.6 && this.performanceStats.avgMemory < 70) {
+        } else if (this.performanceStats.avgCpu < 0.55 && this.performanceStats.avgMemory < 65) {
             this.deviceProfile = "mid_range";
             this.currentGraphicsPreset = "balanced";
         } else {
@@ -150,31 +108,20 @@ class UltimatePerformanceManager {
         this.adjustGraphicsQuality();
         
         switch (this.deviceProfile) {
-            case "high_end":
-                this.setModuleBudgets(0.25, 0.2, 0.15, 0.3);
-                break;
-            case "mid_range":
-                this.setModuleBudgets(0.2, 0.15, 0.1, 0.25);
-                break;
-            case "low_end":
-                this.setModuleBudgets(0.15, 0.1, 0.08, 0.2);
-                break;
-            default:
-                this.setModuleBudgets(0.2, 0.15, 0.1, 0.25);
+            case "high_end": this.setModuleBudgets(0.35, 0.25, 0.15, 0.15); break;
+            case "mid_range": this.setModuleBudgets(0.33, 0.23, 0.13, 0.13); break;
+            case "low_end": this.setModuleBudgets(0.30, 0.20, 0.10, 0.10); break;
+            default: this.setModuleBudgets(0.33, 0.23, 0.13, 0.13);
         }
         
         if (this.gameState?.isTargetLocked) {
-            this.modules.aim.cpuBudget = Math.min(0.4, this.modules.aim.cpuBudget + 0.1);
-            this.modules.recoil.cpuBudget = Math.min(0.3, this.modules.recoil.cpuBudget + 0.08);
-            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.15);
+            this.modules.aim.cpuBudget = Math.min(0.45, this.modules.aim.cpuBudget + 0.1);
+            this.modules.recoil.cpuBudget = Math.min(0.35, this.modules.recoil.cpuBudget + 0.07);
+            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.08);
         }
         
-        if (this.performanceStats.avgTemp > 45) {
+        if (this.performanceStats.avgTemp > 46) {
             this.reduceThermalLoad();
-        }
-        
-        if (this.gameState?.playerHealth < 30) {
-            this.enableSurvivalMode();
         }
     }
 
@@ -186,11 +133,12 @@ class UltimatePerformanceManager {
     }
 
     adjustGraphicsQuality() {
-        if (this.performanceStats.avgFps < this.graphicsPresets[this.currentGraphicsPreset].fpsTarget * 0.8) {
+        const currentFpsTarget = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
+        
+        if (this.performanceStats.avgFps < currentFpsTarget * 0.75) {
             this.downgradeGraphics();
-        }
-        else if (this.performanceStats.avgFps > this.graphicsPresets[this.currentGraphicsPreset].fpsTarget * 1.2 && 
-                 this.performanceStats.avgCpu < 0.6) {
+        } else if (this.performanceStats.avgFps > currentFpsTarget * 1.25 && 
+                 this.performanceStats.avgCpu < 0.55) {
             this.upgradeGraphics();
         }
         
@@ -202,38 +150,25 @@ class UltimatePerformanceManager {
 
     downgradeGraphics() {
         const presets = ["ultra", "high", "balanced", "low", "minimal"];
-        const currentIndex = presets.indexOf(this.currentGraphicsPreset);
-        
-        if (currentIndex < presets.length - 1) {
-            this.currentGraphicsPreset = presets[currentIndex + 1];
-        }
+        const idx = presets.indexOf(this.currentGraphicsPreset);
+        if (idx < presets.length - 1) this.currentGraphicsPreset = presets[idx + 1];
     }
 
     upgradeGraphics() {
         const presets = ["ultra", "high", "balanced", "low", "minimal"];
-        const currentIndex = presets.indexOf(this.currentGraphicsPreset);
-        
-        if (currentIndex > 0 && !this.thermalThrottleDetected) {
-            this.currentGraphicsPreset = presets[currentIndex - 1];
-        }
+        const idx = presets.indexOf(this.currentGraphicsPreset);
+        if (idx > 0 && !this.thermalThrottleDetected) this.currentGraphicsPreset = presets[idx - 1];
     }
 
-    applyGraphicsSettings(currentSettings) {
-        const newSettings = { ...currentSettings };
-        
+    applyGraphicsSettings(current) {
         const preset = this.graphicsPresets[this.currentGraphicsPreset];
+        const newSettings = { ...current };
         
         if (newSettings.textureQuality !== preset.textureQuality ||
             newSettings.shadowQuality !== preset.shadowQuality ||
-            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.1) {
+            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.15) {
             
-            newSettings.textureQuality = preset.textureQuality;
-            newSettings.shadowQuality = preset.shadowQuality;
-            newSettings.effectsQuality = preset.effectsQuality;
-            newSettings.resolutionScale = preset.resolutionScale;
-            newSettings.fpsTarget = preset.fpsTarget;
-            
-            console.log(`Applying graphics preset: ${this.currentGraphicsPreset}`);
+            Object.assign(newSettings, preset);
         }
         
         return newSettings;
@@ -241,9 +176,8 @@ class UltimatePerformanceManager {
 
     reduceThermalLoad() {
         this.downgradeGraphics();
-        
-        this.modules.graphics.cpuBudget *= 0.7;
-        this.modules.network.cpuBudget *= 0.8;
+        this.modules.graphics.cpuBudget *= 0.6;
+        this.modules.network.cpuBudget *= 0.75;
         
         if (this.gameState) {
             this.gameState.particleEffects = false;
@@ -252,13 +186,10 @@ class UltimatePerformanceManager {
     }
 
     enableSurvivalMode() {
-        this.modules.aim.cpuBudget = Math.min(0.35, this.modules.aim.cpuBudget + 0.1);
-        this.modules.recoil.cpuBudget = Math.min(0.25, this.modules.recoil.cpuBudget + 0.1);
-        
-        this.downgradeGraphics();
-        
+        this.modules.aim.cpuBudget = Math.min(0.48, this.modules.aim.cpuBudget + 0.15);
+        this.modules.recoil.cpuBudget = Math.min(0.38, this.modules.recoil.cpuBudget + 0.12);
+        this.currentGraphicsPreset = "minimal";
         this.graphicsPresets[this.currentGraphicsPreset].effectsQuality = "off";
-        this.graphicsPresets[this.currentGraphicsPreset].shadowQuality = "off";
     }
 
     getModuleAllocations() {
@@ -267,56 +198,6 @@ class UltimatePerformanceManager {
             active: config.active,
             cpuBudget: config.cpuBudget.toFixed(2)
         }));
-    }
-
-    getRecommendations() {
-        const recommendations = {
-            status: "optimal",
-            actions: [],
-            details: ""
-        };
-        
-        if (this.performanceStats.avgCpu > 0.85) {
-            recommendations.status = "critical";
-            recommendations.actions.push("reduce_graphics", "disable_background_processes");
-            recommendations.details = "CPU usage too high";
-        } 
-        else if (this.performanceStats.avgCpu > 0.7) {
-            recommendations.status = "high";
-            recommendations.actions.push("reduce_graphics");
-            recommendations.details = "High CPU usage";
-        }
-        
-        const targetFps = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
-        if (this.performanceStats.avgFps < targetFps * 0.7) {
-            recommendations.status = "critical";
-            recommendations.actions.push("downgrade_graphics", "close_background_apps");
-            recommendations.details += recommendations.details ? ", Low FPS" : "Low FPS";
-        }
-        else if (this.performanceStats.avgFps < targetFps * 0.9) {
-            if (recommendations.status !== "critical") recommendations.status = "high";
-            recommendations.actions.push("downgrade_graphics");
-            recommendations.details += recommendations.details ? ", Suboptimal FPS" : "Suboptimal FPS";
-        }
-        
-        if (this.performanceStats.avgTemp > 48) {
-            recommendations.status = "critical";
-            recommendations.actions.push("reduce_thermal_load", "enable_cooling");
-            recommendations.details += recommendations.details ? ", High temperature" : "High temperature";
-        }
-        else if (this.performanceStats.avgTemp > 42) {
-            if (recommendations.status !== "critical") recommendations.status = "high";
-            recommendations.actions.push("reduce_performance_load");
-            recommendations.details += recommendations.details ? ", Elevated temperature" : "Elevated temperature";
-        }
-        
-        if (recommendations.actions.length === 0) {
-            recommendations.details = "System is running optimally";
-        }
-        
-        recommendations.actions = [...new Set(recommendations.actions)];
-        
-        return recommendations;
     }
 }
 
