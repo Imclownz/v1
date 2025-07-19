@@ -1,45 +1,43 @@
-// graphics-adapter.js
+// GRAPHICS ADAPTER v3.0 (Performance Focused)
 class GraphicsAdapter {
     constructor() {
         this.presetMap = {
-            "ultra": 0,
-            "high": 1,
-            "balanced": 2,
-            "low": 3,
-            "minimal": 4
+            "ultra": 0, "high": 1, "balanced": 2, "low": 3, "minimal": 4
         };
+        this.qualityLevels = ["ultra", "high", "medium", "low", "very_low"];
     }
 
     process(body) {
         try {
+            const startTime = Date.now();
             let data = JSON.parse(body);
             
-            // Áp dụng cài đặt đồ họa từ performance manager
             if (data.performance?.graphicsPreset) {
-                const presetLevel = this.presetMap[data.performance.graphicsPreset] || 2;
+                const preset = data.performance.graphicsPreset;
+                const presetLevel = this.presetMap[preset] || 2;
                 
                 data.graphicsSettings = {
                     qualityPreset: presetLevel,
-                    textureQuality: this.mapQuality(data.performance.graphicsPreset, 3),
-                    shadowQuality: this.mapQuality(data.performance.graphicsPreset, 2),
-                    effectQuality: this.mapQuality(data.performance.graphicsPreset, 2),
-                    resolutionScale: data.performance.graphicsSettings?.resolutionScale || 0.85,
-                    fpsLimit: data.performance.graphicsSettings?.fpsTarget || 60
+                    textureQuality: this.mapQuality(preset, 3),
+                    shadowQuality: this.mapQuality(preset, 2),
+                    effectQuality: this.mapQuality(preset, 2),
+                    resolutionScale: data.performance.graphicsSettings?.resolutionScale || 0.9,
+                    fpsLimit: data.performance.graphicsSettings?.fpsTarget || 60,
+                    processingTime: Date.now() - startTime
                 };
             }
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[GRAPHICS ADAPTER] Error:", e.message.substring(0, 20));
+            console.error("[GRAPHICS ADAPTER] Fast Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
     mapQuality(preset, maxLevel) {
-        const levels = ["ultra", "high", "medium", "low", "very_low"];
         const presetIndex = this.presetMap[preset] || 2;
         const adjustedIndex = Math.min(presetIndex, maxLevel);
-        return levels[adjustedIndex];
+        return this.qualityLevels[adjustedIndex];
     }
 }
 
