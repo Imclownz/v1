@@ -1,17 +1,16 @@
-// FREE FIRE RECOIL STABILIZER v7.0
-class FreeFireRecoilStabilizer {
+// STABILIZER PRO v8.0 (Free Fire Recoil Control)
+class StabilizerPro {
     constructor() {
-        this.weaponDatabase = this.getFreeFireWeaponDB();
-        this.sessionToken = "FFRS_" + Date.now().toString(36);
-        this.stabilityLevel = 1.0;
-        this.adaptiveCompensation = 0.96; // Bù giật thích nghi
+        this.weaponDatabase = this.getWeaponDatabase();
+        this.sessionToken = "STABv8_" + Date.now().toString(36);
         this.recoilPatterns = {
-            ak47: [0.12, 0.25, 0.08, -0.10, -0.05, 0.15], // Mẫu giật thực tế AK Free Fire 
+            ak47: [0.12, 0.25, 0.08, -0.10, -0.05, 0.15],
             m4a1: [0.09, 0.16, 0.04, -0.07, -0.04, 0.11],
+            sniper: [0.006, 0.20, 0.006, -0.006, -0.006, 0.01],
             default: [0.05, 0.1, 0.03, -0.04, -0.02, 0.07]
         };
-        this.lastFireTime = 0;
         this.bulletCounter = 0;
+        this.headshotBoost = 1.0;
     }
 
     process(body) {
@@ -21,117 +20,92 @@ class FreeFireRecoilStabilizer {
             const weaponType = data.weaponType || 'default';
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
             
-            // Phát hiện trạng thái bắn
-            const isFiring = data.gameState?.isFiring;
-            if (isFiring) {
-                this.bulletCounter++;
-            } else {
-                this.bulletCounter = 0;
+            // Phát hiện trạng thái headshot
+            if (data.aimSystem?.lockStrength > 0.98) {
+                this.headshotBoost = 1.5; // Tăng cường ổn định khi headshot
             }
             
             data.recoilSystem = {
-                version: "Stabilizer-7.0",
-                horizontalCompensation: this.calculateHorizontalComp(profile) * this.adaptiveCompensation,
-                verticalCompensation: this.calculateVerticalComp(profile) * this.adaptiveCompensation,
-                crosshairStabilization: this.calculateCrosshairStability(profile, isFiring),
-                patternElimination: "freefire_adaptive",
-                smoothingFactor: 0.985,
-                security: {
-                    token: this.sessionToken,
-                    checksum: this.generateChecksum()
-                },
+                version: "8.0",
+                horizontalCompensation: this.calculateHorizontalComp(profile),
+                verticalCompensation: this.calculateVerticalComp(profile),
+                crosshairStabilization: this.calculateStabilization(),
+                headshotBoost: this.headshotBoost,
                 processingTime: performance.now() - startTime
             };
             
-            // Bù giật theo từng viên đạn nếu đang bắn
-            if (isFiring) {
-                const comp = this.calculatePerBulletComp(weaponType, this.bulletCounter);
-                data.recoilSystem.horizontalCompensation += comp.x;
-                data.recoilSystem.verticalCompensation += comp.y;
-                
-                // TỐI ƯU: Giảm 40% giật dọc khi bắn >5 viên 
-                if (this.bulletCounter > 5) {
-                    data.recoilSystem.verticalCompensation *= 0.6;
-                }
+            // Xử lý giật theo từng viên đạn
+            if (data.gameState?.isFiring) {
+                this.applyPerBulletCompensation(data.recoilSystem, weaponType);
             }
-            
-            // Cập nhật thời gian bắn
-            if (isFiring) this.lastFireTime = performance.now();
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[RECOIL STABILIZER] FreeFire Error:", e.message.substring(0,25));
+            console.error("[STABILIZER PRO] Error:", e.message.substring(0,20));
             return body;
         }
     }
 
-    // TÍNH TOÁN GIẬT NGANG TỐI ƯU
+    // BÙ GIẬT THÔNG MINH
     calculateHorizontalComp(profile) {
-        let comp = profile.horizontalBase * this.stabilityLevel;
+        let comp = profile.horizontalBase;
         
-        // Giảm giật khi khóa mục tiêu
-        if (this.lockStrength > 0.98) {
-            comp *= 0.65;
+        // Giảm giật khi headshot
+        if (this.headshotBoost > 1.0) {
+            comp *= 0.4;
         }
         
-        return comp;
+        return comp * this.headshotBoost;
     }
 
-    // TÍNH TOÁN GIẬT DỌC TỐI ƯU
     calculateVerticalComp(profile) {
-        let comp = profile.verticalBase * this.stabilityLevel;
+        let comp = profile.verticalBase;
         
-        // Giảm giật khi khóa mục tiêu
-        if (this.lockStrength > 0.98) {
-            comp *= 0.6;
+        // Giảm giật khi headshot
+        if (this.headshotBoost > 1.0) {
+            comp *= 0.35;
         }
         
-        return comp;
+        return comp * this.headshotBoost;
     }
 
     // ỔN ĐỊNH TÂM NGẮM
-    calculateCrosshairStability(profile, isFiring) {
-        const baseStability = profile.baseStability;
-        let stabilityBoost = 1.0;
-        
-        if (isFiring) {
-            const timeFiring = performance.now() - this.lastFireTime;
-            // Giảm độ ổn định khi bắn liên tục
-            stabilityBoost = Math.max(0.7, 1.0 - (timeFiring * 0.0001));
-        }
+    calculateStabilization() {
+        const baseStability = 1.0;
+        const headshotStability = this.headshotBoost > 1.0 ? 1.8 : 1.0;
         
         return {
-            x: baseStability * stabilityBoost * 0.85,
-            y: baseStability * stabilityBoost * 0.92,
-            z: baseStability * stabilityBoost * 0.95
+            x: baseStability * headshotStability * 0.88,
+            y: baseStability * headshotStability * 0.95,
+            z: baseStability * headshotStability * 0.92
         };
     }
 
-    // CẢI TIẾN: Bù giật theo từng viên đạn 
-    calculatePerBulletComp(weaponType, bulletCount) {
+    // BÙ GIẬT THEO TỪNG VIÊN
+    applyPerBulletCompensation(recoilSystem, weaponType) {
+        this.bulletCounter++;
         const pattern = this.recoilPatterns[weaponType] || this.recoilPatterns.default;
-        const index = bulletCount % pattern.length;
-        return {
-            x: pattern[index] * -0.85, // Đảo ngược hướng giật
-            y: pattern[index] * -1.2    // Ưu tiên bù giật dọc
-        };
+        const index = this.bulletCounter % pattern.length;
+        
+        recoilSystem.horizontalCompensation += pattern[index] * -0.9;
+        recoilSystem.verticalCompensation += pattern[index] * -1.4;
+        
+        // Tự động giảm giật sau 5 viên
+        if (this.bulletCounter > 5) {
+            recoilSystem.verticalCompensation *= 0.5;
+        }
     }
 
-    getFreeFireWeaponDB() {
+    getWeaponDatabase() {
         return {
-            default: {horizontalBase: 0.035, verticalBase: 0.065, baseStability: 1.2},
-            sniper: {horizontalBase: 0.008, verticalBase: 0.095, baseStability: 1.8},
-            ak47: {horizontalBase: 0.065, verticalBase: 0.125, baseStability: 0.95},
-            m4a1: {horizontalBase: 0.048, verticalBase: 0.085, baseStability: 1.1},
-            shotgun: {horizontalBase: 0.075, verticalBase: 0.135, baseStability: 0.85}
+            default: {horizontalBase: 0.035, verticalBase: 0.065},
+            sniper: {horizontalBase: 0.008, verticalBase: 0.095},
+            ak47: {horizontalBase: 0.065, verticalBase: 0.125},
+            m4a1: {horizontalBase: 0.048, verticalBase: 0.085},
+            shotgun: {horizontalBase: 0.075, verticalBase: 0.135}
         };
-    }
-
-    generateChecksum() {
-        const crypto = require('crypto');
-        return crypto.createHash('md5').update(this.sessionToken).digest('hex').substring(0,12);
     }
 }
 
-const recoilSystem = new FreeFireRecoilStabilizer();
+const recoilSystem = new StabilizerPro();
 $done({ body: recoilSystem.process($response.body) });
