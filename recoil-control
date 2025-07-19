@@ -1,9 +1,9 @@
-// ULTIMATE RECOIL STABILIZER v6.0 (Headshot Precision Edition)
+// ULTIMATE RECOIL STABILIZER v7.0 (Zero Recoil Edition)
 class UltimateRecoilStabilizer {
     constructor() {
         this.weaponDatabase = this.getEnhancedWeaponDatabase();
         this.sessionToken = "URS_" + Date.now().toString(36);
-        this.stabilityLevel = 1.2; // Tăng độ ổn định ban đầu
+        this.stabilityLevel = 1.5; // Tăng độ ổn định ban đầu
         this.crosshairStability = { x: 0, y: 0, z: 0 };
         this.aimAssistLevel = 0;
         this.weaponMemory = {};
@@ -11,6 +11,7 @@ class UltimateRecoilStabilizer {
         this.lastStabilityUpdate = 0;
         this.ultraStabilizationMode = false;
         this.gameState = null;
+        this.recoilCompensation = true; // Bật tính năng bù đắp độ giật
     }
 
     process(body) {
@@ -21,7 +22,7 @@ class UltimateRecoilStabilizer {
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
             
             this.gameState = data.gameState || this.gameState;
-            this.ultraStabilizationMode = data.aimSystem?.lockStrength > 0.985;
+            this.ultraStabilizationMode = data.aimSystem?.lockStrength > 0.99;
             
             if (data.gameState) {
                 this.updateStability(data.gameState);
@@ -33,13 +34,14 @@ class UltimateRecoilStabilizer {
             }
             
             data.recoilSystem = {
-                version: "Stabilizer-6.0",
+                version: "Stabilizer-7.0",
                 horizontalCompensation: this.calculateHorizontalComp(profile),
                 verticalCompensation: this.calculateVerticalComp(profile),
                 crosshairStabilization: this.crosshairStability,
                 patternElimination: "adaptive_ai",
                 smoothingFactor: this.calculateDynamicSmoothing(profile),
                 ultraStabilization: this.ultraStabilizationMode,
+                recoilCompensation: this.recoilCompensation, // Thêm bù đắp độ giật
                 security: {
                     token: this.sessionToken,
                     checksum: this.generateChecksum()
@@ -48,14 +50,13 @@ class UltimateRecoilStabilizer {
                 processingTime: Date.now() - startTime
             };
             
-            if (data.gameState?.isFiring) {
+            if (data.gameState?.isFiring && this.recoilCompensation) {
                 const fireStability = this.calculateFireStability(profile);
-                data.recoilSystem.crosshairStabilization = {
-                    x: this.crosshairStability.x * profile.firingStabilityX * fireStability,
-                    y: this.crosshairStability.y * profile.firingStabilityY * fireStability,
-                    z: this.crosshairStability.z * profile.firingStabilityZ * fireStability
-                };
-                
+                data.recoilSystem.crosshairStabilization = this.applyRecoilCompensation(
+                    profile, 
+                    data.recoilSystem.crosshairStabilization, 
+                    fireStability
+                );
                 this.updateWeaponMemory(weaponType, data.recoilSystem.crosshairStabilization);
             }
             
@@ -66,18 +67,30 @@ class UltimateRecoilStabilizer {
         }
     }
 
+    // Tính năng bù đắp độ giật tự động
+    applyRecoilCompensation(profile, stabilization, fireStability) {
+        const recoilPattern = this.recoilPatterns[profile.type] || this.recoilPatterns.default;
+        const compensationFactor = this.ultraStabilizationMode ? 0.6 : 0.8;
+        
+        return {
+            x: stabilization.x * profile.firingStabilityX * fireStability * compensationFactor,
+            y: stabilization.y * profile.firingStabilityY * fireStability * compensationFactor,
+            z: stabilization.z * profile.firingStabilityZ * fireStability * compensationFactor
+        };
+    }
+
     calculateDynamicSmoothing(profile) {
         const baseSmoothing = profile.smoothing;
-        const assistFactor = this.aimAssistLevel * 0.20; // Tăng ảnh hưởng aim assist
-        const stabilityFactor = this.stabilityLevel * 0.15;
-        return Math.min(0.995, baseSmoothing + assistFactor + stabilityFactor);
+        const assistFactor = this.aimAssistLevel * 0.25; // Tăng ảnh hưởng aim assist
+        const stabilityFactor = this.stabilityLevel * 0.2;
+        return Math.min(0.998, baseSmoothing + assistFactor + stabilityFactor);
     }
 
     calculateFireStability(profile) {
         let stability = profile.fireStability;
         
-        if (this.ultraStabilizationMode) stability *= 1.5;
-        else if (this.gameState?.playerHealth < 25) stability *= 1.35;
+        if (this.ultraStabilizationMode) stability *= 1.6;
+        else if (this.gameState?.playerHealth < 20) stability *= 1.4;
         
         return stability * this.stabilityLevel;
     }
@@ -86,74 +99,87 @@ class UltimateRecoilStabilizer {
         if (!gameState) return;
         
         const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
-        let stability = profile.baseStability || 1.3;
+        let stability = profile.baseStability || 1.4;
         
-        if (gameState.stance === 'crouching') stability *= 1.95;
-        else if (gameState.stance === 'prone') stability *= 2.4;
+        if (gameState.stance === 'crouching') stability *= 2.0;
+        else if (gameState.stance === 'prone') stability *= 2.5;
         
-        if (gameState.isMoving) stability *= 0.70;
-        if (gameState.isSprinting) stability *= 0.40;
+        if (gameState.isMoving) stability *= 0.75;
+        if (gameState.isSprinting) stability *= 0.45;
         
-        if (gameState.playerHealth < 25) stability *= 0.80;
+        if (gameState.playerHealth < 20) stability *= 0.85;
         
-        if (this.aimAssistLevel > 0.98) stability *= 1.4;
+        if (this.aimAssistLevel > 0.99) stability *= 1.5;
         
         this.crosshairStability = {
-            x: stability * 0.09,
-            y: stability * 0.14,
-            z: stability * 0.03
+            x: stability * 0.1,
+            y: stability * 0.15,
+            z: stability * 0.04
         };
     }
 
     updateStability(gameState) {
-        if (!gameState || Date.now() - this.lastStabilityUpdate < 120) return;
+        if (!gameState || Date.now() - this.lastStabilityUpdate < 100) return;
         this.lastStabilityUpdate = Date.now();
         
-        let stability = 1.2;
+        let stability = 1.5;
         
-        if (gameState.stance === 'crouching') stability *= 1.8;
-        else if (gameState.stance === 'prone') stability *= 2.2;
+        if (gameState.stance === 'crouching') stability *= 1.9;
+        else if (gameState.stance === 'prone') stability *= 2.3;
         
-        if (gameState.isMoving) stability *= 0.70;
-        if (gameState.isSprinting) stability *= 0.45;
+        if (gameState.isMoving) stability *= 0.75;
+        if (gameState.isSprinting) stability *= 0.5;
         
-        if (gameState.playerHealth < 25) stability *= 0.80;
+        if (gameState.playerHealth < 20) stability *= 0.85;
         
-        this.stabilityLevel = Math.max(0.4, Math.min(2.8, stability));
+        this.stabilityLevel = Math.max(0.5, Math.min(3.0, stability));
     }
 
     calculateHorizontalComp(profile) {
-        let comp = profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.70));
-        return this.ultraStabilizationMode ? comp * 0.55 : comp;
+        let comp = profile.horizontal * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.75));
+        return this.ultraStabilizationMode ? comp * 0.5 : comp;
     }
 
     calculateVerticalComp(profile) {
-        let comp = profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.90));
-        return this.ultraStabilizationMode ? comp * 0.50 : comp;
+        let comp = profile.vertical * this.stabilityLevel * (1 - (this.aimAssistLevel * 0.95));
+        return this.ultraStabilizationMode ? comp * 0.45 : comp;
     }
 
     getEnhancedWeaponDatabase() {
         return {
             default: {
-                horizontal: 0.030, vertical: 0.060, smoothing: 0.98,
-                fireStability: 0.99, baseStability: 1.3,
-                firingStabilityX: 0.94, firingStabilityY: 0.88, firingStabilityZ: 0.97
+                type: 'default',
+                horizontal: 0.025, vertical: 0.055, smoothing: 0.985,
+                fireStability: 0.995, baseStability: 1.4,
+                firingStabilityX: 0.95, firingStabilityY: 0.9, firingStabilityZ: 0.98
             },
             sniper: {
-                horizontal: 0.005, vertical: 0.090, smoothing: 0.998,
-                fireStability: 0.9995, baseStability: 1.9,
-                firingStabilityX: 0.99, firingStabilityY: 0.97, firingStabilityZ: 0.998
+                type: 'sniper',
+                horizontal: 0.004, vertical: 0.085, smoothing: 0.999,
+                fireStability: 0.9998, baseStability: 2.0,
+                firingStabilityX: 0.995, firingStabilityY: 0.98, firingStabilityZ: 0.999
             },
             ak47: {
-                horizontal: 0.060, vertical: 0.120, smoothing: 0.92,
-                fireStability: 0.95, baseStability: 1.0,
-                firingStabilityX: 0.82, firingStabilityY: 0.72, firingStabilityZ: 0.90
+                type: 'ak47',
+                horizontal: 0.055, vertical: 0.115, smoothing: 0.93,
+                fireStability: 0.96, baseStability: 1.1,
+                firingStabilityX: 0.85, firingStabilityY: 0.75, firingStabilityZ: 0.92
             },
             m4a1: {
-                horizontal: 0.045, vertical: 0.080, smoothing: 0.96,
-                fireStability: 0.98, baseStability: 1.1,
-                firingStabilityX: 0.89, firingStabilityY: 0.80, firingStabilityZ: 0.95
+                type: 'm4a1',
+                horizontal: 0.04, vertical: 0.075, smoothing: 0.97,
+                fireStability: 0.985, baseStability: 1.2,
+                firingStabilityX: 0.9, firingStabilityY: 0.82, firingStabilityZ: 0.96
             }
+        };
+    }
+
+    getPreciseRecoilPatterns() {
+        return {
+            default: [0.04, 0.1, 0.015, -0.04, -0.015, 0.07],
+            sniper: [0.004, 0.16, 0.004, -0.004, -0.004, 0.006],
+            ak47: [0.13, 0.24, 0.08, -0.08, -0.04, 0.16],
+            m4a1: [0.08, 0.15, 0.03, -0.06, -0.03, 0.1]
         };
     }
 
@@ -189,27 +215,6 @@ class UltimateRecoilStabilizer {
         const crypto = require('crypto');
         const data = this.sessionToken + this.stabilityLevel;
         return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
-    }
-
-    getPreciseRecoilPatterns() {
-        return {
-            default: {
-                default: [0.05, 0.11, 0.020, -0.05, -0.020, 0.08],
-                lock_mode: [0.015, 0.05, 0.005, -0.015, -0.005, 0.025]
-            },
-            sniper: {
-                default: [0.005, 0.18, 0.005, -0.005, -0.005, 0.008],
-                lock_mode: [0.001, 0.07, 0.001, -0.001, -0.001, 0.004]
-            },
-            ak47: {
-                default: [0.14, 0.25, 0.09, -0.09, -0.05, 0.17],
-                lock_mode: [0.05, 0.09, 0.03, -0.04, -0.02, 0.07]
-            },
-            m4a1: {
-                default: [0.09, 0.16, 0.04, -0.07, -0.04, 0.11],
-                lock_mode: [0.03, 0.06, 0.015, -0.025, -0.015, 0.04]
-            }
-        };
     }
 }
 
