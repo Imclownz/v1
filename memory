@@ -1,9 +1,9 @@
-// MEMORY OPTIMIZER v2.0 (Stability Edition)
+// MEMORY OPTIMIZER v3.0 (Ultra Stability Edition)
 class MemoryOptimizer {
     constructor() {
         this.cache = new Map();
-        this.maxCacheSize = 50;
-        this.cleanupInterval = 10000;
+        this.maxCacheSize = 40; // Giảm kích thước cache để tối ưu
+        this.cleanupInterval = 8000; // Giảm thời gian dọn dẹp
         this.lastCleanup = Date.now();
     }
 
@@ -16,7 +16,7 @@ class MemoryOptimizer {
                 this.lastCleanup = Date.now();
             }
             
-            if (data.targets && data.targets.length > 10) {
+            if (data.targets && data.targets.length > 8) {
                 data.targets = this.optimizeTargets(data.targets);
             }
             
@@ -28,13 +28,13 @@ class MemoryOptimizer {
     }
 
     optimizeTargets(targets) {
-        const maxTargets = 8;
+        const maxTargets = 6; // Giảm số mục tiêu tối đa để tăng hiệu suất
         if (targets.length <= maxTargets) return targets;
         
         return targets
             .sort((a, b) => {
-                const aScore = (100 - a.health) + (a.isShooting ? 30 : 0);
-                const bScore = (100 - b.health) + (b.isShooting ? 30 : 0);
+                const aScore = (100 - a.health) + (a.isShooting ? 40 : 0);
+                const bScore = (100 - b.health) + (b.isShooting ? 40 : 0);
                 return bScore - aScore;
             })
             .slice(0, maxTargets);
@@ -45,7 +45,7 @@ class MemoryOptimizer {
         const keysToDelete = [];
         
         for (const [key, entry] of this.cache) {
-            if (now - entry.timestamp > 30000) {
+            if (now - entry.timestamp > 25000) { // Giảm thời gian lưu cache
                 keysToDelete.push(key);
             }
         }
