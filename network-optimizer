@@ -1,147 +1,49 @@
-// ultimate-network-stealth.js
-const NETWORK_PROFILES = {
-    BALANCED: {
-        protocol: "hybrid",
-        compression: "medium",
-        resendThreshold: 150,
-        jitterBuffer: 20
-    },
-    COMPETITIVE: {
-        protocol: "udp_priority",
-        compression: "high",
-        resendThreshold: 100,
-        jitterBuffer: 10
-    },
-    STEALTH: {
-        protocol: "tcp_secure",
-        compression: "low",
-        resendThreshold: 200,
-        jitterBuffer: 30
-    }
-};
-
-class UltimateNetworkStealth {
+// ULTRA NETWORK BOOSTER v6.0
+class UltraNetworkBooster {
     constructor() {
-        this.currentProfile = NETWORK_PROFILES.BALANCED;
-        this.securityToken = "UNS_" + Date.now().toString(36);
-        this.lastProfileSwitch = Date.now();
-        this.behaviorProfiles = this.getBehaviorProfiles();
-        this.currentBehavior = this.behaviorProfiles[0];
-        this.lastBehaviorChange = Date.now();
+        this.profiles = {
+            competitive: { protocol: "UDP", compression: "high", threshold: 80 },
+            balanced: { protocol: "Hybrid", compression: "medium", threshold: 120 },
+            stealth: { protocol: "TCP", compression: "low", threshold: 180 }
+        };
+        this.currentProfile = this.profiles.balanced;
+        this.lastSwitch = 0;
     }
 
     process(body) {
         try {
-            let data = JSON.parse(body);
+            const data = JSON.parse(body);
             
-            this.autoSelectProfile(data.networkMetrics, data.securityStatus);
-            
-            this.rotateBehavior();
+            if (data.networkMetrics) {
+                this.autoSelectProfile(data.networkMetrics);
+            }
             
             data.network = {
                 ...this.currentProfile,
-                version: "5.0",
-                timestamp: Date.now(),
-                security: {
-                    token: this.securityToken,
-                    checksum: this.generateChecksum(),
-                    behavior: this.currentBehavior.name,
-                    metrics: this.generateBehaviorMetrics()
-                },
-                advanced: {
-                    packetAggregation: true,
-                    errorCorrection: "adaptive",
-                    latencySmoothing: true,
-                    routeOptimization: "ai_based"
-                }
+                timestamp: Date.now()
             };
-            
-            if (data.aimSystem?.lockStrength > 0.95) {
-                data.network.protocol = "udp_priority";
-                data.network.compression = "high";
-            }
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[ULTIMATE NET] Error:", e.message.substring(0, 20));
+            console.error("[NET BOOSTER] Error:", e.message);
             return body;
         }
     }
 
-    autoSelectProfile(metrics, securityStatus) {
-        if (!metrics) return;
-        if (Date.now() - this.lastProfileSwitch < 5000) return;
+    autoSelectProfile(metrics) {
+        if (Date.now() - this.lastSwitch < 4000) return;
         
-        if (securityStatus?.riskLevel > 0.7) {
-            this.currentProfile = NETWORK_PROFILES.STEALTH;
-            this.lastProfileSwitch = Date.now();
-            return;
+        if (metrics.ping > 150 || metrics.packetLoss > 0.1) {
+            this.currentProfile = this.profiles.stealth;
+        } else if (metrics.aimIntensity > 0.8) {
+            this.currentProfile = this.profiles.competitive;
+        } else {
+            this.currentProfile = this.profiles.balanced;
         }
         
-        if (metrics.aimIntensity > 0.8) {
-            this.currentProfile = NETWORK_PROFILES.COMPETITIVE;
-            this.lastProfileSwitch = Date.now();
-            return;
-        }
-        
-        if (metrics.isCellular || metrics.ping > 150) {
-            this.currentProfile = NETWORK_PROFILES.STEALTH;
-            this.lastProfileSwitch = Date.now();
-            return;
-        }
-        
-        this.currentProfile = NETWORK_PROFILES.BALANCED;
-    }
-
-    rotateBehavior() {
-        if (Date.now() - this.lastBehaviorChange < 300000) return;
-        if (Math.random() < 0.7) return;
-        
-        const currentIndex = this.behaviorProfiles.indexOf(this.currentBehavior);
-        const nextIndex = (currentIndex + 1) % this.behaviorProfiles.length;
-        this.currentBehavior = this.behaviorProfiles[nextIndex];
-        this.lastBehaviorChange = Date.now();
-    }
-
-    getBehaviorProfiles() {
-        return [
-            {
-                name: "casual",
-                reactionTime: { min: 250, max: 450 },
-                accuracy: 0.6,
-                movement: "normal"
-            },
-            {
-                name: "regular",
-                reactionTime: { min: 200, max: 350 },
-                accuracy: 0.75,
-                movement: "fluid"
-            },
-            {
-                name: "pro",
-                reactionTime: { min: 150, max: 300 },
-                accuracy: 0.85,
-                movement: "precise"
-            }
-        ];
-    }
-
-    generateBehaviorMetrics() {
-        const profile = this.currentBehavior;
-        return {
-            reactionTime: profile.reactionTime.min + Math.random() * (profile.reactionTime.max - profile.reactionTime.min),
-            accuracy: profile.accuracy + (Math.random() * 0.1 - 0.05),
-            movementPattern: profile.movement,
-            inputVariance: Math.random() * 0.15
-        };
-    }
-
-    generateChecksum() {
-        const crypto = require('crypto');
-        const data = this.securityToken + this.currentProfile.protocol + this.currentBehavior.name;
-        return crypto.createHash('sha3-256').update(data).digest('hex');
+        this.lastSwitch = Date.now();
     }
 }
 
-const networkSystem = new UltimateNetworkStealth();
-$done({ body: networkSystem.process($response.body) });
+const netBooster = new UltraNetworkBooster();
+$done({ body: netBooster.process($response.body) });
