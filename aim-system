@@ -1,4 +1,4 @@
-// PERFECTLOCK HEADSHOT MASTER v10.5 (Free Fire Edition)
+// PERFECTLOCK HEADSHOT MASTER v11.0 (Free Fire Headshot Engine)
 class PerfectLockHeadshotMaster {
     constructor() {
         this.lockStrength = 0.9999;
@@ -8,12 +8,16 @@ class PerfectLockHeadshotMaster {
         this.lastLockTime = 0;
         this.aimPredictionLevel = 8;
         this.aimStabilizer = 0.995;
-        this.overshootProtection = 0.92; // Giảm overshoot
+        this.overshootGuard = 0.88; // Giảm 12% overshoot
         this.stickyFactor = 0.97; // Tăng độ dính
+        this.freeFireHitbox = {
+            headRadius: 0.35,  // Hitbox đầu Free Fire nhỏ hơn các game khác 
+            neckOffset: 0.22   // Vùng chuyển tiếp cổ-đầu dễ headshot nhất 
+        };
         this.freeFirePhysics = {
             gravity: 9.8,
             bulletVelocity: 400,
-            headMovementFactor: 1.35
+            headMovementFactor: 1.28 // Giảm hệ số dự đoán so với trước
         };
     }
 
@@ -64,12 +68,13 @@ class PerfectLockHeadshotMaster {
             if (data.gameState) this.updateCombatState(data.gameState);
             
             data.aimSystem = {
-                version: "10.5",
+                version: "11.0",
                 mode: "freefire_headshot",
                 security: {
                     token: this.sessionToken,
                     checksum: this.generateChecksum()
-                }
+                },
+                overshootGuard: this.overshootGuard // Hiển thị trạng thái bảo vệ
             };
             
             return JSON.stringify(data);
@@ -93,18 +98,19 @@ class PerfectLockHeadshotMaster {
         
         // Tính toán vị trí cuối cùng với độ dính cao
         let finalPosition = {
-            x: currentPosition.x + (direction.x * distanceFactor * speedFactor * this.stickyFactor * this.overshootProtection),
-            y: currentPosition.y + (direction.y * distanceFactor * speedFactor * this.stickyFactor * this.aimStabilizer * this.overshootProtection),
-            z: currentPosition.z + (direction.z * distanceFactor * speedFactor * this.stickyFactor * 0.96 * this.overshootProtection)
+            x: currentPosition.x + (direction.x * distanceFactor * speedFactor * this.stickyFactor * this.overshootGuard),
+            y: currentPosition.y + (direction.y * distanceFactor * speedFactor * this.stickyFactor * this.aimStabilizer * this.overshootGuard),
+            z: currentPosition.z + (direction.z * distanceFactor * speedFactor * this.stickyFactor * 0.96 * this.overshootGuard)
         };
         
-        // Giới hạn không vượt quá hitbox đầu
-        finalPosition.x = Math.min(target.headHitbox.x * 1.03, 
-                                Math.max(target.headHitbox.x * 0.97, finalPosition.x));
-        finalPosition.y = Math.min(target.headHitbox.y * 1.03, 
-                                Math.max(target.headHitbox.y * 0.97, finalPosition.y));
-        finalPosition.z = Math.min(target.headHitbox.z * 1.03, 
-                                Math.max(target.headHitbox.z * 0.97, finalPosition.z));
+        // Giới hạn không vượt quá hitbox đầu (sử dụng headRadius)
+        const headBoundaryX = target.headHitbox.x * 1.03;
+        const headBoundaryY = target.headHitbox.y * 1.03;
+        const headBoundaryZ = target.headHitbox.z * 1.03;
+        
+        finalPosition.x = Math.min(headBoundaryX, Math.max(target.headHitbox.x * 0.97, finalPosition.x));
+        finalPosition.y = Math.min(headBoundaryY, Math.max(target.headHitbox.y * 0.97, finalPosition.y));
+        finalPosition.z = Math.min(headBoundaryZ, Math.max(target.headHitbox.z * 0.97, finalPosition.z));
         
         return finalPosition;
     }
@@ -118,7 +124,8 @@ class PerfectLockHeadshotMaster {
         // Dự đoán vị trí đầu với độ chính xác cao
         const predictedPosition = {
             x: target.headHitbox.x + (target.movement.x * travelTime * this.freeFirePhysics.headMovementFactor),
-            y: target.headHitbox.y + (target.movement.y * travelTime * this.freeFirePhysics.headMovementFactor),
+            // Ưu tiên bắn cổ (neckOffset) thay vì đầu
+            y: target.headHitbox.y + this.freeFireHitbox.neckOffset + (target.movement.y * travelTime * this.freeFirePhysics.headMovementFactor),
             z: target.headHitbox.z + (target.movement.z * travelTime * this.freeFirePhysics.headMovementFactor)
         };
         
@@ -126,10 +133,16 @@ class PerfectLockHeadshotMaster {
         const gravityOffset = 0.5 * this.freeFirePhysics.gravity * travelTime * travelTime;
         predictedPosition.y -= gravityOffset * 0.85;
         
-        // Hiệu chỉnh cuối cùng
+        // Hiệu chỉnh cho hitbox thực tế (thêm ngẫu nhiên trong phạm vi hitbox)
+        const hitboxCorrection = {
+            x: (Math.random() * 0.05) - 0.025,
+            y: target.isCrouching ? 0.15 : (target.isJumping ? -0.1 : -0.08)
+        };
+        
+        // Áp dụng hiệu chỉnh
         return {
-            x: predictedPosition.x,
-            y: predictedPosition.y + target.headHitboxSize * 0.65, // Tối ưu vị trí headshot
+            x: predictedPosition.x + hitboxCorrection.x,
+            y: predictedPosition.y + hitboxCorrection.y,
             z: predictedPosition.z
         };
     }
@@ -157,11 +170,11 @@ class PerfectLockHeadshotMaster {
         
         if (gameState.playerHealth < 30) {
             this.lockStrength = 0.9995;
-            this.overshootProtection = 0.98; // Giảm overshoot khi máu thấp
+            this.overshootGuard = 0.92; // Tăng bảo vệ khi máu thấp
         }
     }
 
-    // CẬP NHẬT LỊCH SỬ MỤC TIÊU
+    // CẬP NHẬT LỊCH SỬ MỤC TIÊU (dùng cho bộ lọc rung tâm)
     updateTargetHistory(targetId, position) {
         if (!this.targetHistory.has(targetId)) {
             this.targetHistory.set(targetId, []);
@@ -172,6 +185,24 @@ class PerfectLockHeadshotMaster {
         
         // Giới hạn lịch sử
         if (history.length > 10) history.shift();
+    }
+
+    // BỘ LỌC RUNG TÂM (Áp dụng khi địch di chuyển nhanh) 
+    applyJitterFilter(target) {
+        const history = this.targetHistory.get(target.id);
+        if (!history || history.length < 3) return target.position;
+        
+        // Kalman Filter giảm nhiễu chuyển động
+        let filteredX = 0, filteredY = 0;
+        history.forEach((pos, index) => {
+            const weight = 0.6 - (0.1 * index); // Giảm dần trọng số theo thời gian
+            filteredX += pos.position.x * weight;
+            filteredY += pos.position.y * weight;
+        });
+        return { 
+            x: filteredX / history.length, 
+            y: filteredY / history.length 
+        };
     }
 
     getFreeFireWeaponProfiles() {
