@@ -29,7 +29,6 @@ class PerfectLockUltimateProSystem {
                     const perfectAim = this.calculatePrecisionAim(lockedTarget, data.playerPosition, data.currentWeapon);
                     data.aimPosition = this.applyNeuralLock(perfectAim, data.currentAimPosition, lockedTarget);
                     
-                    // Tăng cường ổn định khi khóa mục tiêu
                     if (this.lockStrength > 0.97 && data.recoilSystem?.crosshairStabilization) {
                         const stabilizationBoost = 1.8 - (lockedTarget.distance * 0.002);
                         data.aimPosition = {
@@ -40,7 +39,6 @@ class PerfectLockUltimateProSystem {
                         data.recoilSystem.aimLockStrength = this.lockStrength;
                     }
                     
-                    // Kích hoạt dẫn đường đạn thông minh
                     if (this.performanceMode !== "low") {
                         data.bulletTrajectory = this.calculateAdaptiveTrajectory(
                             data.playerPosition,
@@ -73,7 +71,6 @@ class PerfectLockUltimateProSystem {
     updatePerformanceMode(performanceState) {
         if (!performanceState) return;
         
-        // Tối ưu hóa chế độ hiệu năng động
         if (performanceState.cpuUsage > 0.85 || performanceState.memoryUsage > 85) {
             this.performanceMode = "balanced";
             this.aimPredictionLevel = 3;
@@ -92,7 +89,6 @@ class PerfectLockUltimateProSystem {
             const bulletSpeed = this.weaponProfiles[weaponType]?.bulletVelocity || 500;
             const travelTime = distance / bulletSpeed;
             
-            // Sử dụng mạng neural để dự đoán chuyển động
             const movementPrediction = this.neuralMovementPrediction(target);
             
             return {
@@ -114,18 +110,15 @@ class PerfectLockUltimateProSystem {
             movementPatterns: []
         };
 
-        // Cập nhật lịch sử
         history.positions.push(target.position);
         history.timestamps.push(now);
         
-        // Giới hạn lịch sử để tối ưu hiệu năng
         const maxHistory = Math.min(10, 3 + this.aimPredictionLevel);
         if (history.positions.length > maxHistory) {
             history.positions.shift();
             history.timestamps.shift();
         }
         
-        // Neural network prediction (simplified)
         let predictedX = 0, predictedY = 0, predictedZ = 0;
         const weightFactor = this.neuralWeights.sensitivity;
         
@@ -136,20 +129,17 @@ class PerfectLockUltimateProSystem {
                 const dz = history.positions[i].z - history.positions[i-1].z;
                 const dt = (history.timestamps[i] - history.timestamps[i-1]) / 1000;
                 
-                // Áp dụng trọng số neural
                 predictedX += (dx / dt) * weightFactor * (i / history.positions.length);
                 predictedY += (dy / dt) * weightFactor * (i / history.positions.length);
                 predictedZ += (dz / dt) * weightFactor * (i / history.positions.length);
             }
             
-            // Chuẩn hóa dự đoán
             const avgFactor = 1 / (history.positions.length - 1);
             predictedX *= avgFactor;
             predictedY *= avgFactor;
             predictedZ *= avgFactor;
         }
         
-        // Lưu mẫu chuyển động để học tiếp
         history.movementPatterns.push({x: predictedX, y: predictedY, z: predictedZ});
         this.targetHistory.set(target.id, history);
         
@@ -157,18 +147,15 @@ class PerfectLockUltimateProSystem {
     }
 
     calculateHeadHitbox(target, travelTime) {
-        // Tính toán hitbox đầu chính xác dựa trên tư thế
         const headHeight = target.isCrouching ? target.height * 0.85 : target.height * 0.92;
         const headRadius = target.isCrouching ? 0.22 : 0.25;
         
-        // Vị trí đầu hiện tại
         const currentHead = {
             x: target.position.x,
             y: target.position.y + headHeight,
             z: target.position.z
         };
         
-        // Dự đoán vị trí đầu với hệ số hiệu chỉnh neural
         return {
             x: currentHead.x + (target.movement.x * travelTime * 1.25 * this.neuralWeights.accuracy),
             y: currentHead.y + (target.movement.y * travelTime * 1.25 * this.neuralWeights.accuracy),
@@ -178,7 +165,6 @@ class PerfectLockUltimateProSystem {
     }
 
     calculateThreatLevel(target) {
-        // Tính mức độ nguy hiểm của mục tiêu
         let threat = 0;
         threat += target.isAimingAtPlayer ? 40 : 0;
         threat += (100 - target.health) * 0.6;
@@ -188,13 +174,10 @@ class PerfectLockUltimateProSystem {
     }
 
     selectOptimalTarget(targets) {
-        // Sắp xếp mục tiêu theo độ ưu tiên
         return targets.sort((a, b) => {
-            // Ưu tiên mục tiêu đang khóa
             if (a.isLocked && !b.isLocked) return -1;
             if (!a.isLocked && b.isLocked) return 1;
             
-            // Tính điểm chiến thuật
             const aScore = this.calculateTacticalScore(a);
             const bScore = this.calculateTacticalScore(b);
             
@@ -205,18 +188,17 @@ class PerfectLockUltimateProSystem {
     calculateTacticalScore(target) {
         let score = 0;
         
-        // Điểm cơ bản
-        score += Math.max(0, 120 - (target.distance / 1.8)); // Ưu tiên gần
+        // Tăng trọng số cho mục tiêu gần và đang bắn
+        score += Math.max(0, 150 - (target.distance / 1.5));
+        score += target.isShooting ? 50 : 0;
         
-        // Yếu tố chiến thuật
         score += target.threatLevel * 1.2;
         score += (100 - target.health) * 0.9;
         
-        // Phạt mục tiêu di chuyển nhanh
+        // Giảm phạt cho mục tiêu di chuyển
         const speed = Math.sqrt(target.movement.x**2 + target.movement.y**2 + target.movement.z**2);
-        score -= Math.min(60, speed * 15);
+        score -= Math.min(40, speed * 10);
         
-        // Ưu tiên mục tiêu đứng yên hoặc ngắm bắn
         score += target.isAiming ? 25 : 0;
         score += speed < 0.1 ? 15 : 0;
         
@@ -224,14 +206,12 @@ class PerfectLockUltimateProSystem {
     }
 
     calculatePrecisionAim(target, playerPosition, weaponType) {
-        // Vị trí chính xác giữa hitbox đầu
         let aimPosition = {
             x: target.headHitbox.x,
             y: target.headHitbox.y,
             z: target.headHitbox.z
         };
         
-        // Hiệu chỉnh đạn đạo nâng cao
         if (['sniper', 'dmr'].includes(weaponType)) {
             const gravity = this.ballisticCalculator.getGravity(weaponType);
             const drop = this.ballisticCalculator.calculateAdvancedDrop(
@@ -243,12 +223,11 @@ class PerfectLockUltimateProSystem {
             aimPosition.y += drop;
         }
         
-        // Hiệu chỉnh vũ khí với độ chính xác neural
         const weaponProfile = this.weaponProfiles[weaponType] || this.weaponProfiles.default;
         aimPosition.y += weaponProfile.verticalOffset * this.neuralWeights.precision;
         
-        // Thêm độ lệch ngẫu nhiên nhỏ để tránh bị phát hiện
-        const randFactor = 0.02 - (this.lockStrength * 0.01);
+        // Giảm độ lệch ngẫu nhiên để tăng độ chính xác
+        const randFactor = 0.01 - (this.lockStrength * 0.005);
         aimPosition.x += (Math.random() * randFactor) - (randFactor / 2);
         aimPosition.y += (Math.random() * randFactor * 0.7) - (randFactor / 3);
         
@@ -262,7 +241,6 @@ class PerfectLockUltimateProSystem {
             z: targetPosition.z - currentPosition.z
         };
         
-        // Tính toán hệ số khóa dựa trên neural network
         const distanceFactor = Math.min(1, 80 / target.distance);
         const speedFactor = 1 - (Math.sqrt(
             target.movement.x**2 + 
@@ -341,23 +319,19 @@ class PerfectLockUltimateProSystem {
         const combatIntensity = gameState.combatIntensity || 0;
         const timeSinceCombat = Date.now() - this.lastLockTime;
         
-        // Hệ thống điều chỉnh khóa theo cường độ chiến đấu
         if (gameState.isInCombat || timeSinceCombat < 4000) {
             this.lockStrength = Math.min(0.999, 0.97 + (combatIntensity * 0.02));
         } else {
             this.lockStrength = Math.max(0.96, this.lockStrength - 0.01);
         }
         
-        // Tăng cường khi ngắm bắn hoặc máu thấp
         if (gameState.isAiming) this.lockStrength = 0.992;
         if (gameState.playerHealth < 25) this.lockStrength = 0.999;
         
-        // Tự động điều chỉnh độ ổn định
         this.aimStabilizer = 0.90 + (this.lockStrength * 0.05);
     }
 
     generateNeuralWeights() {
-        // Tạo trọng số neural ngẫu nhiên cho mỗi phiên
         return {
             aggression: 0.85 + (Math.random() * 0.15),
             accuracy: 0.92 + (Math.random() * 0.08),
@@ -419,7 +393,6 @@ class AdvancedBallisticCalculator {
         const time = distance / velocity;
         const baseDrop = 0.5 * gravity * Math.pow(time, 2);
         
-        // Bổ sung hiệu chỉnh chuyển động dọc
         const verticalCompensation = movement.y * time * 0.85;
         
         return baseDrop + verticalCompensation;
