@@ -1,56 +1,63 @@
-// INTELLIGENT MEMORY MANAGER v4.0
-class IntelligentMemoryManager {
+// MEMORY OPTIMIZER v2.0 (Stability Edition)
+class MemoryOptimizer {
     constructor() {
         this.cache = new Map();
-        this.maxCacheSize = 40;
-        this.cleanupInterval = 8000;
-        this.lastCleanup = 0;
+        this.maxCacheSize = 50;
+        this.cleanupInterval = 10000;
+        this.lastCleanup = Date.now();
     }
 
     process(body) {
         try {
             const data = JSON.parse(body);
-            this.cleanup();
             
-            // Tối ưu dữ liệu mục tiêu
+            if (Date.now() - this.lastCleanup > this.cleanupInterval) {
+                this.cleanupCache();
+                this.lastCleanup = Date.now();
+            }
+            
             if (data.targets && data.targets.length > 10) {
                 data.targets = this.optimizeTargets(data.targets);
             }
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[MEM MANAGER] Error:", e.message);
+            console.error("[MEM OPTIMIZER] Error:", e.message.substring(0, 20));
             return body;
         }
     }
 
     optimizeTargets(targets) {
+        const maxTargets = 8;
+        if (targets.length <= maxTargets) return targets;
+        
         return targets
-            .filter(target => target.visible && target.distance < 200)
-            .sort((a, b) => b.threatLevel - a.threatLevel)
-            .slice(0, 8);
+            .sort((a, b) => {
+                const aScore = (100 - a.health) + (a.isShooting ? 30 : 0);
+                const bScore = (100 - b.health) + (b.isShooting ? 30 : 0);
+                return bScore - aScore;
+            })
+            .slice(0, maxTargets);
     }
 
-    cleanup() {
+    cleanupCache() {
         const now = Date.now();
-        if (now - this.lastCleanup < this.cleanupInterval) return;
+        const keysToDelete = [];
         
-        // Xóa cache cũ
         for (const [key, entry] of this.cache) {
-            if (now - entry.lastAccess > 30000) {
-                this.cache.delete(key);
+            if (now - entry.timestamp > 30000) {
+                keysToDelete.push(key);
             }
         }
         
-        // Giới hạn kích thước cache
+        keysToDelete.forEach(key => this.cache.delete(key));
+        
         if (this.cache.size > this.maxCacheSize) {
             const keys = [...this.cache.keys()].slice(0, this.cache.size - this.maxCacheSize);
             keys.forEach(key => this.cache.delete(key));
         }
-        
-        this.lastCleanup = now;
     }
 }
 
-const memManager = new IntelligentMemoryManager();
-$done({ body: memManager.process($response.body) });
+const memoryOptimizer = new MemoryOptimizer();
+$done({ body: memoryOptimizer.process($response.body) });
