@@ -1,205 +1,91 @@
-// ULTIMATE PERFORMANCE MANAGER v3.5 (Turbo Optimized)
-class UltimatePerformanceManager {
+// ADVANCED PERFORMANCE OPTIMIZER v5.0
+class AdvancedPerformanceOptimizer {
     constructor() {
         this.modules = {
-            aim: { active: true, priority: 0, cpuBudget: 0.35 },
-            recoil: { active: true, priority: 1, cpuBudget: 0.25 },
-            network: { active: true, priority: 2, cpuBudget: 0.15 },
-            graphics: { active: true, priority: 3, cpuBudget: 0.15 }
-        };
-        this.lastAdjustment = Date.now();
-        this.deviceProfile = "unknown";
-        this.performanceStats = {
-            avgCpu: 0, avgMemory: 0, avgFps: 0, avgTemp: 0, samples: 0
+            aim: { cpu: 0.40, enabled: true },
+            recoil: { cpu: 0.30, enabled: true },
+            graphics: { cpu: 0.15, enabled: true }
         };
         this.graphicsPresets = {
-            ultra: { textureQuality: "ultra", shadowQuality: "high", effectsQuality: "high", resolutionScale: 1.0, fpsTarget: 120 },
-            high: { textureQuality: "high", shadowQuality: "medium", effectsQuality: "medium", resolutionScale: 0.95, fpsTarget: 90 },
-            balanced: { textureQuality: "medium", shadowQuality: "low", effectsQuality: "medium", resolutionScale: 0.9, fpsTarget: 75 },
-            low: { textureQuality: "low", shadowQuality: "off", effectsQuality: "low", resolutionScale: 0.8, fpsTarget: 60 },
-            minimal: { textureQuality: "very_low", shadowQuality: "off", effectsQuality: "off", resolutionScale: 0.7, fpsTarget: 45 }
+            ultra: { texture: "ultra", shadow: "high", effects: "high", resScale: 1.0 },
+            high: { texture: "high", shadow: "medium", effects: "medium", resScale: 0.95 },
+            balanced: { texture: "medium", shadow: "low", effects: "medium", resScale: 0.9 },
+            low: { texture: "low", shadow: "off", effects: "low", resScale: 0.8 },
+            minimal: { texture: "minimal", shadow: "off", effects: "off", resScale: 0.7 }
         };
-        this.currentGraphicsPreset = "balanced";
-        this.thermalThrottleDetected = false;
-        this.survivalMode = false;
+        this.currentPreset = "balanced";
+        this.lastAdjustment = 0;
     }
 
     process(body) {
         try {
-            const startTime = Date.now();
-            let data = JSON.parse(body);
+            const data = JSON.parse(body);
             
-            if (data.gameState) this.gameState = data.gameState;
-            if (data.performanceState) this.updatePerformanceStats(data.performanceState);
-            
-            const now = Date.now();
-            if (now - this.lastAdjustment > 4000 || 
-                (data.performanceState && (data.performanceState.cpuUsage > 0.85 || data.performanceState.memoryUsage > 85))) {
-                this.adjustSystem();
-                this.lastAdjustment = now;
+            if (data.performanceState) {
+                this.adjustSystem(data.performanceState);
             }
             
             if (data.graphicsSettings) {
-                data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
+                data.graphicsSettings = this.applyGraphicsPreset(data.graphicsSettings);
             }
             
-            this.survivalMode = this.gameState?.playerHealth < 30;
-            if (this.survivalMode) this.enableSurvivalMode();
-            
             data.performance = {
-                timestamp: now,
-                deviceProfile: this.deviceProfile,
-                graphicsPreset: this.currentGraphicsPreset,
-                moduleAllocations: this.getModuleAllocations(),
-                stats: {
-                    avgCpu: this.performanceStats.avgCpu,
-                    avgMemory: this.performanceStats.avgMemory,
-                    avgFps: this.performanceStats.avgFps,
-                    avgTemp: this.performanceStats.avgTemp
-                },
-                survivalMode: this.survivalMode,
-                processingTime: Date.now() - startTime
+                preset: this.currentPreset,
+                moduleAllocations: this.modules
             };
 
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[PERF MANAGER] Fast Error:", e.message.substring(0, 20));
+            console.error("[PERF OPTIMIZER] Error:", e.message);
             return body;
         }
     }
 
-    updatePerformanceStats(perf) {
-        if (!perf) return;
+    adjustSystem(perfState) {
+        if (Date.now() - this.lastAdjustment < 5000) return;
+        this.lastAdjustment = Date.now();
         
-        const weight = 0.35;
-        this.performanceStats.avgCpu = this.calcAvg(this.performanceStats.avgCpu, perf.cpuUsage, weight);
-        this.performanceStats.avgMemory = this.calcAvg(this.performanceStats.avgMemory, perf.memoryUsage, weight);
-        this.performanceStats.avgFps = this.calcAvg(this.performanceStats.avgFps, perf.fps, weight);
-        
-        if (perf.temperature) {
-            this.performanceStats.avgTemp = this.calcAvg(this.performanceStats.avgTemp, perf.temperature, weight);
+        // Ưu tiên hệ thống aim khi chiến đấu
+        if (perfState.inCombat) {
+            this.modules.aim.cpu = Math.min(0.45, this.modules.aim.cpu + 0.05);
+            this.modules.graphics.cpu = Math.max(0.10, this.modules.graphics.cpu - 0.05);
         }
         
-        this.performanceStats.samples++;
-        
-        if (this.performanceStats.samples >= 3 && this.deviceProfile === "unknown") {
-            this.detectDeviceProfile();
-        }
-    }
-
-    calcAvg(current, newVal, weight) {
-        return current * (1 - weight) + newVal * weight;
-    }
-
-    detectDeviceProfile() {
-        if (this.performanceStats.avgCpu < 0.35 && this.performanceStats.avgMemory < 45) {
-            this.deviceProfile = "high_end";
-            this.currentGraphicsPreset = "high";
-        } else if (this.performanceStats.avgCpu < 0.55 && this.performanceStats.avgMemory < 65) {
-            this.deviceProfile = "mid_range";
-            this.currentGraphicsPreset = "balanced";
-        } else {
-            this.deviceProfile = "low_end";
-            this.currentGraphicsPreset = "low";
-        }
-    }
-
-    adjustSystem() {
-        this.adjustGraphicsQuality();
-        
-        switch (this.deviceProfile) {
-            case "high_end": this.setModuleBudgets(0.35, 0.25, 0.15, 0.15); break;
-            case "mid_range": this.setModuleBudgets(0.33, 0.23, 0.13, 0.13); break;
-            case "low_end": this.setModuleBudgets(0.30, 0.20, 0.10, 0.10); break;
-            default: this.setModuleBudgets(0.33, 0.23, 0.13, 0.13);
-        }
-        
-        if (this.gameState?.isTargetLocked) {
-            this.modules.aim.cpuBudget = Math.min(0.45, this.modules.aim.cpuBudget + 0.1);
-            this.modules.recoil.cpuBudget = Math.min(0.35, this.modules.recoil.cpuBudget + 0.07);
-            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.08);
-        }
-        
-        if (this.performanceStats.avgTemp > 46) {
-            this.reduceThermalLoad();
-        }
-    }
-
-    setModuleBudgets(aim, recoil, network, graphics) {
-        this.modules.aim.cpuBudget = aim;
-        this.modules.recoil.cpuBudget = recoil;
-        this.modules.network.cpuBudget = network;
-        this.modules.graphics.cpuBudget = graphics;
-    }
-
-    adjustGraphicsQuality() {
-        const currentFpsTarget = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
-        
-        if (this.performanceStats.avgFps < currentFpsTarget * 0.75) {
+        // Giảm đồ họa khi nhiệt độ cao
+        if (perfState.temperature > 45) {
             this.downgradeGraphics();
-        } else if (this.performanceStats.avgFps > currentFpsTarget * 1.25 && 
-                 this.performanceStats.avgCpu < 0.55) {
-            this.upgradeGraphics();
         }
         
-        if (this.performanceStats.avgTemp > 48 && this.currentGraphicsPreset !== "minimal") {
-            this.currentGraphicsPreset = "minimal";
-            this.thermalThrottleDetected = true;
+        // Chế độ sinh tồn khi máu thấp
+        if (perfState.playerHealth < 30) {
+            this.activateSurvivalMode();
         }
     }
 
     downgradeGraphics() {
         const presets = ["ultra", "high", "balanced", "low", "minimal"];
-        const idx = presets.indexOf(this.currentGraphicsPreset);
-        if (idx < presets.length - 1) this.currentGraphicsPreset = presets[idx + 1];
-    }
-
-    upgradeGraphics() {
-        const presets = ["ultra", "high", "balanced", "low", "minimal"];
-        const idx = presets.indexOf(this.currentGraphicsPreset);
-        if (idx > 0 && !this.thermalThrottleDetected) this.currentGraphicsPreset = presets[idx - 1];
-    }
-
-    applyGraphicsSettings(current) {
-        const preset = this.graphicsPresets[this.currentGraphicsPreset];
-        const newSettings = { ...current };
-        
-        if (newSettings.textureQuality !== preset.textureQuality ||
-            newSettings.shadowQuality !== preset.shadowQuality ||
-            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.15) {
-            
-            Object.assign(newSettings, preset);
-        }
-        
-        return newSettings;
-    }
-
-    reduceThermalLoad() {
-        this.downgradeGraphics();
-        this.modules.graphics.cpuBudget *= 0.6;
-        this.modules.network.cpuBudget *= 0.75;
-        
-        if (this.gameState) {
-            this.gameState.particleEffects = false;
-            this.gameState.ambientOcclusion = false;
+        const currentIndex = presets.indexOf(this.currentPreset);
+        if (currentIndex < presets.length - 1) {
+            this.currentPreset = presets[currentIndex + 1];
         }
     }
 
-    enableSurvivalMode() {
-        this.modules.aim.cpuBudget = Math.min(0.48, this.modules.aim.cpuBudget + 0.15);
-        this.modules.recoil.cpuBudget = Math.min(0.38, this.modules.recoil.cpuBudget + 0.12);
-        this.currentGraphicsPreset = "minimal";
-        this.graphicsPresets[this.currentGraphicsPreset].effectsQuality = "off";
+    activateSurvivalMode() {
+        this.modules.aim.cpu = 0.45;
+        this.currentPreset = "minimal";
     }
 
-    getModuleAllocations() {
-        return Object.entries(this.modules).map(([name, config]) => ({
-            module: name,
-            active: config.active,
-            cpuBudget: config.cpuBudget.toFixed(2)
-        }));
+    applyGraphicsPreset(settings) {
+        const preset = this.graphicsPresets[this.currentPreset];
+        return {
+            ...settings,
+            textureQuality: preset.texture,
+            shadowQuality: preset.shadow,
+            effectQuality: preset.effects,
+            resolutionScale: preset.resScale
+        };
     }
 }
 
-const perfManager = new UltimatePerformanceManager();
-$done({ body: perfManager.process($response.body) });
+const perfOptimizer = new AdvancedPerformanceOptimizer();
+$done({ body: perfOptimizer.process($response.body) });
