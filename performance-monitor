@@ -61,17 +61,14 @@ class UltimatePerformanceManager {
         try {
             let data = JSON.parse(body);
             
-            // Cập nhật trạng thái game nếu có
             if (data.gameState) {
                 this.gameState = data.gameState;
             }
             
-            // Cập nhật thống kê hiệu năng
             if (data.performanceState) {
                 this.updatePerformanceStats(data.performanceState);
             }
             
-            // Điều chỉnh hệ thống mỗi 5 giây hoặc khi có vấn đề hiệu năng
             const now = Date.now();
             if (now - this.lastAdjustment > 5000 || 
                 (data.performanceState && (data.performanceState.cpuUsage > 0.85 || data.performanceState.memoryUsage > 85))) {
@@ -79,12 +76,10 @@ class UltimatePerformanceManager {
                 this.lastAdjustment = now;
             }
             
-            // Áp dụng cài đặt đồ họa
             if (data.graphicsSettings) {
                 data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
             }
             
-            // Thêm dữ liệu hiệu năng vào response
             data.performance = {
                 timestamp: now,
                 deviceProfile: this.deviceProfile,
@@ -109,10 +104,8 @@ class UltimatePerformanceManager {
     updatePerformanceStats(performanceState) {
         if (!performanceState) return;
         
-        // Trọng số cho trung bình di động
         const weight = 0.3;
         
-        // Cập nhật trung bình di động
         this.performanceStats.avgCpu = this.calculateMovingAverage(
             this.performanceStats.avgCpu, performanceState.cpuUsage, weight
         );
@@ -123,7 +116,6 @@ class UltimatePerformanceManager {
             this.performanceStats.avgFps, performanceState.fps, weight
         );
         
-        // Cập nhật nhiệt độ nếu có
         if (performanceState.temperature) {
             this.performanceStats.avgTemp = this.calculateMovingAverage(
                 this.performanceStats.avgTemp, performanceState.temperature, weight
@@ -132,7 +124,6 @@ class UltimatePerformanceManager {
         
         this.performanceStats.samples++;
         
-        // Phát hiện profile thiết bị sau 5 mẫu
         if (this.performanceStats.samples >= 5 && this.deviceProfile === "unknown") {
             this.detectDeviceProfile();
         }
@@ -156,10 +147,8 @@ class UltimatePerformanceManager {
     }
 
     adjustSystem() {
-        // Điều chỉnh đồ họa dựa trên hiệu năng
         this.adjustGraphicsQuality();
         
-        // Điều chỉnh module dựa trên profile thiết bị
         switch (this.deviceProfile) {
             case "high_end":
                 this.setModuleBudgets(0.25, 0.2, 0.15, 0.3);
@@ -174,19 +163,16 @@ class UltimatePerformanceManager {
                 this.setModuleBudgets(0.2, 0.15, 0.1, 0.25);
         }
         
-        // Ưu tiên tài nguyên cho hệ thống aim khi khóa mục tiêu
         if (this.gameState?.isTargetLocked) {
-            this.modules.aim.cpuBudget = Math.min(0.3, this.modules.aim.cpuBudget + 0.05);
-            this.modules.recoil.cpuBudget = Math.min(0.2, this.modules.recoil.cpuBudget + 0.03);
-            this.modules.graphics.cpuBudget = Math.max(0.1, this.modules.graphics.cpuBudget - 0.08);
+            this.modules.aim.cpuBudget = Math.min(0.4, this.modules.aim.cpuBudget + 0.1);
+            this.modules.recoil.cpuBudget = Math.min(0.3, this.modules.recoil.cpuBudget + 0.08);
+            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.15);
         }
         
-        // Giảm tải khi nhiệt độ cao
         if (this.performanceStats.avgTemp > 45) {
             this.reduceThermalLoad();
         }
         
-        // Tối ưu cho chế độ sinh tồn
         if (this.gameState?.playerHealth < 30) {
             this.enableSurvivalMode();
         }
@@ -200,17 +186,14 @@ class UltimatePerformanceManager {
     }
 
     adjustGraphicsQuality() {
-        // Tự động giảm đồ họa nếu FPS thấp
         if (this.performanceStats.avgFps < this.graphicsPresets[this.currentGraphicsPreset].fpsTarget * 0.8) {
             this.downgradeGraphics();
         }
-        // Tăng đồ họa nếu FPS ổn định và có tài nguyên
         else if (this.performanceStats.avgFps > this.graphicsPresets[this.currentGraphicsPreset].fpsTarget * 1.2 && 
                  this.performanceStats.avgCpu < 0.6) {
             this.upgradeGraphics();
         }
         
-        // Giảm đồ họa khẩn cấp nếu nhiệt độ quá cao
         if (this.performanceStats.avgTemp > 48 && this.currentGraphicsPreset !== "minimal") {
             this.currentGraphicsPreset = "minimal";
             this.thermalThrottleDetected = true;
@@ -236,13 +219,10 @@ class UltimatePerformanceManager {
     }
 
     applyGraphicsSettings(currentSettings) {
-        // Tạo bản sao của cài đặt đồ họa hiện tại
         const newSettings = { ...currentSettings };
         
-        // Áp dụng preset đồ họa
         const preset = this.graphicsPresets[this.currentGraphicsPreset];
         
-        // Chỉ áp dụng nếu khác biệt đáng kể
         if (newSettings.textureQuality !== preset.textureQuality ||
             newSettings.shadowQuality !== preset.shadowQuality ||
             Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.1) {
@@ -253,7 +233,6 @@ class UltimatePerformanceManager {
             newSettings.resolutionScale = preset.resolutionScale;
             newSettings.fpsTarget = preset.fpsTarget;
             
-            // Ghi nhật ký thay đổi
             console.log(`Applying graphics preset: ${this.currentGraphicsPreset}`);
         }
         
@@ -261,14 +240,11 @@ class UltimatePerformanceManager {
     }
 
     reduceThermalLoad() {
-        // Giảm tải đồ họa
         this.downgradeGraphics();
         
-        // Giảm tải CPU cho các module không quan trọng
         this.modules.graphics.cpuBudget *= 0.7;
         this.modules.network.cpuBudget *= 0.8;
         
-        // Tắt các hiệu ứng không cần thiết
         if (this.gameState) {
             this.gameState.particleEffects = false;
             this.gameState.ambientOcclusion = false;
@@ -276,14 +252,11 @@ class UltimatePerformanceManager {
     }
 
     enableSurvivalMode() {
-        // Kích hoạt chế độ ưu tiên sinh tồn
         this.modules.aim.cpuBudget = Math.min(0.35, this.modules.aim.cpuBudget + 0.1);
         this.modules.recoil.cpuBudget = Math.min(0.25, this.modules.recoil.cpuBudget + 0.1);
         
-        // Giảm đồ họa để tiết kiệm tài nguyên
         this.downgradeGraphics();
         
-        // Tắt các thành phần đồ họa không cần thiết
         this.graphicsPresets[this.currentGraphicsPreset].effectsQuality = "off";
         this.graphicsPresets[this.currentGraphicsPreset].shadowQuality = "off";
     }
@@ -303,7 +276,6 @@ class UltimatePerformanceManager {
             details: ""
         };
         
-        // Kiểm tra tải CPU
         if (this.performanceStats.avgCpu > 0.85) {
             recommendations.status = "critical";
             recommendations.actions.push("reduce_graphics", "disable_background_processes");
@@ -315,7 +287,6 @@ class UltimatePerformanceManager {
             recommendations.details = "High CPU usage";
         }
         
-        // Kiểm tra FPS
         const targetFps = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
         if (this.performanceStats.avgFps < targetFps * 0.7) {
             recommendations.status = "critical";
@@ -328,7 +299,6 @@ class UltimatePerformanceManager {
             recommendations.details += recommendations.details ? ", Suboptimal FPS" : "Suboptimal FPS";
         }
         
-        // Kiểm tra nhiệt độ
         if (this.performanceStats.avgTemp > 48) {
             recommendations.status = "critical";
             recommendations.actions.push("reduce_thermal_load", "enable_cooling");
@@ -340,12 +310,10 @@ class UltimatePerformanceManager {
             recommendations.details += recommendations.details ? ", Elevated temperature" : "Elevated temperature";
         }
         
-        // Không có vấn đề
         if (recommendations.actions.length === 0) {
             recommendations.details = "System is running optimally";
         }
         
-        // Loại bỏ các hành động trùng lặp
         recommendations.actions = [...new Set(recommendations.actions)];
         
         return recommendations;
