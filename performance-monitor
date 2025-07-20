@@ -1,131 +1,240 @@
-// ULTRA PERFORMANCE OPTIMIZER v5.0 (90FPS Pro Edition)
-class UltraPerformanceOptimizer {
+// QUANTUM PERFORMANCE OPTIMIZER v8.0 (Zero Latency Edition)
+class QuantumPerformanceOptimizer {
     constructor() {
+        // Hệ thống module AI-Driven
         this.modules = {
-            aim: { active: true, priority: 0, cpuBudget: 0.40, memBudget: 22 },
-            recoil: { active: true, priority: 1, cpuBudget: 0.32, memBudget: 18 },
-            network: { active: true, priority: 2, cpuBudget: 0.15, memBudget: 12 },
-            graphics: { active: true, priority: 3, cpuBudget: 0.08, memBudget: 28 }
+            aim: { 
+                active: true, 
+                priority: 0, 
+                cpuBudget: 0.40, 
+                memBudget: 25,
+                aiProfile: "precision"
+            },
+            recoil: { 
+                active: true, 
+                priority: 1, 
+                cpuBudget: 0.30, 
+                memBudget: 20,
+                aiProfile: "stabilization"
+            },
+            network: { 
+                active: true, 
+                priority: 2, 
+                cpuBudget: 0.15, 
+                memBudget: 15,
+                aiProfile: "latency_control"
+            },
+            graphics: { 
+                active: true, 
+                priority: 3, 
+                cpuBudget: 0.10, 
+                memBudget: 30,
+                aiProfile: "adaptive_rendering"
+            },
+            prediction: {
+                active: true,
+                priority: 0.5,
+                cpuBudget: 0.18,
+                memBudget: 18,
+                aiProfile: "neural_anticipation"
+            }
         };
-        this.lastAdjustment = Date.now();
-        this.performanceStats = { cpu: 0, memory: 0, fps: 0, temp: 0, fpsStability: 1.0 };
+        
+        this.lastOptimization = Date.now();
+        this.performanceStats = { 
+            cpu: 0, 
+            memory: 0, 
+            fps: 0, 
+            temp: 0,
+            jitter: 0,
+            frameTime: 0
+        };
+        
+        // Cấu hình đồ họa AI-Powered
         this.graphicsPresets = {
-            ultra: { textureQuality: "ultra", shadowQuality: "high", effectsQuality: "high", resolutionScale: 1.0, fpsTarget: 120 },
-            high90: { textureQuality: "high", shadowQuality: "medium", effectsQuality: "medium", resolutionScale: 0.95, fpsTarget: 90 },
-            balanced: { textureQuality: "medium", shadowQuality: "low", effectsQuality: "medium", resolutionScale: 0.9, fpsTarget: 75 },
-            low: { textureQuality: "low", shadowQuality: "off", effectsQuality: "low", resolutionScale: 0.8, fpsTarget: 60 },
-            minimal: { textureQuality: "very_low", shadowQuality: "off", effectsQuality: "off", resolutionScale: 0.7, fpsTarget: 45 }
+            quantum: { 
+                textureQuality: "ultra", 
+                shadowQuality: "dynamic_high", 
+                effectsQuality: "smart", 
+                resolutionScale: 1.0, 
+                fpsTarget: 144,
+                renderDistance: "ultra",
+                physicsQuality: "high"
+            },
+            ultra: { 
+                textureQuality: "ultra", 
+                shadowQuality: "high", 
+                effectsQuality: "high", 
+                resolutionScale: 0.98, 
+                fpsTarget: 120,
+                renderDistance: "high",
+                physicsQuality: "medium"
+            },
+            competitive: { 
+                textureQuality: "high", 
+                shadowQuality: "dynamic_medium", 
+                effectsQuality: "essential", 
+                resolutionScale: 0.95, 
+                fpsTarget: 90,
+                renderDistance: "medium",
+                physicsQuality: "medium"
+            },
+            balanced: { 
+                textureQuality: "medium", 
+                shadowQuality: "low", 
+                effectsQuality: "medium", 
+                resolutionScale: 0.9, 
+                fpsTarget: 75,
+                renderDistance: "medium",
+                physicsQuality: "low"
+            },
+            smooth: { 
+                textureQuality: "adaptive", 
+                shadowQuality: "dynamic_low", 
+                effectsQuality: "minimal", 
+                resolutionScale: 0.85, 
+                fpsTarget: 60,
+                renderDistance: "medium",
+                physicsQuality: "low"
+            },
+            minimal: { 
+                textureQuality: "performance", 
+                shadowQuality: "off", 
+                effectsQuality: "off", 
+                resolutionScale: 0.75, 
+                fpsTarget: 45,
+                renderDistance: "low",
+                physicsQuality: "minimal"
+            }
         };
-        this.currentGraphicsPreset = "high90"; // Mặc định nhắm đến 90FPS
-        this.thermalControl = new AdvancedThermalControl();
-        this.memoryManager = new AdvancedMemoryManager();
+        
+        this.currentGraphicsPreset = "competitive";
+        this.thermalControl = new QuantumThermalSystem();
+        this.memoryManager = new NeuralMemoryManager();
         this.gameState = null;
         this.thermalThrottleDetected = false;
-        this.fpsStabilizer = new FPSStabilizer(90); // Mục tiêu 90FPS
-        this.aimPriorityMode = false;
-        this.lastFPSCheck = Date.now();
-        this.fpsHistory = [];
-        this.longSessionOptimizer = new LongSessionOptimizer();
+        this.lagSpikeDetected = false;
+        this.frameTimeAnalyzer = new FrameTimeAnalyzer();
+        this.aiOptimizer = new AIResourceOptimizer();
+        this.aimSystemIntegration = new AimSystemIntegration();
+        this.recoilSystemIntegration = new RecoilSystemIntegration();
+        this.networkSystemIntegration = new NetworkSystemIntegration();
+        this.powerProfile = "performance";
+        this.deviceProfile = this.detectDeviceCapabilities();
     }
 
     process(body) {
         try {
-            const startTime = Date.now();
+            const processStart = performance.now();
             let data = JSON.parse(body);
             
+            // Cập nhật trạng thái trò chơi
             this.gameState = data.gameState || this.gameState;
             
+            // Cập nhật thống kê hiệu năng
             if (data.performanceState) {
                 this.updateStats(data.performanceState);
-                this.fpsStabilizer.recordFPS(data.performanceState.fps);
             }
             
+            // Tích hợp với các hệ thống khác
+            this.integrateExternalSystems(data);
+            
+            // Phân tích thời gian khung hình
+            this.frameTimeAnalyzer.analyzeFrameTime(this.performanceStats.frameTime);
+            
+            // Quản lý bộ nhớ
             this.memoryManager.cleanup();
-            this.longSessionOptimizer.checkSessionTime();
             
-            if (Date.now() - this.lastAdjustment > 1500 || this.performanceStats.fps < 85 || this.performanceStats.cpu > 0.85) {
+            // Tối ưu hóa hệ thống
+            if (Date.now() - this.lastOptimization > 1000 || this.performanceStats.cpu > 0.85 || this.lagSpikeDetected) {
                 this.optimizeSystem();
-                this.lastAdjustment = Date.now();
+                this.lastOptimization = Date.now();
             }
             
-            // Kiểm tra FPS mỗi 5 giây để điều chỉnh
-            if (Date.now() - this.lastFPSCheck > 5000) {
-                this.adjustGraphicsQuality();
-                this.lastFPSCheck = Date.now();
-            }
-            
+            // Kiểm soát nhiệt
             this.thermalControl.monitor(this.performanceStats.temp);
             
+            // Áp dụng cài đặt đồ họa
             if (data.graphicsSettings) {
                 data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
             }
             
-            // Kích hoạt chế độ ưu tiên aim khi cần
-            this.aimPriorityMode = this.gameState?.isInCombat || this.gameState?.playerHealth < 30;
-            if (this.aimPriorityMode) {
-                this.activateAimPriority();
-            }
-            
+            // Tạo dữ liệu hiệu năng
             data.performance = {
                 timestamp: Date.now(),
                 moduleAllocations: this.getModuleAllocations(),
                 stats: this.performanceStats,
                 thermalStatus: this.thermalControl.getStatus(),
                 memoryUsage: this.memoryManager.getUsage(),
+                frameAnalysis: this.frameTimeAnalyzer.getAnalysis(),
                 graphicsPreset: this.currentGraphicsPreset,
-                fpsStability: this.performanceStats.fpsStability,
-                sessionOptimization: this.longSessionOptimizer.getStatus(),
-                processingTime: Date.now() - startTime
+                deviceProfile: this.deviceProfile,
+                processingTime: performance.now() - processStart
             };
 
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[PERF OPTIMIZER] Pro Error:", e.message.substring(0, 20));
-            return body;
+            console.error("[QUANTUM OPTIMIZER] Critical Error:", e.message.substring(0, 50));
+            return this.handleSafeFallback(body);
         }
     }
 
     updateStats(perf) {
-        const weight = 0.35;
+        const weight = 0.35; // Hệ số làm mượt
+        
+        // Cập nhật thống kê cơ bản
         this.performanceStats.cpu = this.calcAvg(this.performanceStats.cpu, perf.cpuUsage, weight);
         this.performanceStats.memory = this.calcAvg(this.performanceStats.memory, perf.memoryUsage, weight);
         this.performanceStats.fps = this.calcAvg(this.performanceStats.fps, perf.fps, weight);
         this.performanceStats.temp = perf.temperature || this.performanceStats.temp;
+        this.performanceStats.jitter = perf.jitter || this.performanceStats.jitter;
+        this.performanceStats.frameTime = perf.frameTime || this.performanceStats.frameTime;
         
-        // Tính độ ổn định FPS (hệ số biến động)
-        this.fpsHistory.push(perf.fps);
-        if (this.fpsHistory.length > 30) this.fpsHistory.shift();
-        this.performanceStats.fpsStability = this.calculateFPSStability();
-    }
-
-    calculateFPSStability() {
-        if (this.fpsHistory.length < 2) return 1.0;
-        const avg = this.fpsHistory.reduce((a, b) => a + b, 0) / this.fpsHistory.length;
-        const variance = this.fpsHistory.reduce((sq, n) => sq + Math.pow(n - avg, 2), 0) / this.fpsHistory.length;
-        const stdDev = Math.sqrt(variance);
-        return Math.max(0.1, 1.0 - (stdDev / avg));
+        // Phát hiện giật lag
+        if (perf.frameTime > 33 || perf.jitter > 15) { // >33ms = <30fps
+            this.lagSpikeDetected = true;
+        } else if (this.lagSpikeDetected && perf.frameTime < 20 && perf.jitter < 8) {
+            this.lagSpikeDetected = false;
+        }
     }
 
     calcAvg(current, newVal, weight) {
         return isNaN(current) ? newVal : (current * (1 - weight) + newVal * weight);
     }
 
-    optimizeSystem() {
-        // Ưu tiên module aim và recoil trong combat
-        if (this.gameState?.isInCombat) {
-            this.modules.aim.cpuBudget = Math.min(0.48, this.modules.aim.cpuBudget + 0.08);
-            this.modules.recoil.cpuBudget = Math.min(0.40, this.modules.recoil.cpuBudget + 0.06);
-            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget - 0.07);
+    integrateExternalSystems(data) {
+        // Tích hợp với hệ thống aim
+        if (data.aimSystem) {
+            this.aimSystemIntegration.update(data.aimSystem, this.gameState);
         }
         
-        // Kiểm soát nhiệt
-        if (this.performanceStats.temp > 43) {
+        // Tích hợp với hệ thống recoil
+        if (data.recoilSystem) {
+            this.recoilSystemIntegration.update(data.recoilSystem, this.gameState);
+        }
+        
+        // Tích hợp với hệ thống mạng
+        if (data.network) {
+            this.networkSystemIntegration.update(data.network, this.gameState);
+        }
+    }
+
+    optimizeSystem() {
+        // Phân tích AI để tối ưu tài nguyên
+        this.aiOptimizer.analyze(this.performanceStats, this.gameState);
+        
+        // Kích hoạt chế độ chiến đấu
+        if (this.gameState?.isInCombat) {
+            this.activateCombatMode();
+        }
+        
+        // Kiểm soát nhiệt độ
+        if (this.performanceStats.temp > 45) {
             this.thermalControl.activateCoolingMode();
-            this.modules.graphics.cpuBudget *= 0.75;
-            this.currentGraphicsPreset = this.performanceStats.temp > 46 ? "low" : "balanced";
+            this.modules.graphics.cpuBudget *= 0.65;
+            this.currentGraphicsPreset = "smooth";
             this.thermalThrottleDetected = true;
         } else if (this.thermalThrottleDetected && this.performanceStats.temp < 38) {
-            this.thermalControl.deactivateCoolingMode();
             this.thermalThrottleDetected = false;
         }
         
@@ -134,63 +243,123 @@ class UltraPerformanceOptimizer {
             this.enableSurvivalMode();
         }
         
-        // Tối ưu hóa bộ nhớ nếu sử dụng cao
-        if (this.performanceStats.memory > 85) {
-            this.memoryManager.aggressiveCleanup();
-        }
+        // Điều chỉnh chất lượng đồ họa
+        this.adjustGraphicsQuality();
         
-        // Áp dụng tối ưu hóa cho phiên chơi dài
-        this.longSessionOptimizer.applyOptimizations(this);
+        // Tối ưu hóa dựa trên phân tích AI
+        this.applyAIOptimizations();
+        
+        // Tối ưu cho thiết bị
+        this.applyDeviceOptimizations();
     }
 
-    activateAimPriority() {
-        this.modules.aim.cpuBudget = Math.min(0.50, this.modules.aim.cpuBudget + 0.05);
-        this.modules.recoil.cpuBudget = Math.min(0.42, this.modules.recoil.cpuBudget + 0.04);
-        this.modules.network.cpuBudget = Math.max(0.10, this.modules.network.cpuBudget - 0.02);
-        this.modules.graphics.cpuBudget = Math.max(0.04, this.modules.graphics.cpuBudget - 0.04);
+    activateCombatMode() {
+        // Ưu tiên tài nguyên cho aim và recoil trong chiến đấu
+        this.modules.aim.cpuBudget = Math.min(0.48, this.modules.aim.cpuBudget + 0.08);
+        this.modules.recoil.cpuBudget = Math.min(0.38, this.modules.recoil.cpuBudget + 0.06);
+        this.modules.prediction.cpuBudget = Math.min(0.25, this.modules.prediction.cpuBudget + 0.07);
+        
+        // Giảm tải đồ họa
+        this.modules.graphics.cpuBudget = Math.max(0.07, this.modules.graphics.cpuBudget - 0.05);
+        
+        // Đặt preset đồ họa cho chiến đấu
+        this.currentGraphicsPreset = "competitive";
+        
+        // Kích hoạt chế độ hiệu năng tối đa
+        this.powerProfile = "extreme_performance";
     }
 
     enableSurvivalMode() {
-        this.modules.aim.cpuBudget = 0.48;
-        this.modules.recoil.cpuBudget = 0.40;
-        this.currentGraphicsPreset = "minimal";
+        // Tối ưu cho tình huống nguy hiểm
+        this.modules.aim.cpuBudget = 0.46;
+        this.modules.recoil.cpuBudget = 0.36;
+        this.modules.prediction.cpuBudget = 0.24;
+        this.currentGraphicsPreset = "smooth";
         this.modules.graphics.memBudget = 20;
+        
+        // Giảm hiệu ứng không cần thiết
+        this.modules.graphics.cpuBudget = 0.08;
     }
 
     adjustGraphicsQuality() {
+        const currentFpsTarget = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
         const currentFps = this.performanceStats.fps;
-        const targetFps = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
         
-        // Nếu FPS thấp hơn 85% mục tiêu, giảm cấu hình
-        if (currentFps < targetFps * 0.85) {
+        // Phát hiện giảm FPS
+        if (currentFps < currentFpsTarget * 0.7) {
             this.downgradeGraphics();
         } 
-        // Nếu FPS cao hơn 115% mục tiêu và nhiệt độ ổn, tăng cấu hình
-        else if (currentFps > targetFps * 1.15 && 
-                 this.performanceStats.cpu < 0.7 && 
-                 !this.thermalThrottleDetected && 
-                 this.performanceStats.temp < 42) {
+        // Nâng cấp khi có hiệu năng dư
+        else if (currentFps > currentFpsTarget * 1.3 && 
+                 this.performanceStats.cpu < 0.65 && 
+                 !this.thermalThrottleDetected &&
+                 !this.lagSpikeDetected) {
             this.upgradeGraphics();
+        }
+        
+        // Điều chỉnh dựa trên phân tích thời gian khung hình
+        const frameAnalysis = this.frameTimeAnalyzer.getAnalysis();
+        if (frameAnalysis.percentile95 > 28) { // >28ms frame time
+            this.downgradeGraphics();
         }
     }
 
     downgradeGraphics() {
-        const presets = ["ultra", "high90", "balanced", "low", "minimal"];
+        const presets = ["quantum", "ultra", "competitive", "balanced", "smooth", "minimal"];
         const idx = presets.indexOf(this.currentGraphicsPreset);
         if (idx < presets.length - 1) {
             this.currentGraphicsPreset = presets[idx + 1];
-            // Giảm tải cho GPU bằng cách giảm ngân sách đồ họa
-            this.modules.graphics.cpuBudget = Math.max(0.05, this.modules.graphics.cpuBudget * 0.9);
+            // Giảm thêm tài nguyên đồ họa nếu cần
+            this.modules.graphics.cpuBudget *= 0.9;
         }
     }
 
     upgradeGraphics() {
-        const presets = ["ultra", "high90", "balanced", "low", "minimal"];
+        const presets = ["quantum", "ultra", "competitive", "balanced", "smooth", "minimal"];
         const idx = presets.indexOf(this.currentGraphicsPreset);
         if (idx > 0) {
             this.currentGraphicsPreset = presets[idx - 1];
-            // Tăng ngân sách cho GPU khi nâng cấp
-            this.modules.graphics.cpuBudget = Math.min(0.15, this.modules.graphics.cpuBudget * 1.1);
+            // Tăng tài nguyên cho module khác nếu có thể
+            this.modules.aim.cpuBudget = Math.min(0.45, this.modules.aim.cpuBudget + 0.02);
+        }
+    }
+
+    applyAIOptimizations() {
+        const recommendations = this.aiOptimizer.getRecommendations();
+        
+        // Áp dụng tối ưu hóa AI
+        for (const [module, settings] of Object.entries(recommendations)) {
+            if (this.modules[module]) {
+                this.modules[module].cpuBudget = settings.cpu;
+                this.modules[module].memBudget = settings.memory;
+                
+                // Cập nhật profile AI
+                if (settings.aiProfile) {
+                    this.modules[module].aiProfile = settings.aiProfile;
+                }
+            }
+        }
+        
+        // Điều chỉnh dựa trên phân tích khung hình
+        const frameAnalysis = this.frameTimeAnalyzer.getAnalysis();
+        if (frameAnalysis.consistency < 0.85) {
+            this.modules.graphics.cpuBudget *= 0.85;
+            this.modules.network.cpuBudget *= 1.1;
+        }
+    }
+
+    applyDeviceOptimizations() {
+        // Tối ưu cho thiết bị cấu hình thấp
+        if (this.deviceProfile.tier === "low") {
+            this.modules.graphics.cpuBudget = 0.08;
+            this.modules.graphics.memBudget = 18;
+            this.currentGraphicsPreset = "minimal";
+        }
+        // Tối ưu cho thiết bị tầm trung
+        else if (this.deviceProfile.tier === "mid") {
+            this.modules.graphics.cpuBudget = 0.12;
+            this.modules.graphics.memBudget = 22;
+            this.currentGraphicsPreset = "smooth";
         }
     }
 
@@ -198,7 +367,7 @@ class UltraPerformanceOptimizer {
         const preset = this.graphicsPresets[this.currentGraphicsPreset];
         const newSettings = { ...current };
         
-        // Chỉ áp dụng nếu có sự khác biệt đáng kể
+        // Chỉ áp dụng thay đổi nếu khác biệt đáng kể
         if (newSettings.textureQuality !== preset.textureQuality ||
             newSettings.shadowQuality !== preset.shadowQuality ||
             Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.1) {
@@ -208,7 +377,13 @@ class UltraPerformanceOptimizer {
             newSettings.effectsQuality = preset.effectsQuality;
             newSettings.resolutionScale = preset.resolutionScale;
             newSettings.fpsTarget = preset.fpsTarget;
+            newSettings.renderDistance = preset.renderDistance;
+            newSettings.physicsQuality = preset.physicsQuality;
         }
+        
+        // Áp dụng tối ưu hóa AI
+        newSettings.aiOptimized = true;
+        newSettings.dynamicScaling = "ai_controlled";
         
         return newSettings;
     }
@@ -216,39 +391,95 @@ class UltraPerformanceOptimizer {
     getModuleAllocations() {
         return Object.entries(this.modules).map(([name, config]) => ({
             module: name,
-            cpuBudget: config.cpuBudget.toFixed(2),
-            memBudget: config.memBudget
+            cpuBudget: config.cpuBudget.toFixed(3),
+            memBudget: config.memBudget,
+            aiProfile: config.aiProfile,
+            priority: config.priority
         }));
+    }
+
+    detectDeviceCapabilities() {
+        // Phát hiện khả năng thiết bị (giả lập)
+        return {
+            gpu: "adreno_650",
+            cpu: "snapdragon_865",
+            ram: 8,
+            tier: "high" // low, mid, high
+        };
+    }
+
+    handleSafeFallback(originalBody) {
+        try {
+            const data = JSON.parse(originalBody);
+            if (data.performance) {
+                // Chế độ an toàn
+                data.performance.safeMode = true;
+                data.performance.moduleAllocations = [
+                    {module: "aim", cpuBudget: "0.35", memBudget: 20},
+                    {module: "recoil", cpuBudget: "0.25", memBudget: 15},
+                    {module: "graphics", cpuBudget: "0.10", memBudget: 25}
+                ];
+            }
+            return JSON.stringify(data);
+        } catch (e) {
+            return originalBody;
+        }
     }
 }
 
-class AdvancedThermalControl {
+// HỆ THỐNG KIỂM SOÁT NHIỆT LƯỢNG TỬ
+class QuantumThermalSystem {
     constructor() {
         this.temperature = 0;
         this.coolingMode = false;
         this.lastCoolingActivation = 0;
         this.coolingIntensity = 1.0;
+        this.thermalHistory = [];
     }
 
     monitor(temp) {
         this.temperature = temp;
         
-        if (temp > 44) {
+        // Lưu lịch sử nhiệt độ
+        this.thermalHistory.push({
+            timestamp: Date.now(),
+            temp: temp
+        });
+        
+        // Giữ lịch sử vừa phải
+        if (this.thermalHistory.length > 50) {
+            this.thermalHistory.shift();
+        }
+        
+        // Kích hoạt chế độ làm mát
+        if (temp > 46 && !this.coolingMode) {
             this.activateCoolingMode();
-            this.coolingIntensity = Math.min(1.5, 1.0 + (temp - 44) * 0.1);
-        } else if (temp < 38 && this.coolingMode) {
+        } 
+        // Tắt chế độ làm mát
+        else if (temp < 40 && this.coolingMode) {
             this.deactivateCoolingMode();
+        }
+        
+        // Điều chỉnh cường độ làm mát
+        if (this.coolingMode) {
+            if (temp > 50) {
+                this.coolingIntensity = 1.5;
+            } else if (temp > 45) {
+                this.coolingIntensity = 1.2;
+            } else {
+                this.coolingIntensity = 1.0;
+            }
         }
     }
 
     activateCoolingMode() {
         this.coolingMode = true;
         this.lastCoolingActivation = Date.now();
+        this.coolingIntensity = 1.0;
     }
 
     deactivateCoolingMode() {
         this.coolingMode = false;
-        this.coolingIntensity = 1.0;
     }
 
     getStatus() {
@@ -256,141 +487,283 @@ class AdvancedThermalControl {
             temperature: this.temperature,
             coolingActive: this.coolingMode,
             coolingIntensity: this.coolingIntensity,
-            since: this.lastCoolingActivation
+            since: this.lastCoolingActivation,
+            avgTemp: this.calculateAverageTemp()
         };
+    }
+    
+    calculateAverageTemp() {
+        if (this.thermalHistory.length === 0) return 0;
+        const sum = this.thermalHistory.reduce((acc, entry) => acc + entry.temp, 0);
+        return sum / this.thermalHistory.length;
     }
 }
 
-class AdvancedMemoryManager {
+// QUẢN LÝ BỘ NHỚ THẦN KINH
+class NeuralMemoryManager {
     constructor() {
         this.memoryCache = new Map();
         this.lastCleanup = Date.now();
-        this.maxCacheSize = 45;
+        this.maxCacheSize = 60;
         this.memUsage = 0;
-        this.cleanupInterval = 8000; // Dọn dẹp mỗi 8 giây
+        this.cleanupThreshold = 10000; // 10 giây
     }
 
     cleanup() {
-        if (Date.now() - this.lastCleanup < this.cleanupInterval) return;
+        if (Date.now() - this.lastCleanup < this.cleanupThreshold) return;
         this.lastCleanup = Date.now();
         
         const now = Date.now();
         let count = 0;
+        
+        // Dọn dẹp các mục cũ
         for (const [key, entry] of this.memoryCache) {
-            if (now - entry.lastAccessed > 25000) { // Xóa entry không dùng trong 25 giây
+            if (now - entry.lastAccessed > 30000) { // 30 giây
                 this.memoryCache.delete(key);
                 count++;
             }
         }
         
-        // Giới hạn kích thước cache
+        // Giới hạn kích thước bộ nhớ cache
         if (this.memoryCache.size > this.maxCacheSize) {
             const keys = [...this.memoryCache.keys()].slice(0, this.memoryCache.size - this.maxCacheSize);
             keys.forEach(key => this.memoryCache.delete(key));
             count += keys.length;
         }
         
-        this.memUsage = this.memoryCache.size;
-    }
-
-    aggressiveCleanup() {
-        const keys = [...this.memoryCache.keys()];
-        const half = Math.floor(keys.length / 2);
-        keys.slice(0, half).forEach(key => this.memoryCache.delete(key));
+        // Cập nhật sử dụng bộ nhớ
         this.memUsage = this.memoryCache.size;
     }
 
     getUsage() {
         return {
             cacheSize: this.memoryCache.size,
-            memoryUsage: this.memUsage
+            memoryUsage: this.memUsage,
+            maxCacheSize: this.maxCacheSize
         };
     }
 }
 
-class FPSStabilizer {
-    constructor(targetFPS) {
-        this.targetFPS = targetFPS;
-        this.fpsBuffer = [];
-        this.bufferSize = 15;
-        this.currentStability = 1.0;
-    }
-
-    recordFPS(fps) {
-        this.fpsBuffer.push(fps);
-        if (this.fpsBuffer.length > this.bufferSize) {
-            this.fpsBuffer.shift();
-        }
-        this.calculateStability();
-    }
-
-    calculateStability() {
-        if (this.fpsBuffer.length < 2) {
-            this.currentStability = 1.0;
-            return;
-        }
-        
-        const avg = this.fpsBuffer.reduce((a, b) => a + b, 0) / this.fpsBuffer.length;
-        const variance = this.fpsBuffer.reduce((sq, n) => sq + Math.pow(n - avg, 2), 0) / this.fpsBuffer.length;
-        const stdDev = Math.sqrt(variance);
-        this.currentStability = Math.max(0.1, 1.0 - (stdDev / this.targetFPS));
-    }
-
-    getStability() {
-        return this.currentStability;
-    }
-}
-
-class LongSessionOptimizer {
+// TRÌNH PHÂN TÍCH THỜI GIAN KHUNG HÌNH
+class FrameTimeAnalyzer {
     constructor() {
-        this.sessionStartTime = Date.now();
-        this.optimizationLevel = 0;
-        this.lastOptimizationTime = 0;
+        this.frameTimes = [];
+        this.maxSamples = 120; // ~2 giây ở 60fps
+        this.lastAnalysis = 0;
+        this.analysisCache = null;
     }
-
-    checkSessionTime() {
-        const sessionDuration = (Date.now() - this.sessionStartTime) / 60000; // tính bằng phút
+    
+    analyzeFrameTime(frameTime) {
+        if (!frameTime) return;
         
-        if (sessionDuration > 30 && this.optimizationLevel < 1) {
-            this.optimizationLevel = 1;
-        } else if (sessionDuration > 60 && this.optimizationLevel < 2) {
-            this.optimizationLevel = 2;
-        } else if (sessionDuration > 90 && this.optimizationLevel < 3) {
-            this.optimizationLevel = 3;
-        }
-    }
-
-    applyOptimizations(optimizer) {
-        if (Date.now() - this.lastOptimizationTime < 30000) return;
-        this.lastOptimizationTime = Date.now();
+        // Thêm thời gian khung hình mới
+        this.frameTimes.push(frameTime);
         
-        if (this.optimizationLevel >= 1) {
-            // Cấp 1: Giảm tải bộ nhớ
-            optimizer.memoryManager.aggressiveCleanup();
-            optimizer.modules.graphics.memBudget = Math.max(20, optimizer.modules.graphics.memBudget - 3);
-        }
-        
-        if (this.optimizationLevel >= 2) {
-            // Cấp 2: Giảm độ phức tạp đồ họa
-            optimizer.downgradeGraphics();
-            optimizer.modules.graphics.cpuBudget *= 0.9;
-        }
-        
-        if (this.optimizationLevel >= 3) {
-            // Cấp 3: Tăng cường làm mát
-            optimizer.thermalControl.coolingIntensity = Math.min(1.8, optimizer.thermalControl.coolingIntensity + 0.1);
-            optimizer.modules.network.cpuBudget = Math.max(0.08, optimizer.modules.network.cpuBudget - 0.02);
+        // Giới hạn số mẫu
+        if (this.frameTimes.length > this.maxSamples) {
+            this.frameTimes.shift();
         }
     }
+    
+    getAnalysis() {
+        // Chỉ phân tích mỗi 500ms
+        if (Date.now() - this.lastAnalysis < 500 && this.analysisCache) {
+            return this.analysisCache;
+        }
+        
+        this.lastAnalysis = Date.now();
+        
+        if (this.frameTimes.length === 0) {
+            return {
+                min: 0,
+                max: 0,
+                avg: 0,
+                percentile95: 0,
+                consistency: 0
+            };
+        }
+        
+        // Tính toán các chỉ số
+        const sorted = [...this.frameTimes].sort((a, b) => a - b);
+        const min = sorted[0];
+        const max = sorted[sorted.length - 1];
+        const sum = sorted.reduce((acc, val) => acc + val, 0);
+        const avg = sum / sorted.length;
+        
+        // Phần trăm 95
+        const idx95 = Math.floor(sorted.length * 0.95);
+        const percentile95 = sorted[idx95];
+        
+        // Tính nhất quán (1 là hoàn hảo)
+        const consistency = Math.max(0, 1 - (max - min) / 30);
+        
+        // Lưu vào bộ nhớ cache
+        this.analysisCache = {
+            min,
+            max,
+            avg,
+            percentile95,
+            consistency,
+            samples: sorted.length
+        };
+        
+        return this.analysisCache;
+    }
+}
 
-    getStatus() {
+// TRÌNH TỐI ƯU HÓA TÀI NGUYÊN AI
+class AIResourceOptimizer {
+    constructor() {
+        this.learningModel = {
+            aim: { cpu: 0.40, memory: 25 },
+            recoil: { cpu: 0.30, memory: 20 },
+            prediction: { cpu: 0.18, memory: 18 },
+            network: { cpu: 0.15, memory: 15 },
+            graphics: { cpu: 0.10, memory: 30 }
+        };
+        this.lastUpdate = 0;
+    }
+    
+    analyze(perfStats, gameState) {
+        // Cập nhật mô hình mỗi 5 giây
+        if (Date.now() - this.lastUpdate < 5000) return;
+        this.lastUpdate = Date.now();
+        
+        // Điều chỉnh dựa trên sử dụng CPU
+        if (perfStats.cpu > 0.85) {
+            this.reduceResourceUsage();
+        } else if (perfStats.cpu < 0.65) {
+            this.increaseResourceUsage();
+        }
+        
+        // Điều chỉnh cho trạng thái trò chơi
+        if (gameState?.isInCombat) {
+            this.learningModel.aim.cpu = Math.min(0.48, this.learningModel.aim.cpu + 0.05);
+            this.learningModel.recoil.cpu = Math.min(0.38, this.learningModel.recoil.cpu + 0.04);
+            this.learningModel.graphics.cpu = Math.max(0.07, this.learningModel.graphics.cpu - 0.04);
+        }
+        
+        // Ưu tiên dự đoán khi FPS cao
+        if (perfStats.fps > 100) {
+            this.learningModel.prediction.cpu = Math.min(0.24, this.learningModel.prediction.cpu + 0.03);
+        }
+    }
+    
+    reduceResourceUsage() {
+        // Giảm tải các module ít quan trọng hơn
+        this.learningModel.graphics.cpu *= 0.85;
+        this.learningModel.network.cpu *= 0.9;
+        this.learningModel.prediction.cpu *= 0.92;
+    }
+    
+    increaseResourceUsage() {
+        // Tăng cường các module quan trọng
+        this.learningModel.aim.cpu = Math.min(0.45, this.learningModel.aim.cpu * 1.08);
+        this.learningModel.recoil.cpu = Math.min(0.35, this.learningModel.recoil.cpu * 1.07);
+        this.learningModel.prediction.cpu = Math.min(0.22, this.learningModel.prediction.cpu * 1.06);
+    }
+    
+    getRecommendations() {
         return {
-            sessionDuration: (Date.now() - this.sessionStartTime) / 60000,
-            optimizationLevel: this.optimizationLevel,
-            lastOptimization: this.lastOptimizationTime
+            aim: { 
+                cpu: this.learningModel.aim.cpu,
+                memory: this.learningModel.aim.memory,
+                aiProfile: "precision"
+            },
+            recoil: { 
+                cpu: this.learningModel.recoil.cpu,
+                memory: this.learningModel.recoil.memory,
+                aiProfile: "stabilization"
+            },
+            prediction: { 
+                cpu: this.learningModel.prediction.cpu,
+                memory: this.learningModel.prediction.memory,
+                aiProfile: "neural_anticipation"
+            },
+            network: { 
+                cpu: this.learningModel.network.cpu,
+                memory: this.learningModel.network.memory,
+                aiProfile: "latency_control"
+            },
+            graphics: { 
+                cpu: this.learningModel.graphics.cpu,
+                memory: this.learningModel.graphics.memory,
+                aiProfile: "adaptive_rendering"
+            }
         };
     }
 }
 
-const perfOptimizer = new UltraPerformanceOptimizer();
-$done({ body: perfOptimizer.process($response.body) });
+// TÍCH HỢP HỆ THỐNG AIM
+class AimSystemIntegration {
+    constructor() {
+        this.lastLockStrength = 0;
+        this.lockStability = 0;
+    }
+    
+    update(aimSystem, gameState) {
+        if (!aimSystem) return;
+        
+        this.lastLockStrength = aimSystem.lockPrecision || 0;
+        
+        // Tính toán độ ổn định khóa
+        if (gameState?.isInCombat) {
+            this.lockStability = Math.min(1.0, this.lockStability + 0.05);
+        } else {
+            this.lockStability = Math.max(0.5, this.lockStability - 0.02);
+        }
+    }
+    
+    getOptimizationRecommendation() {
+        if (this.lastLockStrength > 0.98) {
+            return { cpuBoost: 0.05 };
+        }
+        return {};
+    }
+}
+
+// TÍCH HỢP HỆ THỐNG RECOIL
+class RecoilSystemIntegration {
+    constructor() {
+        this.lastStability = 0;
+        this.compensationEfficiency = 0;
+    }
+    
+    update(recoilSystem, gameState) {
+        if (!recoilSystem) return;
+        
+        this.lastStability = recoilSystem.crosshairStabilization || 0;
+        
+        // Tính toán hiệu quả bù giật
+        if (gameState?.isFiring) {
+            this.compensationEfficiency = Math.min(1.0, this.compensationEfficiency + 0.1);
+        } else {
+            this.compensationEfficiency = Math.max(0.3, this.compensationEfficiency - 0.05);
+        }
+    }
+}
+
+// TÍCH HỢP HỆ THỐNG MẠNG
+class NetworkSystemIntegration {
+    constructor() {
+        this.lastLatency = 0;
+        this.packetLoss = 0;
+    }
+    
+    update(networkData, gameState) {
+        if (!networkData) return;
+        
+        this.lastLatency = networkData.stats?.ping || 0;
+        this.packetLoss = networkData.stats?.packetLoss || 0;
+    }
+    
+    getOptimizationRecommendation() {
+        if (this.lastLatency > 100 || this.packetLoss > 0.1) {
+            return { prioritizeNetwork: true };
+        }
+        return {};
+    }
+}
+
+const quantumPerfOptimizer = new QuantumPerformanceOptimizer();
+$done({ body: quantumPerfOptimizer.process($response.body) });
