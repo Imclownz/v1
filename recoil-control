@@ -1,316 +1,373 @@
-// HYPER RECOIL STABILIZER v8.0 (Quantum Lock Edition)
-class HyperRecoilStabilizer {
+// QUANTUM RECOIL STABILIZER v8.0 (Headshot Optimized)
+class QuantumRecoilStabilizer {
     constructor() {
         this.weaponDatabase = this.getQuantumWeaponDatabase();
-        this.sessionToken = "HRS_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 8);
-        this.stabilityFactor = 1.0;
-        this.crosshairStability = { x: 0, y: 0, z: 0 };
-        this.aimLockStrength = 0;
+        this.sessionToken = "QRS_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 8);
+        this.stabilityMatrix = { x: 1.0, y: 1.0, z: 1.0 };
+        this.aimAssistLevel = 0;
         this.weaponMemory = {};
-        this.recoilPatternAI = new RecoilPatternAI();
-        this.lastUpdateTime = 0;
-        this.quantumLockMode = false;
+        this.recoilNeuralNet = new RecoilNeuralNetwork();
+        this.lastStabilityUpdate = 0;
+        this.quantumStabilizationMode = false;
         this.gameState = null;
-        this.environment = { wind: 0, gravity: 9.81 };
-        this.bulletCounter = 0;
-        this.recoilSmoothing = 0.97;
+        this.aimSystemState = null;
+        this.headshotAssist = 1.0;
+        this.recoilPrediction = { x: 0, y: 0, z: 0 };
+        this.frameHistory = [];
+        this.maxFrameHistory = 8;
         this.performanceProfile = "ultra";
-        this.neuralNetwork = new RecoilNeuralNetwork();
-        this.targetTracking = new TargetMovementPredictor();
+        this.crosshairBehavior = "balanced";
+        this.targetLockStatus = false;
+        this.aimSmoothing = 0.85;
+        this.dynamicPull = 1.0;
     }
 
     process(body) {
         try {
             const processStart = performance.now();
-            let data = JSON.parse(body);
-            const weaponType = data.weaponType || 'default';
+            let gameData = JSON.parse(body);
+            const weaponType = gameData.weaponType || 'default';
             const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
             
-            // Cập nhật trạng thái trò chơi
-            this.gameState = data.gameState || this.gameState;
-            this.quantumLockMode = data.aimSystem?.lockPrecision > 0.995;
+            // Update system states
+            this.gameState = gameData.gameState || this.gameState;
+            this.aimSystemState = gameData.aimSystem || this.aimSystemState;
             
-            if (data.gameState) {
-                this.updateEnvironment(data.gameState.environment);
-                this.updateDynamicStability(data.gameState);
-                this.updateCrosshairStability(data.gameState, weaponType);
+            // Update stabilization mode based on aim system
+            this.updateStabilizationMode();
+            
+            if (this.gameState) {
+                this.updateStabilityMatrix(this.gameState);
+                this.updateHeadshotAssist();
+                this.updateCrosshairBehavior();
+                this.updateDynamicPull();
             }
             
-            if (data.aimSystem) {
-                this.aimLockStrength = data.aimSystem.lockPrecision || 0;
-                this.targetTracking.update(data.aimSystem.targets, data.playerPosition);
+            // Update aim assist level from aim system
+            if (this.aimSystemState) {
+                this.aimAssistLevel = this.aimSystemState.lockStrength || 0;
+                this.targetLockStatus = this.aimSystemState.lockedTarget !== undefined;
             }
             
-            // Khởi tạo hệ thống bù giật
-            data.recoilSystem = {
-                version: "Hyper-8.0",
-                horizontalCompensation: this.calculateHorizontalCompensation(profile, weaponType),
-                verticalCompensation: this.calculateVerticalCompensation(profile, weaponType),
-                crosshairStabilization: {...this.crosshairStability},
-                stabilizationMode: this.quantumLockMode ? "quantum_lock" : "adaptive_ai",
+            // Initialize recoil system data
+            gameData.recoilSystem = {
+                version: "Stabilizer-8.0",
+                horizontalCompensation: this.calculateHorizontalCompensation(profile),
+                verticalCompensation: this.calculateVerticalCompensation(profile),
+                crosshairStabilization: this.calculateCrosshairStabilization(profile),
+                headshotAssist: this.headshotAssist,
+                patternElimination: "neural_ai_v2",
                 smoothingFactor: this.calculateDynamicSmoothing(profile),
-                quantumStabilization: this.quantumLockMode,
+                quantumStabilization: this.quantumStabilizationMode,
+                recoilPrediction: this.recoilPrediction,
+                neuralNetworkStatus: this.recoilNeuralNet.getNetworkStatus(weaponType),
+                crosshairBehavior: this.crosshairBehavior,
+                dynamicPull: this.dynamicPull,
                 security: {
                     token: this.sessionToken,
-                    checksum: this.generateQuantumChecksum(),
+                    checksum: this.generateSecurityChecksum(),
                     encryption: "AES-256-GCM"
                 },
                 weaponProfile: this.getWeaponMemory(weaponType),
-                neuralStatus: this.neuralNetwork.getNetworkStatus(weaponType),
                 processingTime: performance.now() - processStart
             };
             
-            // Xử lý khi đang bắn
-            if (data.gameState?.isFiring) {
-                const fireStability = this.calculateFireStability(profile, weaponType);
-                const neuralCompensation = this.neuralNetwork.getCompensation(
-                    weaponType, 
-                    this.bulletCounter,
-                    data.gameState.firingDuration
+            // Advanced firing stability
+            if (this.gameState?.isFiring) {
+                const fireStability = this.calculateFireStability(profile);
+                gameData.recoilSystem.crosshairStabilization = this.applyFiringStabilization(
+                    gameData.recoilSystem.crosshairStabilization,
+                    fireStability,
+                    profile
                 );
                 
-                // Áp dụng bù giật thần kinh
-                data.recoilSystem.crosshairStabilization = {
-                    x: this.crosshairStability.x * profile.firingStabilityX * fireStability * neuralCompensation.x,
-                    y: this.crosshairStability.y * profile.firingStabilityY * fireStability * neuralCompensation.y,
-                    z: this.crosshairStability.z * profile.firingStabilityZ * fireStability * neuralCompensation.z
-                };
+                // Update neural network with current recoil
+                this.updateRecoilNeuralNet(gameData.recoilSystem);
                 
-                // Bù chuyển động mục tiêu
-                if (data.aimSystem?.lockedTarget) {
-                    const targetMovementComp = this.targetTracking.getMovementCompensation(
-                        data.aimSystem.lockedTarget.id,
-                        profile.bulletVelocity
-                    );
-                    data.recoilSystem.crosshairStabilization.x += targetMovementComp.x;
-                    data.recoilSystem.crosshairStabilization.y += targetMovementComp.y;
-                }
+                // Predict next frame recoil
+                this.recoilPrediction = this.predictNextRecoil();
                 
-                // Cập nhật bộ nhớ và bộ đếm đạn
-                this.updateWeaponMemory(weaponType, data.recoilSystem.crosshairStabilization);
-                this.bulletCounter++;
-                
-                // Học từ kiểu bắn hiện tại
-                this.neuralNetwork.updateLearning(weaponType, this.bulletCounter, 
-                    data.recoilSystem.crosshairStabilization);
+                // Update weapon memory
+                this.updateWeaponMemory(weaponType, gameData.recoilSystem.crosshairStabilization);
             } else {
-                this.bulletCounter = 0;
+                this.recoilPrediction = { x: 0, y: 0, z: 0 };
             }
             
-            // Tối ưu hóa hiệu suất
-            this.optimizePerformance(data.performanceState);
+            // Apply headshot assist to aim position
+            if (gameData.aimPosition && this.targetLockStatus) {
+                gameData.aimPosition = this.applyHeadshotAssist(
+                    gameData.aimPosition,
+                    this.aimSystemState.lockedTarget.headHitbox
+                );
+            }
             
-            return JSON.stringify(data);
+            return JSON.stringify(gameData);
         } catch (e) {
-            console.error("[HYPER RECOIL] Critical Error:", e.message.substring(0, 50));
+            console.error("[QUANTUM RECOIL] Critical Error:", e.message.substring(0, 50));
             return this.handleCriticalError(body, e);
+        }
+    }
+
+    updateStabilizationMode() {
+        if (this.aimSystemState?.lockStrength > 0.98 && this.aimSystemState?.lockedTarget) {
+            this.quantumStabilizationMode = true;
+        } else {
+            this.quantumStabilizationMode = false;
+        }
+        
+        if (this.gameState?.playerHealth < 30) {
+            this.quantumStabilizationMode = true;
         }
     }
 
     calculateDynamicSmoothing(profile) {
         const baseSmoothing = profile.smoothing;
-        const lockFactor = this.aimLockStrength * 0.3;
-        const stabilityFactor = this.stabilityFactor * 0.2;
-        let smoothing = baseSmoothing + lockFactor + stabilityFactor;
+        const assistFactor = this.aimAssistLevel * 0.18;
+        const stabilityFactor = (this.stabilityMatrix.x + this.stabilityMatrix.y) / 2 * 0.15;
         
-        // Điều chỉnh theo chế độ hiệu suất
-        if (this.performanceProfile === "balanced") {
-            smoothing *= 0.92;
-        } else if (this.performanceProfile === "high") {
-            smoothing *= 0.97;
+        let smoothing = Math.min(0.99, baseSmoothing + assistFactor + stabilityFactor);
+        
+        // Adjust based on performance profile
+        if (this.performanceProfile === "ultra") {
+            smoothing = Math.min(0.995, smoothing + 0.05);
+        } else if (this.performanceProfile === "balanced") {
+            smoothing = Math.max(0.92, smoothing - 0.03);
         }
         
-        return Math.min(0.995, Math.max(0.85, smoothing));
+        return smoothing;
     }
 
-    calculateFireStability(profile, weaponType) {
+    calculateFireStability(profile) {
         let stability = profile.fireStability;
         
-        // Chế độ khóa lượng tử
-        if (this.quantumLockMode) {
-            stability *= 1.6;
+        // Apply modifiers
+        if (this.quantumStabilizationMode) {
+            stability *= 1.55;
+        }
+        else if (this.gameState?.playerHealth < 30) {
+            stability *= 1.35;
         }
         
-        // Hiệu ứng adrenaline khi máu thấp
-        if (this.gameState?.playerHealth < 30) {
-            stability *= 1.4;
+        if (this.targetLockStatus) {
+            stability *= 1.25;
         }
         
-        // Phạt khi di chuyển
-        if (this.gameState?.isMoving) stability *= 0.68;
-        if (this.gameState?.isSprinting) stability *= 0.45;
+        // Neural network boost
+        stability *= this.recoilNeuralNet.getStabilityBoost();
         
-        // Điều chỉnh theo loại vũ khí
-        if (weaponType === 'sniper') stability *= 1.3;
-        else if (weaponType === 'shotgun') stability *= 0.82;
-        
-        // Áp dụng bonus mạng thần kinh
-        const neuralBonus = this.neuralNetwork.getStabilityBonus(weaponType);
-        stability *= neuralBonus;
-        
-        return stability * this.stabilityFactor;
+        return stability * this.stabilityMatrix.y;
     }
 
-    updateEnvironment(env) {
-        if (!env) return;
+    calculateCrosshairStabilization(profile) {
+        const baseStability = profile.baseStability || 1.0;
+        let xStability = baseStability * this.stabilityMatrix.x;
+        let yStability = baseStability * this.stabilityMatrix.y;
+        let zStability = baseStability * this.stabilityMatrix.z;
         
-        this.environment.wind = env.wind || 0;
-        this.environment.gravity = env.gravity || 9.81;
-        
-        // Gió ảnh hưởng đến ổn định ngang
-        if (this.environment.wind) {
-            this.crosshairStability.x *= 1.0 - (Math.abs(this.environment.wind) * 0.0004);
-        }
-    }
-
-    updateCrosshairStability(gameState, weaponType) {
-        if (!gameState) return;
-        
-        const profile = this.weaponDatabase[weaponType] || this.weaponDatabase.default;
-        let stability = profile.baseStability || 1.0;
-        
-        // Hiệu chỉnh theo tư thế
-        switch (gameState.stance) {
-            case 'crouching':
-                stability *= 2.0;
-                break;
-            case 'prone':
-                stability *= 2.5;
-                break;
-            case 'standing':
-            default:
-                stability *= 1.0;
+        // Apply aim assist influence
+        if (this.aimAssistLevel > 0.9) {
+            xStability *= 1.25;
+            yStability *= 1.35;
         }
         
-        // Phạt khi di chuyển
-        if (gameState.isMoving) stability *= 0.6;
-        if (gameState.isSprinting) stability *= 0.3;
+        // Apply headshot assist
+        xStability *= this.headshotAssist;
+        yStability *= this.headshotAssist;
         
-        // Hiệu ứng máu thấp
-        if (gameState.playerHealth < 30) stability *= 0.75;
-        
-        // Hiệu ứng hỗ trợ ngắm
-        if (this.aimLockStrength > 0.97) stability *= 1.5;
-        
-        // Áp dụng hiệu ứng bộ nhớ vũ khí
-        const memory = this.getWeaponMemory(weaponType);
-        if (memory.usageCount > 10) {
-            stability *= 1.0 + (memory.usageCount * 0.003);
-        }
-        
-        // Tính toán ổn định cuối cùng
-        this.crosshairStability = {
-            x: stability * 0.07 * this.recoilSmoothing,
-            y: stability * 0.11 * this.recoilSmoothing,
-            z: stability * 0.015 * this.recoilSmoothing
+        return {
+            x: xStability * 0.07,
+            y: yStability * 0.11,
+            z: zStability * 0.025
         };
     }
 
-    updateDynamicStability(gameState) {
-        if (!gameState || Date.now() - this.lastUpdateTime < 100) return;
-        this.lastUpdateTime = Date.now();
-        
-        let stability = 1.0;
-        
-        // Hiệu ứng tư thế
-        switch (gameState.stance) {
-            case 'crouching':
-                stability *= 1.8;
-                break;
-            case 'prone':
-                stability *= 2.3;
-                break;
-        }
-        
-        // Phạt khi di chuyển
-        if (gameState.isMoving) stability *= 0.65;
-        if (gameState.isSprinting) stability *= 0.35;
-        
-        // Hiệu ứng máu thấp
-        if (gameState.playerHealth < 30) stability *= 0.8;
-        
-        // Cập nhật hệ số ổn định
-        this.stabilityFactor = Math.max(0.3, Math.min(2.7, stability));
+    applyFiringStabilization(stability, fireStability, profile) {
+        return {
+            x: stability.x * profile.firingStabilityX * fireStability,
+            y: stability.y * profile.firingStabilityY * fireStability,
+            z: stability.z * profile.firingStabilityZ * fireStability
+        };
     }
 
-    calculateHorizontalCompensation(profile, weaponType) {
-        let comp = profile.horizontal * this.stabilityFactor * (1 - (this.aimLockStrength * 0.8));
+    updateStabilityMatrix(gameState) {
+        if (!gameState || Date.now() - this.lastStabilityUpdate < 100) return;
+        this.lastStabilityUpdate = Date.now();
         
-        // Áp dụng dự đoán thần kinh
-        const neuralAdjustment = this.neuralNetwork.getHorizontalAdjustment(weaponType);
-        comp *= neuralAdjustment;
+        let xStability = 1.0;
+        let yStability = 1.0;
+        let zStability = 1.0;
         
-        // Chế độ lượng tử giảm giật ngang
-        if (this.quantumLockMode) {
-            comp *= 0.5;
+        // Stance modifiers
+        if (gameState.stance === 'crouching') {
+            yStability *= 2.0;
+            xStability *= 1.8;
+        } else if (gameState.stance === 'prone') {
+            yStability *= 2.8;
+            xStability *= 2.4;
+            zStability *= 1.8;
         }
         
-        // Bù ảnh hưởng của gió
-        if (this.environment.wind) {
-            comp *= 1.0 - (this.environment.wind * 0.0002);
+        // Movement modifiers
+        if (gameState.isMoving) {
+            xStability *= 0.6;
+            yStability *= 0.7;
+        }
+        if (gameState.isSprinting) {
+            xStability *= 0.35;
+            yStability *= 0.4;
+            zStability *= 0.8;
         }
         
-        return comp;
+        // Health modifiers
+        if (gameState.playerHealth < 30) {
+            xStability *= 0.85;
+            yStability *= 0.75;
+        } else if (gameState.playerHealth < 70) {
+            xStability *= 0.92;
+            yStability *= 0.88;
+        }
+        
+        // Apply aim system stability boost
+        if (this.aimSystemState?.lockStrength > 0.95) {
+            const lockBoost = this.aimSystemState.lockStrength * 0.5;
+            xStability *= 1.0 + lockBoost;
+            yStability *= 1.0 + lockBoost;
+        }
+        
+        // Update stability matrix
+        this.stabilityMatrix = {
+            x: Math.max(0.3, Math.min(3.0, xStability)),
+            y: Math.max(0.3, Math.min(3.0, yStability)),
+            z: Math.max(0.3, Math.min(3.0, zStability))
+        };
     }
 
-    calculateVerticalCompensation(profile, weaponType) {
-        let comp = profile.vertical * this.stabilityFactor * (1 - (this.aimLockStrength * 0.9));
-        
-        // Áp dụng dự đoán thần kinh
-        const neuralAdjustment = this.neuralNetwork.getVerticalAdjustment(weaponType);
-        comp *= neuralAdjustment;
-        
-        // Chế độ lượng tử giảm giật dọc
-        if (this.quantumLockMode) {
-            comp *= 0.45;
+    updateHeadshotAssist() {
+        if (!this.targetLockStatus) {
+            this.headshotAssist = 1.0;
+            return;
         }
         
-        return comp;
+        const target = this.aimSystemState.lockedTarget;
+        let assist = 1.0;
+        
+        // Distance based assist
+        if (target.distance < 20) assist = 1.8;
+        else if (target.distance < 50) assist = 1.5;
+        else if (target.distance < 100) assist = 1.2;
+        else assist = 0.95;
+        
+        // Movement based assist
+        const movementSpeed = Math.sqrt(target.movement.x**2 + target.movement.y**2);
+        if (movementSpeed > 0.5) assist *= 1.3;
+        if (target.isJumping) assist *= 1.4;
+        
+        // Health based adjustments
+        if (this.gameState.playerHealth < 30) assist *= 1.4;
+        else if (this.gameState.playerHealth < 70) assist *= 1.1;
+        
+        this.headshotAssist = Math.max(0.6, Math.min(2.0, assist));
+    }
+
+    updateCrosshairBehavior() {
+        if (!this.gameState) return;
+        
+        if (this.quantumStabilizationMode && this.targetLockStatus) {
+            this.crosshairBehavior = "headshot_lock";
+            this.aimSmoothing = 0.95;
+        } else if (this.gameState.isInCombat) {
+            this.crosshairBehavior = "combat_precision";
+            this.aimSmoothing = 0.88;
+        } else if (this.gameState.isMoving) {
+            this.crosshairBehavior = "dynamic_movement";
+            this.aimSmoothing = 0.82;
+        } else {
+            this.crosshairBehavior = "balanced";
+            this.aimSmoothing = 0.85;
+        }
+    }
+
+    updateDynamicPull() {
+        if (!this.targetLockStatus) {
+            this.dynamicPull = 1.0;
+            return;
+        }
+        
+        const target = this.aimSystemState.lockedTarget;
+        let pull = 1.0;
+        
+        // Distance based pull
+        if (target.distance < 20) pull = 1.8;
+        else if (target.distance < 50) pull = 1.5;
+        else if (target.distance < 100) pull = 1.2;
+        else pull = 0.95;
+        
+        // Movement based pull
+        const movementSpeed = Math.sqrt(target.movement.x**2 + target.movement.y**2);
+        if (movementSpeed > 0.5) pull *= 1.3;
+        if (target.isJumping) pull *= 1.4;
+        
+        // Health based adjustments
+        if (this.gameState.playerHealth < 30) pull *= 1.4;
+        else if (this.gameState.playerHealth < 70) pull *= 1.1;
+        
+        this.dynamicPull = Math.max(0.6, Math.min(2.0, pull));
+    }
+
+    calculateHorizontalCompensation(profile) {
+        let comp = profile.horizontal * this.stabilityMatrix.x * (1 - (this.aimAssistLevel * 0.75));
+        
+        // Apply neural network compensation
+        comp *= this.recoilNeuralNet.getHorizontalCompensation();
+        
+        return this.quantumStabilizationMode ? comp * 0.55 : comp;
+    }
+
+    calculateVerticalCompensation(profile) {
+        let comp = profile.vertical * this.stabilityMatrix.y * (1 - (this.aimAssistLevel * 0.9));
+        
+        // Apply neural network compensation
+        comp *= this.recoilNeuralNet.getVerticalCompensation();
+        
+        return this.quantumStabilizationMode ? comp * 0.5 : comp;
     }
 
     getQuantumWeaponDatabase() {
         return {
             default: {
-                horizontal: 0.03, vertical: 0.06, smoothing: 0.98,
-                fireStability: 0.99, baseStability: 1.3,
-                firingStabilityX: 0.96, firingStabilityY: 0.90, firingStabilityZ: 0.98,
-                bulletVelocity: 400
+                horizontal: 0.03, vertical: 0.06, smoothing: 0.96,
+                fireStability: 0.98, baseStability: 1.25,
+                firingStabilityX: 0.94, firingStabilityY: 0.88, firingStabilityZ: 0.97
             },
             sniper: {
-                horizontal: 0.004, vertical: 0.09, smoothing: 0.998,
-                fireStability: 0.999, baseStability: 2.0,
-                firingStabilityX: 0.995, firingStabilityY: 0.985, firingStabilityZ: 0.998,
-                bulletVelocity: 1100
+                horizontal: 0.006, vertical: 0.09, smoothing: 0.992,
+                fireStability: 0.998, baseStability: 1.9,
+                firingStabilityX: 0.99, firingStabilityY: 0.97, firingStabilityZ: 0.998
             },
             ak47: {
-                horizontal: 0.06, vertical: 0.12, smoothing: 0.93,
-                fireStability: 0.95, baseStability: 1.05,
-                firingStabilityX: 0.87, firingStabilityY: 0.78, firingStabilityZ: 0.95,
-                bulletVelocity: 370
+                horizontal: 0.06, vertical: 0.12, smoothing: 0.92,
+                fireStability: 0.95, baseStability: 0.98,
+                firingStabilityX: 0.82, firingStabilityY: 0.75, firingStabilityZ: 0.90
             },
             m4a1: {
-                horizontal: 0.04, vertical: 0.08, smoothing: 0.97,
-                fireStability: 0.98, baseStability: 1.15,
-                firingStabilityX: 0.92, firingStabilityY: 0.85, firingStabilityZ: 0.97,
-                bulletVelocity: 420
-            },
-            shotgun: {
-                horizontal: 0.08, vertical: 0.14, smoothing: 0.90,
-                fireStability: 0.93, baseStability: 0.92,
-                firingStabilityX: 0.80, firingStabilityY: 0.68, firingStabilityZ: 0.88,
-                bulletVelocity: 320
+                horizontal: 0.045, vertical: 0.08, smoothing: 0.94,
+                fireStability: 0.975, baseStability: 1.12,
+                firingStabilityX: 0.89, firingStabilityY: 0.81, firingStabilityZ: 0.96
             },
             awm: {
-                horizontal: 0.003, vertical: 0.11, smoothing: 0.999,
-                fireStability: 0.9995, baseStability: 2.2,
-                firingStabilityX: 0.998, firingStabilityY: 0.992, firingStabilityZ: 0.999,
-                bulletVelocity: 1250
+                horizontal: 0.005, vertical: 0.11, smoothing: 0.995,
+                fireStability: 0.999, baseStability: 2.0,
+                firingStabilityX: 0.992, firingStabilityY: 0.98, firingStabilityZ: 0.999
             },
             mp5: {
-                horizontal: 0.03, vertical: 0.06, smoothing: 0.98,
-                fireStability: 0.99, baseStability: 1.22,
-                firingStabilityX: 0.95, firingStabilityY: 0.88, firingStabilityZ: 0.97,
-                bulletVelocity: 380
+                horizontal: 0.025, vertical: 0.05, smoothing: 0.97,
+                fireStability: 0.985, baseStability: 1.18,
+                firingStabilityX: 0.93, firingStabilityY: 0.86, firingStabilityZ: 0.96
+            },
+            shotgun: {
+                horizontal: 0.08, vertical: 0.14, smoothing: 0.88,
+                fireStability: 0.92, baseStability: 0.85,
+                firingStabilityX: 0.75, firingStabilityY: 0.65, firingStabilityZ: 0.80
             }
         };
     }
@@ -321,78 +378,104 @@ class HyperRecoilStabilizer {
                 usageCount: 0,
                 lastUsed: Date.now(),
                 avgStability: {...stability},
-                recoilPattern: []
+                lastStability: {...stability}
             };
         }
         
         const memory = this.weaponMemory[weaponType];
         memory.usageCount++;
         memory.lastUsed = Date.now();
+        memory.lastStability = {...stability};
         
-        // Cập nhật độ ổn định trung bình
-        const alpha = 0.15;
+        // Update average stability
         memory.avgStability = {
-            x: alpha * stability.x + (1 - alpha) * memory.avgStability.x,
-            y: alpha * stability.y + (1 - alpha) * memory.avgStability.y,
-            z: alpha * stability.z + (1 - alpha) * memory.avgStability.z
+            x: (memory.avgStability.x * (memory.usageCount - 1) + stability.x) / memory.usageCount,
+            y: (memory.avgStability.y * (memory.usageCount - 1) + stability.y) / memory.usageCount,
+            z: (memory.avgStability.z * (memory.usageCount - 1) + stability.z) / memory.usageCount
         };
         
-        // Lưu kiểu giật cho mạng thần kinh
-        if (memory.recoilPattern.length < 100) {
-            memory.recoilPattern.push({...stability});
-        }
+        // Add to neural network training
+        this.recoilNeuralNet.addRecoilSample(stability);
     }
 
     getWeaponMemory(weaponType) {
-        const memory = this.weaponMemory[weaponType] || {
+        return this.weaponMemory[weaponType] || {
             usageCount: 0,
             lastUsed: 0,
             avgStability: { x: 0, y: 0, z: 0 },
-            recoilPattern: []
+            lastStability: { x: 0, y: 0, z: 0 }
+        };
+    }
+
+    applyHeadshotAssist(aimPosition, headHitbox) {
+        if (!headHitbox) return aimPosition;
+        
+        // Calculate direction to head
+        const direction = {
+            x: headHitbox.x - aimPosition.x,
+            y: headHitbox.y - aimPosition.y,
+            z: headHitbox.z - aimPosition.z
         };
         
+        // Apply dynamic pull to y-axis
+        const pullY = this.dynamicPull * 0.15;
+        const newY = aimPosition.y + (direction.y * pullY);
+        
+        // Apply smoothing
         return {
-            usageCount: memory.usageCount,
-            lastUsed: memory.lastUsed,
-            avgStability: {...memory.avgStability}
+            x: aimPosition.x,
+            y: newY,
+            z: aimPosition.z
         };
     }
 
-    generateQuantumChecksum() {
-        const crypto = require('crypto');
-        const data = `${this.sessionToken}|${this.stabilityFactor}|${Date.now()}`;
-        return crypto.createHash('sha512').update(data).digest('hex').substring(0, 32);
-    }
-
-    optimizePerformance(perfState) {
-        if (!perfState) return;
+    updateRecoilNeuralNet(recoilSystem) {
+        // Add current frame to history
+        this.frameHistory.push({
+            timestamp: Date.now(),
+            recoil: {
+                x: recoilSystem.crosshairStabilization.x,
+                y: recoilSystem.crosshairStabilization.y,
+                z: recoilSystem.crosshairStabilization.z
+            }
+        });
         
-        if (perfState.fps < 45) {
-            this.performanceProfile = "balanced";
-            this.neuralNetwork.setPerformanceMode("balanced");
-            this.recoilSmoothing = 0.92;
-        } else if (perfState.fps < 75) {
-            this.performanceProfile = "high";
-            this.neuralNetwork.setPerformanceMode("high");
-            this.recoilSmoothing = 0.96;
-        } else {
-            this.performanceProfile = "ultra";
-            this.neuralNetwork.setPerformanceMode("ultra");
-            this.recoilSmoothing = 0.99;
+        // Maintain frame history size
+        if (this.frameHistory.length > this.maxFrameHistory) {
+            this.frameHistory.shift();
+        }
+        
+        // Train neural network every 5 frames
+        if (this.frameHistory.length >= 5) {
+            this.recoilNeuralNet.trainOnSamples(this.frameHistory.slice(-5));
         }
     }
 
+    predictNextRecoil() {
+        if (this.frameHistory.length < 3) return { x: 0, y: 0, z: 0 };
+        
+        return this.recoilNeuralNet.predictRecoil(
+            this.frameHistory.slice(-3)
+        );
+    }
+
+    generateSecurityChecksum() {
+        const crypto = require('crypto');
+        const data = `${this.sessionToken}|${this.stabilityMatrix.x}|${this.stabilityMatrix.y}|${Date.now()}`;
+        return crypto.createHash('sha512').update(data).digest('hex').substring(0, 32);
+    }
+
     handleCriticalError(originalBody, error) {
-        // Chế độ an toàn khi gặp lỗi
+        // Fallback to basic stabilization
         try {
             const data = JSON.parse(originalBody);
             if (data.recoilSystem) {
+                // Apply minimal stabilization
                 data.recoilSystem.crosshairStabilization = {
-                    x: 0.06,
-                    y: 0.09,
-                    z: 0.02
+                    x: 0.05,
+                    y: 0.08,
+                    z: 0.01
                 };
-                data.recoilSystem.version += "-SAFE";
             }
             return JSON.stringify(data);
         } catch (e) {
@@ -401,232 +484,111 @@ class HyperRecoilStabilizer {
     }
 }
 
-// MẠNG THẦN KINH CHO BÙ GIẬT
+// ADVANCED RECOIL NEURAL NETWORK
 class RecoilNeuralNetwork {
     constructor() {
-        this.weaponModels = {};
-        this.performanceMode = "ultra";
-        this.learningRate = 0.18;
+        this.samples = [];
+        this.coefficients = { x: 1.0, y: 1.0, z: 1.0 };
+        this.stabilityBoost = 1.0;
+        this.compensation = { horizontal: 1.0, vertical: 1.0 };
+        this.lastUpdated = Date.now();
     }
     
-    getCompensation(weaponType, bulletIndex, firingDuration) {
-        if (!this.weaponModels[weaponType]) {
-            this.initWeaponModel(weaponType);
+    addRecoilSample(recoil) {
+        this.samples.push({ ...recoil, timestamp: Date.now() });
+        
+        // Automatic training every 10 samples
+        if (this.samples.length >= 10) {
+            this.trainModel();
         }
-        
-        const model = this.weaponModels[weaponType];
-        
-        // Trả về bù giật dựa trên vị trí viên đạn
-        if (model.pattern.length > 0) {
-            const patternIndex = bulletIndex % model.pattern.length;
-            return {
-                x: 1.0 - model.pattern[patternIndex].x * 0.8,
-                y: 1.0 - model.pattern[patternIndex].y * 0.9,
-                z: 1.0
-            };
-        }
-        
-        // Bù giật mặc định
-        return { x: 1.0, y: 1.0, z: 1.0 };
     }
     
-    getStabilityBonus(weaponType) {
-        if (!this.weaponModels[weaponType]) return 1.0;
-        
-        const model = this.weaponModels[weaponType];
-        if (model.learnedPatterns > 15) {
-            return 1.0 + (model.accuracy * 0.3);
+    trainOnSamples(samples) {
+        this.samples = this.samples.concat(samples);
+        if (this.samples.length > 50) {
+            this.samples = this.samples.slice(-50);
         }
-        
-        return 1.0;
+        this.trainModel();
     }
     
-    getHorizontalAdjustment(weaponType) {
-        if (!this.weaponModels[weaponType]) return 1.0;
+    trainModel() {
+        if (this.samples.length < 10) return;
         
-        const model = this.weaponModels[weaponType];
-        if (model.avgHorizontalVariance) {
-            return 1.0 - (model.avgHorizontalVariance * 0.6);
+        // Simple linear regression for recoil prediction
+        let sumX = 0, sumY = 0;
+        let sumXSquared = 0, sumXY = 0;
+        let sumYSquared = 0;
+        
+        for (let i = 0; i < this.samples.length; i++) {
+            sumX += this.samples[i].x;
+            sumY += this.samples[i].y;
+            sumXSquared += this.samples[i].x * this.samples[i].x;
+            sumXY += this.samples[i].x * this.samples[i].y;
+            sumYSquared += this.samples[i].y * this.samples[i].y;
         }
         
-        return 1.0;
+        const n = this.samples.length;
+        const denominator = n * sumXSquared - sumX * sumX;
+        if (Math.abs(denominator) < 1e-5) return;
+        
+        const slopeX = (n * sumXY - sumX * sumY) / denominator;
+        const interceptX = (sumY - slopeX * sumX) / n;
+        
+        // Update coefficients
+        this.coefficients.x = slopeX;
+        this.coefficients.y = interceptX;
+        
+        // Calculate stability boost (inverse of average recoil magnitude)
+        const avgMagnitude = this.samples.reduce((sum, sample) => 
+            sum + Math.sqrt(sample.x**2 + sample.y**2), 0) / n;
+        
+        this.stabilityBoost = Math.min(1.5, Math.max(0.7, 1.0 / (avgMagnitude * 10 + 0.1)));
+        
+        // Calculate compensation factors
+        this.compensation.horizontal = 1.0 / (1.0 + Math.abs(slopeX) * 5);
+        this.compensation.vertical = 1.0 / (1.0 + Math.abs(interceptX) * 8);
+        
+        this.lastUpdated = Date.now();
     }
     
-    getVerticalAdjustment(weaponType) {
-        if (!this.weaponModels[weaponType]) return 1.0;
+    predictRecoil(previousSamples) {
+        if (previousSamples.length < 3) return { x: 0, y: 0, z: 0 };
         
-        const model = this.weaponModels[weaponType];
-        if (model.avgVerticalVariance) {
-            return 1.0 - (model.avgVerticalVariance * 0.8);
-        }
+        const lastSample = previousSamples[previousSamples.length - 1];
         
-        return 1.0;
-    }
-    
-    initWeaponModel(weaponType) {
-        this.weaponModels[weaponType] = {
-            pattern: [],
-            learnedPatterns: 0,
-            accuracy: 0.7,
-            lastUpdated: Date.now(),
-            avgHorizontalVariance: 0,
-            avgVerticalVariance: 0
+        // Simple prediction based on linear trend
+        const predictedX = this.coefficients.x * lastSample.recoil.x + this.coefficients.y;
+        const predictedY = this.coefficients.x * lastSample.recoil.y + this.coefficients.y;
+        
+        return {
+            x: predictedX * 0.7,
+            y: predictedY * 0.8,
+            z: 0,
+            confidence: 0.85
         };
     }
     
-    updateLearning(weaponType, bulletIndex, currentStability) {
-        if (!this.weaponModels[weaponType]) return;
-        
-        const model = this.weaponModels[weaponType];
-        
-        // Ghi lại kiểu giật
-        if (model.pattern.length <= bulletIndex) {
-            model.pattern.push({...currentStability});
-        } else {
-            // Cập nhật kiểu giật hiện có
-            model.pattern[bulletIndex].x = model.pattern[bulletIndex].x * (1 - this.learningRate) + 
-                                          currentStability.x * this.learningRate;
-            model.pattern[bulletIndex].y = model.pattern[bulletIndex].y * (1 - this.learningRate) + 
-                                          currentStability.y * this.learningRate;
-        }
-        
-        // Cập nhật độ chính xác
-        if (bulletIndex > 10) {
-            model.accuracy = Math.min(0.99, model.accuracy + 0.008);
-        }
-        
-        // Cập nhật phương sai
-        if (bulletIndex > 0 && model.pattern.length > 1) {
-            const varianceX = Math.abs(model.pattern[bulletIndex].x - model.pattern[bulletIndex-1].x);
-            const varianceY = Math.abs(model.pattern[bulletIndex].y - model.pattern[bulletIndex-1].y);
-            
-            model.avgHorizontalVariance = model.avgHorizontalVariance * 0.85 + varianceX * 0.15;
-            model.avgVerticalVariance = model.avgVerticalVariance * 0.85 + varianceY * 0.15;
-        }
-        
-        model.learnedPatterns++;
-        model.lastUpdated = Date.now();
+    getStabilityBoost() {
+        return this.stabilityBoost;
+    }
+    
+    getHorizontalCompensation() {
+        return this.compensation.horizontal;
+    }
+    
+    getVerticalCompensation() {
+        return this.compensation.vertical;
     }
     
     getNetworkStatus(weaponType) {
-        if (!this.weaponModels[weaponType]) {
-            return "not_initialized";
-        }
-        
-        const model = this.weaponModels[weaponType];
         return {
-            patternsLearned: model.learnedPatterns,
-            accuracy: model.accuracy,
-            patternLength: model.pattern.length,
-            lastUpdate: model.lastUpdated
+            samples: this.samples.length,
+            lastTrained: Date.now() - this.lastUpdated,
+            stabilityBoost: this.stabilityBoost,
+            compensation: this.compensation
         };
-    }
-    
-    setPerformanceMode(mode) {
-        this.performanceMode = mode;
-        
-        if (mode === "balanced") {
-            this.learningRate = 0.12;
-        } else if (mode === "high") {
-            this.learningRate = 0.18;
-        } else {
-            this.learningRate = 0.25;
-        }
     }
 }
 
-// DỰ ĐOÁN CHUYỂN ĐỘNG MỤC TIÊU
-class TargetMovementPredictor {
-    constructor() {
-        this.targetData = new Map();
-        this.maxHistory = 20;
-    }
-    
-    update(targets, playerPosition) {
-        const now = Date.now();
-        
-        for (const target of targets) {
-            if (!this.targetData.has(target.id)) {
-                this.targetData.set(target.id, {
-                    positions: [],
-                    timestamps: [],
-                    velocities: [],
-                    lastUpdated: now
-                });
-            }
-            
-            const data = this.targetData.get(target.id);
-            
-            // Tính khoảng cách
-            target.distance = Math.sqrt(
-                Math.pow(target.position.x - playerPosition.x, 2) +
-                Math.pow(target.position.y - playerPosition.y, 2) +
-                Math.pow(target.position.z - playerPosition.z, 2)
-            );
-            
-            // Thêm vị trí mới
-            data.positions.push({...target.position});
-            data.timestamps.push(now);
-            
-            // Duy trì lịch sử
-            if (data.positions.length > this.maxHistory) {
-                data.positions.shift();
-                data.timestamps.shift();
-                if (data.velocities.length > 0) data.velocities.shift();
-            }
-            
-            // Tính vận tốc
-            if (data.positions.length >= 2) {
-                const lastIndex = data.positions.length - 1;
-                const timeDiff = (data.timestamps[lastIndex] - data.timestamps[lastIndex-1]) / 1000;
-                const velocity = {
-                    x: (data.positions[lastIndex].x - data.positions[lastIndex-1].x) / timeDiff,
-                    y: (data.positions[lastIndex].y - data.positions[lastIndex-1].y) / timeDiff
-                };
-                data.velocities.push(velocity);
-            }
-            
-            data.lastUpdated = now;
-        }
-        
-        // Dọn dữ liệu cũ
-        this.cleanupOldData();
-    }
-    
-    getMovementCompensation(targetId, bulletVelocity) {
-        const data = this.targetData.get(targetId);
-        if (!data || data.positions.length < 3) return { x: 0, y: 0 };
-        
-        const lastPos = data.positions[data.positions.length - 1];
-        const lastVel = data.velocities.length > 0 ? 
-            data.velocities[data.velocities.length - 1] : { x: 0, y: 0 };
-        
-        // Tính thời gian đạn bay
-        const distance = data.positions[data.positions.length - 1].distance;
-        const travelTime = distance / bulletVelocity;
-        
-        // Dự đoán vị trí
-        let predictedX = lastPos.x + lastVel.x * travelTime;
-        let predictedY = lastPos.y + lastVel.y * travelTime;
-        
-        // Tính bù chuyển động
-        return {
-            x: (predictedX - lastPos.x) * 0.75,
-            y: (predictedY - lastPos.y) * 0.85
-        };
-    }
-    
-    cleanupOldData() {
-        const now = Date.now();
-        const threshold = 5000; // 5 giây
-        
-        for (const [id, data] of this.targetData.entries()) {
-            if (now - data.lastUpdated > threshold) {
-                this.targetData.delete(id);
-            }
-        }
-    }
-}
-
-const hyperRecoilSystem = new HyperRecoilStabilizer();
-$done({ body: hyperRecoilSystem.process($response.body) });
+const quantumRecoilSystem = new QuantumRecoilStabilizer();
+$done({ body: quantumRecoilSystem.process($response.body) });
