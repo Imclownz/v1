@@ -1,133 +1,470 @@
-// ULTIMATE NETWORK STEALTH v6.0 (Ultra Low Latency Edition)
-class UltimateNetworkStealth {
+// QUANTUM NETWORK OPTIMIZER v8.0 (AI-Powered)
+class QuantumNetworkOptimizer {
     constructor() {
-        this.NETWORK_PROFILES = {
-            BALANCED: {
-                protocol: "hybrid",
-                compression: "medium",
-                resendThreshold: 130,
-                jitterBuffer: 15
-            },
-            COMPETITIVE: {
-                protocol: "udp_priority",
-                compression: "ultra", // Tăng nén để giảm latency
-                resendThreshold: 80,
-                jitterBuffer: 6
-            },
+        this.NETWORK_MODES = {
             STEALTH: {
-                protocol: "tcp_secure",
-                compression: "low",
-                resendThreshold: 170,
-                jitterBuffer: 22
+                protocol: "tls_secure",
+                compression: "adaptive_low",
+                resendThreshold: 180,
+                jitterBuffer: 25,
+                packetMasking: "high",
+                encryption: "quantum_128"
+            },
+            BALANCED: {
+                protocol: "hybrid_udp_tls",
+                compression: "adaptive_medium",
+                resendThreshold: 140,
+                jitterBuffer: 18,
+                packetMasking: "medium",
+                encryption: "aes_192"
+            },
+            PERFORMANCE: {
+                protocol: "udp_priority",
+                compression: "adaptive_high",
+                resendThreshold: 90,
+                jitterBuffer: 8,
+                packetMasking: "low",
+                encryption: "aes_128"
+            },
+            EXTREME: {
+                protocol: "udp_hyper",
+                compression: "ultra",
+                resendThreshold: 60,
+                jitterBuffer: 5,
+                packetMasking: "minimal",
+                encryption: "aes_128_fast"
             }
         };
-        this.currentProfile = this.NETWORK_PROFILES.COMPETITIVE;
-        this.securityToken = "UNS_" + Date.now().toString(36);
-        this.lastProfileSwitch = Date.now();
-        this.behaviorProfiles = this.getBehaviorProfiles();
-        this.currentBehavior = this.behaviorProfiles[0];
-        this.lastBehaviorChange = Date.now();
+        this.currentMode = this.NETWORK_MODES.BALANCED;
+        this.securityToken = "QNET_" + Date.now().toString(36) + "_" + Math.random().toString(36).substr(2, 8);
+        this.lastModeSwitch = Date.now();
+        this.behaviorEngine = new BehaviorSimulationEngine();
         this.connectionStability = 1.0;
+        this.aiRouter = new AIRouteOptimizer();
+        this.latencyCompensator = new LatencyCompensationSystem();
+        this.antiBanSystem = new AntiBanCore();
+        this.packetHistory = [];
+        this.performanceMetrics = {
+            avgPing: 0,
+            packetLoss: 0,
+            jitter: 0,
+            lastUpdated: 0
+        };
     }
 
     process(body) {
         try {
-            const startTime = Date.now();
+            const processStart = performance.now();
             let data = JSON.parse(body);
             
-            this.autoSelectProfile(data.networkMetrics, data.securityStatus);
-            this.rotateBehavior();
+            // Cập nhật và phân tích metrics mạng
+            if (data.networkMetrics) {
+                this.updatePerformanceMetrics(data.networkMetrics);
+            }
             
+            // Tự động chọn chế độ mạng
+            this.autoSelectMode(data);
+            
+            // Xoay hành vi chống ban
+            this.behaviorEngine.rotateBehavior();
+            
+            // Tối ưu hóa định tuyến
+            const routeOptimization = this.aiRouter.calculateOptimalRoute(data);
+            
+            // Tạo cấu hình mạng
             data.network = {
-                ...this.currentProfile,
-                version: "6.0",
+                ...this.currentMode,
+                version: "8.0",
                 timestamp: Date.now(),
-                stability: this.connectionStability,
+                stability: this.calculateNetworkStability(),
                 security: {
                     token: this.securityToken,
-                    checksum: this.generateChecksum(),
-                    behavior: this.currentBehavior.name,
-                    metrics: this.generateBehaviorMetrics()
+                    checksum: this.generateQuantumChecksum(),
+                    behavior: this.behaviorEngine.currentBehavior.name,
+                    metrics: this.behaviorEngine.generateBehaviorMetrics(),
+                    banRisk: this.antiBanSystem.calculateBanRisk()
                 },
                 advanced: {
-                    packetAggregation: true,
-                    errorCorrection: "adaptive",
-                    latencySmoothing: true,
-                    routeOptimization: "ai_based"
+                    packetAggregation: "ai_controlled",
+                    errorCorrection: "forward_error",
+                    latencySmoothing: "adaptive",
+                    routeOptimization: routeOptimization,
+                    packetStealth: "deep_mask"
                 },
-                processingTime: Date.now() - startTime
+                processingTime: performance.now() - processStart
             };
             
-            if (data.aimSystem?.lockStrength > 0.97) {
-                data.network.protocol = "udp_priority";
-                data.network.compression = "ultra";
-                data.network.resendThreshold = 60; // Giảm threshold để tăng tốc
+            // Chế độ chiến đấu khẩn cấp
+            if (data.aimSystem?.lockPrecision > 0.98 || data.gameState?.isInCombat) {
+                this.activateCombatMode(data);
             }
+            
+            // Bù trễ cho hệ thống aim
+            if (data.aimSystem) {
+                data.aimSystem.latencyCompensation = this.latencyCompensator.getCompensationValue();
+            }
+            
+            // Tích hợp với hệ thống recoil
+            if (data.recoilSystem) {
+                data.recoilSystem.networkStability = this.connectionStability;
+            }
+            
+            // Ghi lại gói tin cho phân tích
+            this.logPacket(data.network);
             
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[ULTIMATE NET] Fast Error:", e.message.substring(0, 20));
-            return body;
+            console.error("[QUANTUM NET] Critical Error:", e.message.substring(0, 50));
+            return this.handleSafeFallback(body);
         }
     }
 
-    autoSelectProfile(metrics, securityStatus) {
-        if (!metrics || Date.now() - this.lastProfileSwitch < 3500) return;
+    updatePerformanceMetrics(metrics) {
+        const alpha = 0.3; // Hệ số làm mượt
         
-        if (securityStatus?.riskLevel > 0.65) {
-            this.currentProfile = this.NETWORK_PROFILES.STEALTH;
-            this.lastProfileSwitch = Date.now();
+        if (!metrics) return;
+        
+        // Cập nhật ping trung bình
+        this.performanceMetrics.avgPing = this.performanceMetrics.avgPing 
+            ? alpha * metrics.ping + (1 - alpha) * this.performanceMetrics.avgPing
+            : metrics.ping;
+        
+        // Cập nhật tỷ lệ mất gói
+        this.performanceMetrics.packetLoss = metrics.packetLoss 
+            ? alpha * metrics.packetLoss + (1 - alpha) * this.performanceMetrics.packetLoss
+            : 0;
+        
+        // Cập nhật jitter
+        this.performanceMetrics.jitter = metrics.jitter 
+            ? alpha * metrics.jitter + (1 - alpha) * this.performanceMetrics.jitter
+            : 0;
+        
+        this.performanceMetrics.lastUpdated = Date.now();
+    }
+
+    autoSelectMode(data) {
+        if (!data.networkMetrics || Date.now() - this.lastModeSwitch < 3000) return;
+        
+        const metrics = data.networkMetrics;
+        const security = data.securityStatus || {};
+        const gameState = data.gameState || {};
+        
+        // Chế độ an toàn khi có rủi ro
+        if (security.riskLevel > 0.6 || this.antiBanSystem.detectionRisk > 0.7) {
+            this.currentMode = this.NETWORK_MODES.STEALTH;
+            this.lastModeSwitch = Date.now();
             return;
         }
         
-        if (metrics.aimIntensity > 0.85) {
-            this.currentProfile = this.NETWORK_PROFILES.COMPETITIVE;
-            this.lastProfileSwitch = Date.now();
+        // Chế độ hiệu năng cao cho thi đấu
+        if (gameState.isInTournament || metrics.ping < 40) {
+            this.currentMode = this.NETWORK_MODES.EXTREME;
+            this.lastModeSwitch = Date.now();
             return;
         }
         
-        if (metrics.isCellular || metrics.ping > 140) {
-            this.currentProfile = this.NETWORK_PROFILES.STEALTH;
-            this.lastProfileSwitch = Date.now();
+        // Ưu tiên tốc độ khi chiến đấu
+        if (gameState.isInCombat || data.aimSystem?.lockPrecision > 0.95) {
+            this.currentMode = this.NETWORK_MODES.PERFORMANCE;
+            this.lastModeSwitch = Date.now();
             return;
         }
         
-        this.currentProfile = this.NETWORK_PROFILES.BALANCED;
-    }
-
-    rotateBehavior() {
-        if (Date.now() - this.lastBehaviorChange < 250000 || Math.random() < 0.70) return;
+        // Xử lý mạng di động
+        if (metrics.isCellular || metrics.ping > 120) {
+            this.currentMode = this.NETWORK_MODES.STEALTH;
+            this.lastModeSwitch = Date.now();
+            return;
+        }
         
-        const currentIdx = this.behaviorProfiles.indexOf(this.currentBehavior);
-        const nextIdx = (currentIdx + 1) % this.behaviorProfiles.length;
-        this.currentBehavior = this.behaviorProfiles[nextIdx];
-        this.lastBehaviorChange = Date.now();
+        // Mặc định
+        this.currentMode = this.NETWORK_MODES.BALANCED;
     }
 
-    getBehaviorProfiles() {
-        return [
-            { name: "casual", reactionTime: { min: 200, max: 380 }, accuracy: 0.72, movement: "normal" },
-            { name: "regular", reactionTime: { min: 160, max: 300 }, accuracy: 0.85, movement: "fluid" },
-            { name: "pro", reactionTime: { min: 120, max: 260 }, accuracy: 0.92, movement: "precise" }
-        ];
-    }
-
-    generateBehaviorMetrics() {
-        const profile = this.currentBehavior;
-        return {
-            reactionTime: profile.reactionTime.min + Math.random() * (profile.reactionTime.max - profile.reactionTime.min),
-            accuracy: profile.accuracy + (Math.random() * 0.06 - 0.03),
-            movementPattern: profile.movement,
-            inputVariance: Math.random() * 0.10
+    activateCombatMode(data) {
+        this.currentMode = this.NETWORK_MODES.EXTREME;
+        data.network = {
+            ...data.network,
+            protocol: "udp_hyper",
+            compression: "combat_ultra",
+            resendThreshold: 45,
+            jitterBuffer: 4,
+            packetMasking: "dynamic",
+            combatBoost: true
         };
+        
+        // Kích hoạt bù trễ khẩn cấp
+        this.latencyCompensator.activateEmergencyMode();
     }
 
-    generateChecksum() {
+    calculateNetworkStability() {
+        const metrics = this.performanceMetrics;
+        if (!metrics.lastUpdated || Date.now() - metrics.lastUpdated > 10000) return 0.9;
+        
+        let stability = 1.0;
+        
+        // Phạt mất gói
+        stability -= metrics.packetLoss * 2.5;
+        
+        // Phạt jitter
+        stability -= Math.min(0.3, metrics.jitter * 0.02);
+        
+        // Phạt ping cao
+        if (metrics.avgPing > 100) {
+            stability -= (metrics.avgPing - 100) * 0.005;
+        }
+        
+        return Math.max(0.4, Math.min(1.0, stability));
+    }
+
+    generateQuantumChecksum() {
         const crypto = require('crypto');
-        const data = this.securityToken + this.currentProfile.protocol;
-        return crypto.createHash('sha3-256').update(data).digest('hex').substring(0, 24);
+        const data = `${this.securityToken}|${this.currentMode.protocol}|${Date.now()}`;
+        return crypto.createHash('sha3-512').update(data).digest('hex').substring(0, 32);
+    }
+
+    logPacket(packetData) {
+        this.packetHistory.push({
+            timestamp: Date.now(),
+            mode: this.currentMode,
+            size: JSON.stringify(packetData).length
+        });
+        
+        // Giới hạn lịch sử
+        if (this.packetHistory.length > 100) {
+            this.packetHistory.shift();
+        }
+    }
+
+    handleSafeFallback(originalBody) {
+        try {
+            const data = JSON.parse(originalBody);
+            if (!data.network) {
+                data.network = this.NETWORK_MODES.STEALTH;
+                data.network.version = "8.0-safe";
+            }
+            return JSON.stringify(data);
+        } catch (e) {
+            return originalBody;
+        }
     }
 }
 
-const networkSystem = new UltimateNetworkStealth();
-$done({ body: networkSystem.process($response.body) });
+// ĐỘNG CƠ MÔ PHỎNG HÀNH VI
+class BehaviorSimulationEngine {
+    constructor() {
+        this.behaviorProfiles = this.getBehaviorProfiles();
+        this.currentBehavior = this.behaviorProfiles[1]; // Mặc định là regular
+        this.lastBehaviorChange = Date.now();
+        this.behaviorVariance = 0.15;
+    }
+    
+    getBehaviorProfiles() {
+        return [
+            {
+                name: "casual",
+                reactionTime: { min: 220, max: 400 },
+                accuracy: { base: 0.68, variance: 0.12 },
+                movementPattern: "normal",
+                inputDelay: { min: 30, max: 80 }
+            },
+            {
+                name: "regular",
+                reactionTime: { min: 180, max: 300 },
+                accuracy: { base: 0.78, variance: 0.10 },
+                movementPattern: "fluid",
+                inputDelay: { min: 20, max: 60 }
+            },
+            {
+                name: "pro",
+                reactionTime: { min: 140, max: 250 },
+                accuracy: { base: 0.85, variance: 0.08 },
+                movementPattern: "precise",
+                inputDelay: { min: 15, max: 45 }
+            },
+            {
+                name: "esports",
+                reactionTime: { min: 110, max: 200 },
+                accuracy: { base: 0.92, variance: 0.05 },
+                movementPattern: "crisp",
+                inputDelay: { min: 10, max: 30 }
+            }
+        ];
+    }
+    
+    rotateBehavior() {
+        // Thời gian tối thiểu giữa các lần thay đổi
+        if (Date.now() - this.lastBehaviorChange < 600000) return;
+        
+        // 15% cơ hội thay đổi hành vi mỗi lần kiểm tra
+        if (Math.random() < 0.15) {
+            const currentIdx = this.behaviorProfiles.indexOf(this.currentBehavior);
+            let newIdx;
+            
+            // 70% chuyển sang profile liền kề, 30% chuyển ngẫu nhiên
+            if (Math.random() < 0.7) {
+                newIdx = (currentIdx + (Math.random() > 0.5 ? 1 : -1)) % this.behaviorProfiles.length;
+                if (newIdx < 0) newIdx = this.behaviorProfiles.length - 1;
+            } else {
+                newIdx = Math.floor(Math.random() * this.behaviorProfiles.length);
+            }
+            
+            this.currentBehavior = this.behaviorProfiles[newIdx];
+            this.lastBehaviorChange = Date.now();
+            
+            // Đặt lại phương sai
+            this.behaviorVariance = 0.15 + Math.random() * 0.1;
+        }
+    }
+    
+    generateBehaviorMetrics() {
+        const profile = this.currentBehavior;
+        const varianceFactor = this.behaviorVariance;
+        
+        return {
+            reactionTime: profile.reactionTime.min + 
+                         Math.random() * (profile.reactionTime.max - profile.reactionTime.min),
+            accuracy: profile.accuracy.base + 
+                    (Math.random() * 2 - 1) * profile.accuracy.variance * varianceFactor,
+            movementPattern: profile.movementPattern,
+            inputDelay: profile.inputDelay.min + 
+                      Math.random() * (profile.inputDelay.max - profile.inputDelay.min),
+            inputVariance: Math.random() * varianceFactor * 0.5
+        };
+    }
+}
+
+// HỆ THỐNG BÙ TRỄ THÔNG MINH
+class LatencyCompensationSystem {
+    constructor() {
+        this.baseCompensation = 0;
+        this.emergencyMode = false;
+        this.compensationHistory = [];
+    }
+    
+    getCompensationValue() {
+        let compensation = this.baseCompensation;
+        
+        if (this.emergencyMode) {
+            compensation *= 1.8;
+        }
+        
+        // Thêm nhiễu ngẫu nhiên để tránh phát hiện
+        compensation += (Math.random() - 0.5) * 0.02;
+        
+        return Math.max(0, Math.min(0.3, compensation));
+    }
+    
+    updateCompensation(metrics) {
+        if (!metrics) return;
+        
+        // Tính toán bù trễ cơ bản dựa trên ping và jitter
+        this.baseCompensation = metrics.ping / 1000 + metrics.jitter / 2000;
+        
+        // Lưu lịch sử
+        this.compensationHistory.push({
+            timestamp: Date.now(),
+            value: this.baseCompensation
+        });
+        
+        // Giữ lịch sử vừa phải
+        if (this.compensationHistory.length > 50) {
+            this.compensationHistory.shift();
+        }
+    }
+    
+    activateEmergencyMode() {
+        this.emergencyMode = true;
+        setTimeout(() => {
+            this.emergencyMode = false;
+        }, 10000); // Kéo dài 10 giây
+    }
+}
+
+// HỆ THỐNG CHỐNG BAN
+class AntiBanCore {
+    constructor() {
+        this.detectionRisk = 0;
+        this.behaviorScore = 100;
+        this.lastCheck = Date.now();
+        this.banPatterns = this.getBanPatterns();
+    }
+    
+    calculateBanRisk() {
+        this.updateBehaviorScore();
+        
+        // Rủi ro cơ bản dựa trên điểm hành vi
+        let risk = (100 - this.behaviorScore) / 100;
+        
+        // Thêm nhiễu ngẫu nhiên
+        risk += (Math.random() - 0.5) * 0.05;
+        
+        return Math.max(0, Math.min(0.99, risk));
+    }
+    
+    updateBehaviorScore() {
+        // Giảm điểm hành vi theo thời gian
+        const hoursPlayed = (Date.now() - this.lastCheck) / 3600000;
+        this.behaviorScore = Math.max(20, this.behaviorScore - hoursPlayed * 0.1);
+        
+        // Đặt lại thời gian kiểm tra
+        this.lastCheck = Date.now();
+    }
+    
+    recordPlayerAction(actionType) {
+        // Hành động "an toàn" tăng điểm
+        if (['revive', 'heal', 'move'].includes(actionType)) {
+            this.behaviorScore = Math.min(100, this.behaviorScore + 0.05);
+        }
+        // Hành động "nguy hiểm" giảm điểm
+        else if (['headshot', 'long_range_kill', 'rapid_kill'].includes(actionType)) {
+            this.behaviorScore = Math.max(20, this.behaviorScore - 0.2);
+        }
+    }
+    
+    getBanPatterns() {
+        return {
+            PATTERN_1: { threshold: 0.85, description: "High precision consistency" },
+            PATTERN_2: { threshold: 0.92, description: "Low reaction time variance" },
+            PATTERN_3: { threshold: 0.78, description: "Perfect recoil control" }
+        };
+    }
+}
+
+// TRÌNH TỐI ƯU HÓA ĐỊNH TUYẾN AI
+class AIRouteOptimizer {
+    constructor() {
+        this.routeTable = {};
+        this.lastOptimization = 0;
+    }
+    
+    calculateOptimalRoute(data) {
+        const now = Date.now();
+        
+        // Chỉ tối ưu hóa mỗi 30 giây
+        if (now - this.lastOptimization < 30000) {
+            return this.routeTable.currentRoute || "default";
+        }
+        
+        this.lastOptimization = now;
+        
+        // Logic tối ưu hóa đơn giản
+        let bestRoute = "default";
+        if (data.networkMetrics) {
+            if (data.networkMetrics.ping < 50) {
+                bestRoute = "ultra_low_latency";
+            } else if (data.networkMetrics.ping > 150) {
+                bestRoute = "high_stability";
+            } else if (data.networkMetrics.isCellular) {
+                bestRoute = "cellular_optimized";
+            }
+        }
+        
+        // Lưu vào bảng định tuyến
+        this.routeTable.currentRoute = bestRoute;
+        return bestRoute;
+    }
+}
+
+const quantumNetwork = new QuantumNetworkOptimizer();
+$done({ body: quantumNetwork.process($response.body) });
