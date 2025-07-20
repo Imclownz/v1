@@ -370,9 +370,6 @@ class PerfectLockHeadshotMaster {
         // Ưu tiên mục tiêu gần
         priority += (100 - Math.min(100, target.distance));
         
-        // Ưu tiên mục tiêu có ít máu
-        priority += (100 - target.health) * 0.5;
-        
         // Ưu tiên mục tiêu đang không di chuyển
         if (target.movementSpeed < 0.1) priority += 30;
         
