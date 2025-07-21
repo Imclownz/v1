@@ -1,4 +1,4 @@
-// HEADSHOT MASTER v35.0 (ULTIMATE HEADSHOT SYSTEM)
+// HEADSHOT MASTER v5.0 (ULTIMATE HEADSHOT SYSTEM)
 class UltimateHeadshotSystem {
     constructor() {
         // Cấu hình cơ bản
@@ -15,6 +15,9 @@ class UltimateHeadshotSystem {
         this.lastTargetId = null;
         this.targetSwitchCooldown = 0;
         this.emergencyLockMode = false;
+        this.instantLockEnabled = true;
+        this.lockResponseTime = 0.05; // Thời gian phản hồi khóa aim (giây)
+        this.maxAimHeight = 1.8; // Giới hạn tâm ngắm không vượt quá chiều cao này
         
         // Module chính
         this.targetDetector = new AdvancedTargetDetector();
@@ -26,6 +29,7 @@ class UltimateHeadshotSystem {
         this.performanceOptimizer = new PerformanceOptimizer();
         this.stealthModule = new StealthModule();
         this.combatAnalyzer = new CombatAnalyzer();
+        this.triggerResponseSystem = new TriggerResponseSystem();
     }
 
     process(body) {
@@ -43,6 +47,11 @@ class UltimateHeadshotSystem {
             const detectedTargets = this.targetDetector.detectTargets(data);
             data.targets = detectedTargets;
             
+            // Kích hoạt chế độ khóa nhanh khi kéo nút bắn
+            if (data.gameState?.isFiring && this.instantLockEnabled) {
+                this.triggerResponseSystem.activateInstantLock();
+            }
+            
             if (detectedTargets.length > 0) {
                 // Phân tích và ưu tiên mục tiêu
                 const priorityTarget = this.selectPriorityTarget(detectedTargets, data.gameState);
@@ -54,16 +63,17 @@ class UltimateHeadshotSystem {
                         data.currentAimPosition,
                         data.playerPosition,
                         data.currentWeapon,
-                        data.gameState
+                        data.gameState,
+                        this.triggerResponseSystem.isInstantLockActive()
                     );
                     
                     // Cập nhật vị trí ngắm
                     data.aimPosition = aimData.position;
                     
                     // Áp dụng khóa đầu chặt
-                    if (aimData.lockStrength >= 0.99) {
+                    if (aimData.lockStrength >= 0.99 || this.triggerResponseSystem.isInstantLockActive()) {
                         data.autoFire = true;
-                        data.fireMode = "headshot_lock";
+                        data.fireMode = "instant_headshot_lock";
                         
                         // Tính toán đường đạn chính xác
                         data.bulletTrajectory = this.bulletTracker.calculatePrecisionTrajectory(
@@ -107,7 +117,7 @@ class UltimateHeadshotSystem {
             data.aimSystem = this.getSystemMetadata(startTime);
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[ULTIMATE SYSTEM] Error:", e.message);
+            console.error("[HEADSHOT MASTER] Error:", e.message);
             return body;
         }
     }
@@ -153,14 +163,15 @@ class UltimateHeadshotSystem {
     
     getSystemMetadata(startTime) {
         return {
-            version: "35.0",
+            version: "5.0",
             mode: "auto_headshot_lock",
             features: {
                 autoTargetDetection: true,
                 bulletTracking: true,
                 predictiveAiming: true,
                 headshotExpansion: this.headshotExpansion,
-                stealthMode: true
+                stealthMode: true,
+                instantLock: this.instantLockEnabled
             },
             performance: {
                 processingTime: Date.now() - startTime,
@@ -214,123 +225,28 @@ class UltimateHeadshotSystem {
     }
 }
 
-// =============== MODULE PHÁT HIỆN MỤC TIÊU TỰ ĐỘNG ===============
-class AdvancedTargetDetector {
+// =============== MODULE PHẢN HỒI KÍCH HOẠT ===============
+class TriggerResponseSystem {
     constructor() {
-        this.detectionAlgorithms = {
-            visual: new VisualDetection(),
-            radar: new RadarDetection()
-        };
-        this.targetConfidenceThreshold = 0.85;
-        this.minDetectionSize = 15;
+        this.instantLockActive = false;
+        this.activationTime = 0;
+        this.lockDuration = 0.3; // Thời gian duy trì khóa nhanh (giây)
     }
     
-    detectTargets(gameData) {
-        const targets = [];
-        
-        // Phát hiện qua hình ảnh
-        if (gameData.visualData) {
-            const visualTargets = this.detectionAlgorithms.visual.process(gameData.visualData);
-            targets.push(...visualTargets.filter(t => t.confidence >= this.targetConfidenceThreshold));
-        }
-        
-        // Phát hiện qua radar
-        if (gameData.radarData) {
-            const radarTargets = this.detectionAlgorithms.radar.process(gameData.radarData);
-            targets.push(...radarTargets.filter(t => t.confidence >= this.targetConfidenceThreshold));
-        }
-        
-        // Kết hợp và loại bỏ trùng lặp
-        const mergedTargets = this.mergeTargets(targets);
-        
-        // Tăng cường dữ liệu mục tiêu
-        return mergedTargets.map(target => 
-            this.enhanceTarget(target, gameData.playerPosition)
-        );
+    activateInstantLock() {
+        this.instantLockActive = true;
+        this.activationTime = Date.now();
     }
     
-    mergeTargets(targets) {
-        const merged = [];
-        const positionTolerance = 1.5;
-        
-        for (const target of targets) {
-            let existing = null;
-            
-            // Tìm mục tiêu trùng lặp trong phạm vi cho phép
-            for (const mergedTarget of merged) {
-                const distance = this.calculateDistance(
-                    target.position, 
-                    mergedTarget.position
-                );
-                
-                if (distance < positionTolerance) {
-                    existing = mergedTarget;
-                    break;
-                }
+    isInstantLockActive() {
+        if (this.instantLockActive) {
+            // Tự động tắt sau thời gian quy định
+            if (Date.now() - this.activationTime > this.lockDuration * 1000) {
+                this.instantLockActive = false;
             }
-            
-            if (existing) {
-                // Kết hợp dữ liệu từ các nguồn khác nhau
-                existing.confidence = Math.max(existing.confidence, target.confidence);
-                existing.position = {
-                    x: (existing.position.x + target.position.x) / 2,
-                    y: (existing.position.y + target.position.y) / 2,
-                    z: (existing.position.z + target.position.z) / 2
-                };
-                
-                // Kết hợp các thuộc tính bổ sung
-                if (target.team) existing.team = target.team;
-                if (target.health) existing.health = target.health;
-            } else {
-                merged.push({...target});
-            }
+            return true;
         }
-        
-        return merged;
-    }
-    
-    enhanceTarget(target, playerPosition) {
-        // Tính toán thông tin bổ sung
-        target.distance = this.calculateDistance(target.position, playerPosition);
-        target.headHitbox = this.calculateHeadHitbox(target);
-        target.priority = this.calculateThreatLevel(target);
-        return target;
-    }
-    
-    calculateDistance(pos1, pos2) {
-        return Math.sqrt(
-            Math.pow(pos1.x - pos2.x, 2) +
-            Math.pow(pos1.y - pos2.y, 2) +
-            Math.pow(pos1.z - pos2.z, 2)
-        );
-    }
-    
-    calculateHeadHitbox(target) {
-        // Tính toán vùng headshot dựa trên model nhân vật
-        const headRadius = target.type === 'player' ? 0.35 : 0.25;
-        const headHeightOffset = target.isCrouching ? 0.65 : 1.65;
-        
-        return {
-            x: target.position.x,
-            y: target.position.y + headHeightOffset,
-            z: target.position.z,
-            radius: headRadius
-        };
-    }
-    
-    calculateThreatLevel(target) {
-        let threat = 0;
-        
-        // Mục tiêu đang nhắm vào người chơi
-        if (target.isAimingAtPlayer) threat += 8;
-        
-        // Mục tiêu có vũ khí mạnh
-        if (target.weaponType === 'sniper' || target.weaponType === 'shotgun') threat += 7;
-        
-        // Mục tiêu gần
-        if (target.distance < 20) threat += 6;
-        
-        return threat;
+        return false;
     }
 }
 
@@ -338,19 +254,20 @@ class AdvancedTargetDetector {
 class AutoAimSystem {
     constructor() {
         this.lockSpeed = 0.15;
+        this.instantLockSpeed = 0.35; // Tốc độ khóa khi kích hoạt chế độ nhanh
         this.maxLockTime = 0.5;
         this.lockThreshold = 0.95;
         this.smoothingFactor = 0.85;
         this.headshotPriority = 9.5;
-        this.maxAimHeight = 1.8; // Giới hạn tâm ngắm không vượt quá chiều cao này
+        this.maxAimHeight = 1.8;
     }
     
-    acquireTarget(target, currentAimPos, playerPos, weaponType, gameState) {
+    acquireTarget(target, currentAimPos, playerPos, weaponType, gameState, instantLock = false) {
         // Tính vị trí aim chính xác
         const perfectAim = this.calculatePerfectAim(target, playerPos, weaponType);
         
         // Dịch chuyển tâm súng
-        const newAimPos = this.moveAimToTarget(currentAimPos, perfectAim, gameState, target);
+        const newAimPos = this.moveAimToTarget(currentAimPos, perfectAim, gameState, target, instantLock);
         
         // Tính độ bám của khóa
         const lockStrength = this.calculateLockStrength(newAimPos, perfectAim, target);
@@ -394,15 +311,16 @@ class AutoAimSystem {
         };
     }
     
-    moveAimToTarget(currentPos, targetPos, gameState, target) {
+    moveAimToTarget(currentPos, targetPos, gameState, target, instantLock) {
         // Tính toán tốc độ di chuyển tâm ngắm
+        let moveSpeed = instantLock ? this.instantLockSpeed : this.lockSpeed;
+        
         const distance = Math.sqrt(
             Math.pow(targetPos.x - currentPos.x, 2) +
             Math.pow(targetPos.y - currentPos.y, 2)
         );
         
         // Giảm lực kéo khi bắn ở tầm xa
-        let moveSpeed = Math.min(1.0, this.lockSpeed * (1 + distance / 50));
         if (distance > 100) moveSpeed *= 0.7;
         if (distance > 200) moveSpeed *= 0.5;
         
@@ -424,6 +342,15 @@ class AutoAimSystem {
         const maxY = target.position.y + this.maxAimHeight;
         if (newPos.y > maxY) {
             newPos.y = Math.min(newPos.y, maxY);
+        }
+        
+        // Trong chế độ instant lock, ghim thẳng vào giữa đầu
+        if (instantLock && distance < 200) {
+            return {
+                x: target.headHitbox.x,
+                y: target.headHitbox.y,
+                z: target.headHitbox.z
+            };
         }
         
         return newPos;
@@ -723,8 +650,8 @@ class JumpPredictionModel {
 class AimLockController {
     constructor() {
         this.lockSensitivity = 0.95;
-        this.minLockTime = 0.3;
-        this.maxLockDistance = 200;
+        this.minLockTime = 0.1; // Giảm thời gian khóa tối thiểu
+        this.maxLockDistance = 250;
         this.lastLockTime = 0;
     }
     
@@ -749,7 +676,6 @@ class AimLockController {
             z: newPosition.z - currentAim.z
         };
         
-        // Áp dụng với độ nhạy
         return {
             x: currentAim.x + moveVector.x * this.lockSensitivity,
             y: currentAim.y + moveVector.y * this.lockSensitivity,
@@ -989,20 +915,147 @@ class CombatAnalyzer {
     }
 }
 
+// =============== MODULE PHÁT HIỆN MỤC TIÊU TỰ ĐỘNG ===============
+class AdvancedTargetDetector {
+    constructor() {
+        this.detectionAlgorithms = {
+            visual: new VisualDetection(),
+            radar: new RadarDetection()
+        };
+        this.targetConfidenceThreshold = 0.85;
+        this.minDetectionSize = 15;
+    }
+    
+    detectTargets(gameData) {
+        const targets = [];
+        
+        // Phát hiện qua hình ảnh
+        if (gameData.visualData) {
+            const visualTargets = this.detectionAlgorithms.visual.process(gameData.visualData);
+            targets.push(...visualTargets.filter(t => t.confidence >= this.targetConfidenceThreshold));
+        }
+        
+        // Phát hiện qua radar
+        if (gameData.radarData) {
+            const radarTargets = this.detectionAlgorithms.radar.process(gameData.radarData);
+            targets.push(...radarTargets.filter(t => t.confidence >= this.targetConfidenceThreshold));
+        }
+        
+        // Kết hợp và loại bỏ trùng lặp
+        const mergedTargets = this.mergeTargets(targets);
+        
+        // Tăng cường dữ liệu mục tiêu
+        return mergedTargets.map(target => 
+            this.enhanceTarget(target, gameData.playerPosition)
+        );
+    }
+    
+    mergeTargets(targets) {
+        const merged = [];
+        const positionTolerance = 1.5;
+        
+        for (const target of targets) {
+            let existing = null;
+            
+            // Tìm mục tiêu trùng lặp trong phạm vi cho phép
+            for (const mergedTarget of merged) {
+                const distance = this.calculateDistance(
+                    target.position, 
+                    mergedTarget.position
+                );
+                
+                if (distance < positionTolerance) {
+                    existing = mergedTarget;
+                    break;
+                }
+            }
+            
+            if (existing) {
+                // Kết hợp dữ liệu từ các nguồn khác nhau
+                existing.confidence = Math.max(existing.confidence, target.confidence);
+                existing.position = {
+                    x: (existing.position.x + target.position.x) / 2,
+                    y: (existing.position.y + target.position.y) / 2,
+                    z: (existing.position.z + target.position.z) / 2
+                };
+                
+                // Kết hợp các thuộc tính bổ sung
+                if (target.team) existing.team = target.team;
+                if (target.health) existing.health = target.health;
+            } else {
+                merged.push({...target});
+            }
+        }
+        
+        return merged;
+    }
+    
+    enhanceTarget(target, playerPosition) {
+        // Tính toán thông tin bổ sung
+        target.distance = this.calculateDistance(target.position, playerPosition);
+        target.headHitbox = this.calculateHeadHitbox(target);
+        target.priority = this.calculateThreatLevel(target);
+        
+        // Mở rộng vùng headshot 10x
+        target.headHitbox.radius *= 10;
+        
+        return target;
+    }
+    
+    calculateDistance(pos1, pos2) {
+        return Math.sqrt(
+            Math.pow(pos1.x - pos2.x, 2) +
+            Math.pow(pos1.y - pos2.y, 2) +
+            Math.pow(pos1.z - pos2.z, 2)
+        );
+    }
+    
+    calculateHeadHitbox(target) {
+        // Tính toán vùng headshot dựa trên model nhân vật
+        const headRadius = target.type === 'player' ? 0.35 : 0.25;
+        const headHeightOffset = target.isCrouching ? 0.65 : 1.65;
+        
+        return {
+            x: target.position.x,
+            y: target.position.y + headHeightOffset,
+            z: target.position.z,
+            radius: headRadius
+        };
+    }
+    
+    calculateThreatLevel(target) {
+        let threat = 0;
+        
+        // Mục tiêu đang nhắm vào người chơi
+        if (target.isAimingAtPlayer) threat += 8;
+        
+        // Mục tiêu có vũ khí mạnh
+        if (target.weaponType === 'sniper' || target.weaponType === 'shotgun') threat += 7;
+        
+        // Mục tiêu gần
+        if (target.distance < 20) threat += 6;
+        
+        return threat;
+    }
+}
+
 // =============== HỆ THỐNG CON PHÁT HIỆN HÌNH ẢNH ===============
 class VisualDetection {
     process(visualData) {
         const targets = [];
         
-        // Giả lập quá trình phát hiện mục tiêu bằng hình ảnh
+        // Tối ưu hóa cho chế độ khóa nhanh
+        const minConfidence = visualData.gameState?.isFiring ? 0.75 : 0.85;
+        
         for (const entity of visualData.entities) {
-            if (entity.type === 'player' && entity.visible) {
+            if (entity.type === 'player' && entity.visible && entity.confidence >= minConfidence) {
                 targets.push({
                     id: entity.id,
                     position: entity.position,
-                    confidence: 0.9,
+                    confidence: entity.confidence,
                     type: 'player',
-                    team: entity.team
+                    team: entity.team,
+                    isAimingAtPlayer: entity.isAimingAtPlayer
                 });
             }
         }
@@ -1016,13 +1069,15 @@ class RadarDetection {
     process(radarData) {
         const targets = [];
         
-        // Giả lập phát hiện mục tiêu qua radar
+        // Tăng độ nhạy khi đang bắn
+        const minSize = radarData.gameState?.isFiring ? 3 : 5;
+        
         for (const blip of radarData.blips) {
-            if (blip.size > 5 && blip.movement > 0.1) {
+            if (blip.size > minSize && blip.movement > 0.05) {
                 targets.push({
                     id: `radar_${blip.id}`,
                     position: blip.position,
-                    confidence: 0.8,
+                    confidence: 0.85,
                     type: 'radar_target'
                 });
             }
@@ -1037,10 +1092,6 @@ class BulletPhysics {
     calculateBulletDrop(distance, bulletVelocity, gravity) {
         const time = distance / bulletVelocity;
         return 0.5 * gravity * time * time;
-    }
-    
-    calculateWindDrift(distance, windSpeed, bulletMass) {
-        return (windSpeed * distance) / (bulletMass * 100);
     }
 }
 
@@ -1066,24 +1117,14 @@ class TrajectoryCalculator {
 
 // =============== HỆ THỐNG CON DỰ ĐOÁN TÁC ĐỘNG ===============
 class ImpactPredictor {
-    predictImpact(projectile, target) {
+    willHitHead(predictedPos, target) {
+        const headPos = target.headHitbox;
         const distance = Math.sqrt(
-            Math.pow(projectile.position.x - target.position.x, 2) +
-            Math.pow(projectile.position.y - target.position.y, 2)
+            Math.pow(predictedPos.x - headPos.x, 2) +
+            Math.pow(predictedPos.y - headPos.y, 2)
         );
         
-        return distance < target.radius;
-    }
-    
-    calculateDamage(projectile, target, hitLocation) {
-        let damage = projectile.baseDamage;
-        
-        // Nhân hệ số vị trí trúng đạn
-        if (hitLocation === 'head') damage *= 2.5;
-        else if (hitLocation === 'body') damage *= 1.0;
-        else damage *= 0.7;
-        
-        return damage;
+        return distance <= (headPos.radius * 1.2);
     }
 }
 
