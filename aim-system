@@ -1,14 +1,14 @@
-// ================== HEADSHOT GOD v9.0 (OMEGA HEADSHOT SYSTEM) ==================
+// ================== HEADSHOT MASTER v8.0 (OMEGA HEADSHOT SYSTEM) ==================
 class OmegaHeadshotSystem {
     constructor() {
-        // Ultimate Configuration
+        // Hyper configuration
         this.lockStrength = 0.9999999;
         this.targetHistory = new Map();
-        this.sessionToken = `HS_GOD_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 12)}`;
+        this.sessionToken = `HS_ULTRA_${Date.now().toString(36)}_${Math.random().toString(36).substr(2, 12)}`;
         this.weaponProfiles = this.getPrecisionWeaponProfiles();
         this.aimPredictionLevel = 30;
         this.aimStabilizer = 0.99999;
-        this.headshotAccuracy = 1.0;
+        this.headshotAccuracy = 0.99999;
         this.dynamicHeadExpansion = this.calculateDynamicExpansion();
         this.maxHistory = 150;
         this.lockedHeadPosition = null;
@@ -18,13 +18,13 @@ class OmegaHeadshotSystem {
         this.instantLockEnabled = true;
         this.lockResponseTime = 0.008; // 8ms response time
         this.distanceBasedAimAssist = {
-            close: { strength: 0.98, expansion: 1.2, priority: 10 },
-            medium: { strength: 0.92, expansion: 1.6, priority: 9 },
-            far: { strength: 0.85, expansion: 2.2, priority: 8 },
-            sniper: { strength: 0.96, expansion: 1.0, priority: 12 }
+            close: { strength: 0.98, expansion: 1.5 },
+            medium: { strength: 0.92, expansion: 2.0 },
+            far: { strength: 0.85, expansion: 3.0 },
+            extreme: { strength: 0.78, expansion: 4.0 }
         };
         
-        // God Modules
+        // Enhanced modules
         this.targetDetector = new NeuralTargetDetector();
         this.autoAimSystem = new QuantumAimSystem();
         this.bulletTracker = new CurvedBulletTracker();
@@ -40,49 +40,54 @@ class OmegaHeadshotSystem {
         this.bulletBendingEngine = new BallisticCurveEngine();
         this.headPositionTracker = new HeadTrackingSystem();
         this.contextAnalyzer = new CombatContextProcessor();
-        this.headLockPriority = new HeadLockPrioritySystem(); // New Module
-        this.combatScenarioHandler = new CombatScenarioHandler(); // New Module
-        this.bulletStabilizer = new ProjectileStabilizer(); // New Module
-        this.dynamicDistanceAdjuster = new DynamicDistanceAdjuster(); // New Module
-        this.antiDetectionSystem = new StealthEnhancer(); // New Module
+        this.headshotGuaranteeSystem = new HeadshotGuaranteeSystem(); // NEW
+        this.antiDodgeSystem = new AntiDodgeSystem(); // NEW
+        this.headLockStabilizer = new HeadLockStabilizer(); // NEW
+        this.dynamicPrioritySystem = new DynamicPrioritySystem(); // NEW
     }
 
     process(body) {
         try {
-            const startTime = performance.now();
+            const startTime = Date.now();
             const data = JSON.parse(body);
             
-            // Enhanced combat context analysis
+            // Analyze combat context
             this.contextAnalyzer.processContext(data.gameState);
             
-            // Advanced performance optimization
+            // Optimize performance based on device
             this.performanceOptimizer.adaptiveAdjust(data.performanceState);
             
-            // Tactical analysis with scenario prediction
+            // Analyze combat situation with tactical awareness
             this.combatAnalyzer.tacticalAnalyze(data.gameState);
             
-            // Hyper lock activation with fire button
+            // Activate instant lock if fire button is pressed
             if (data.gameState?.isFiring && this.instantLockEnabled) {
                 this.triggerResponseSystem.activateHyperLock();
+                this.headLockStabilizer.activate(); // NEW: Stabilize head lock on fire
             }
             
-            // Enhanced neural target detection
+            // Detect enemies with neural network
             const detectedTargets = this.targetDetector.neuralDetect(data);
             data.targets = detectedTargets;
             
             if (detectedTargets.length > 0) {
-                // Priority target selection with threat analysis
-                const priorityTarget = this.selectPriorityTarget(detectedTargets, data.gameState);
+                // NEW: Dynamic priority system
+                const prioritizedTargets = this.dynamicPrioritySystem.analyzeTargets(
+                    detectedTargets, 
+                    data.gameState
+                );
                 
-                // Advanced head tracking
+                // Select priority target with threat prediction
+                const priorityTarget = this.selectPriorityTarget(prioritizedTargets, data.gameState);
+                
+                // Track head position with high precision
                 this.headPositionTracker.trackHead(priorityTarget);
                 
-                // Apply quantum aiming with head priority
+                // Apply quantum aiming
                 if (priorityTarget) {
-                    // Apply distance-based adjustments
-                    this.dynamicDistanceAdjuster.adjustForDistance(priorityTarget.distance);
+                    // NEW: Anti-dodge prediction
+                    this.antiDodgeSystem.predictDodge(priorityTarget, data.gameState);
                     
-                    // Enhanced quantum acquisition
                     const aimData = this.autoAimSystem.quantumAcquire(
                         priorityTarget, 
                         data.currentAimPosition,
@@ -92,28 +97,30 @@ class OmegaHeadshotSystem {
                         this.triggerResponseSystem.isHyperLockActive()
                     );
                     
-                    // Apply head lock priority
-                    data.aimPosition = this.headLockPriority.applyHeadPriority(
+                    // NEW: Head lock stabilization
+                    data.aimPosition = this.headLockStabilizer.stabilize(
                         aimData.position, 
-                        priorityTarget.headHitbox,
-                        priorityTarget.distance
-                    );
-                    
-                    // Stabilize aim with advanced algorithms
-                    data.aimPosition = this.aimLockController.stabilizeAim(
-                        data.aimPosition, 
-                        data.currentAimPosition
+                        data.currentAimPosition,
+                        priorityTarget.headHitbox
                     );
                     
                     // Apply headshot lock with distance-based adjustments
                     if (this.shouldLockTarget(aimData, data.gameState, priorityTarget)) {
                         data.autoFire = true;
-                        data.fireMode = "god_headshot_lock";
+                        data.fireMode = "quantum_headshot_lock";
                         
-                        // Calculate curved bullet trajectory with stabilization
-                        data.bulletTrajectory = this.bulletTracker.calculateCurvedTrajectory(
+                        // NEW: Headshot guarantee system
+                        const guaranteedHeadshot = this.headshotGuaranteeSystem.guaranteeHit(
                             data.playerPosition,
                             data.aimPosition,
+                            priorityTarget,
+                            data.currentWeapon
+                        );
+                        
+                        // Calculate curved bullet trajectory
+                        data.bulletTrajectory = this.bulletTracker.calculateCurvedTrajectory(
+                            data.playerPosition,
+                            guaranteedHeadshot.position,
                             priorityTarget,
                             data.currentWeapon,
                             data.gameState,
@@ -121,19 +128,13 @@ class OmegaHeadshotSystem {
                             this.bulletBendingEngine
                         );
                         
-                        // Apply projectile stabilization
-                        data.bulletTrajectory = this.bulletStabilizer.stabilizeProjectile(
-                            data.bulletTrajectory,
-                            priorityTarget,
-                            data.currentWeapon
-                        );
-                        
                         // AI-powered movement prediction
                         if (this.aimLockController.isTargetMoving(priorityTarget)) {
                             const predictedHead = this.targetPredictor.predictHeadPosition(
                                 priorityTarget,
                                 data.bulletTrajectory.travelTime,
-                                this.movementAnalyzer
+                                this.movementAnalyzer,
+                                this.antiDodgeSystem // NEW: Include dodge prediction
                             );
                             data.aimPosition = this.aimLockController.quantumAdjust(
                                 data.aimPosition,
@@ -143,7 +144,7 @@ class OmegaHeadshotSystem {
                         }
                     }
                     
-                    // Smart recoil compensation with distance factors
+                    // Smart recoil compensation
                     if (data.gameState?.isFiring) {
                         data.aimPosition = this.recoilCompensator.smartCompensate(
                             data.aimPosition,
@@ -156,29 +157,26 @@ class OmegaHeadshotSystem {
                     this.lastLockTime = Date.now();
                 }
                 
-                // Handle combat scenarios
-                this.combatScenarioHandler.handleScenario(data, priorityTarget, this.contextAnalyzer);
-                
                 // Advanced stealth concealment
                 this.stealthModule.ghostConceal(data, this.contextAnalyzer);
-                this.antiDetectionSystem.applyStealth(data);
             }
             
-            // Add god system metadata
+            // Add system metadata
             data.aimSystem = this.getSystemMetadata(startTime);
             return JSON.stringify(data);
         } catch (e) {
-            console.error("[GOD SYSTEM] Divine Error:", e.message);
+            console.error("[OMEGA SYSTEM] Critical Error:", e.message);
             return body;
         }
     }
     
     calculateDynamicExpansion() {
         return {
-            close: 1.2,
-            medium: 1.6,
-            far: 2.2,
-            sniper: 0.8
+            close: 1.5,
+            medium: 2.0,
+            far: 3.0,
+            extreme: 4.0,
+            sniper: 1.0
         };
     }
     
@@ -190,12 +188,12 @@ class OmegaHeadshotSystem {
         if (aimData.lockStrength >= 0.995) return true;
         
         // Lock in high threat situations
-        if (gameState.playerHealth < 25) return true;
+        if (gameState.playerHealth < 30) return true;
         
         // Lock for priority targets
         if (target.priority >= 9) return true;
         
-        // Lock when head is visible
+        // NEW: Lock when head is visible
         if (target.headVisibility > 0.8) return true;
         
         return false;
@@ -211,9 +209,6 @@ class OmegaHeadshotSystem {
         const combatState = this.combatAnalyzer.getCombatState();
         
         for (const target of targets) {
-            // Apply head visibility factor
-            if (target.headVisibility < 0.3) continue;
-            
             const threatScore = this.calculateThreatScore(target, playerHealth, combatState);
             if (threatScore > maxThreat) {
                 maxThreat = threatScore;
@@ -228,7 +223,7 @@ class OmegaHeadshotSystem {
     applyTacticalPriority(primaryTarget, allTargets) {
         // Check for immediate threats
         const immediateThreats = allTargets.filter(t => 
-            t.distance < 8 && t.isAimingAtPlayer && t.headVisibility > 0.5
+            t.distance < 10 && t.isAimingAtPlayer && t.headVisibility > 0.7
         );
         
         if (immediateThreats.length > 0) {
@@ -238,15 +233,15 @@ class OmegaHeadshotSystem {
         }
         
         // Check for snipers
-        const snipers = allTargets.filter(t => t.weaponType === 'sniper' && t.headVisibility > 0.4);
+        const snipers = allTargets.filter(t => t.weaponType === 'sniper' && t.headVisibility > 0.6);
         if (snipers.length > 0) {
             return snipers.sort((a, b) => a.distance - b.distance)[0];
         }
         
-        // Check for exposed heads
-        const exposedTargets = allTargets.filter(t => t.headVisibility > 0.9);
+        // NEW: Prioritize targets with exposed heads
+        const exposedTargets = allTargets.filter(t => t.headVisibility > 0.8);
         if (exposedTargets.length > 0) {
-            return exposedTargets.sort((a, b) => a.distance - b.distance)[0];
+            return exposedTargets.sort((a, b) => b.priority - a.priority)[0];
         }
         
         return primaryTarget;
@@ -256,38 +251,39 @@ class OmegaHeadshotSystem {
         let score = 0;
         
         // Distance factor with non-linear scaling
-        const distanceFactor = 1 - Math.min(1, target.distance / 300);
-        score += Math.pow(distanceFactor, 2) * 100;
-        
-        // Head visibility multiplier
-        score *= (1 + target.headVisibility);
+        const distanceFactor = 1 - Math.min(1, target.distance / 400);
+        score += Math.pow(distanceFactor, 2) * 120;
         
         // Aiming at player
         if (target.isAimingAtPlayer) score += 95;
         
         // Low health target bonus
-        if (target.health < 25) score += 75;
+        if (target.health < 30) score += 75;
         
         // Weapon danger with multipliers
         const weaponDanger = {
-            sniper: { close: 75, medium: 95, far: 110 },
-            shotgun: { close: 110, medium: 85, far: 35 },
-            rifle: { close: 85, medium: 90, far: 80 },
-            smg: { close: 95, medium: 75, far: 45 },
-            pistol: { close: 65, medium: 55, far: 35 }
+            sniper: { close: 80, medium: 95, far: 100, extreme: 100 },
+            shotgun: { close: 100, medium: 85, far: 40, extreme: 30 },
+            rifle: { close: 85, medium: 90, far: 80, extreme: 75 },
+            smg: { close: 95, medium: 75, far: 45, extreme: 35 },
+            pistol: { close: 65, medium: 55, far: 35, extreme: 25 }
         };
         
-        const range = target.distance < 15 ? 'close' : 
-                     target.distance < 40 ? 'medium' : 'far';
+        const range = target.distance < 20 ? 'close' : 
+                     target.distance < 50 ? 'medium' : 
+                     target.distance < 100 ? 'far' : 'extreme';
         
-        const dangerProfile = weaponDanger[target.weaponType] || { close: 55, medium: 55, far: 55 };
+        const dangerProfile = weaponDanger[target.weaponType] || { close: 55, medium: 55, far: 55, extreme: 50 };
         score += dangerProfile[range];
         
         // Movement threat analysis
         score += this.movementAnalyzer.assessMovementThreat(target);
         
+        // Head visibility bonus
+        score += target.headVisibility * 40;
+        
         // Critical player health multiplier
-        if (playerHealth < 25) {
+        if (playerHealth < 30) {
             score *= 1.8;
         }
         
@@ -301,8 +297,8 @@ class OmegaHeadshotSystem {
     
     getSystemMetadata(startTime) {
         return {
-            version: "9.0",
-            mode: "god_headshot_lock",
+            version: "8.0",
+            mode: "quantum_headshot_lock",
             features: {
                 instantLock: this.instantLockEnabled,
                 headshotExpansion: this.dynamicHeadExpansion,
@@ -310,12 +306,12 @@ class OmegaHeadshotSystem {
                 guaranteedHeadshot: true,
                 bulletBending: true,
                 neuralDetection: true,
-                headPriority: true,
-                projectileStabilization: true,
-                dynamicDistance: true
+                headLockStabilizer: true, // NEW
+                antiDodgeSystem: true, // NEW
+                headshotGuarantee: true // NEW
             },
             performance: {
-                processingTime: performance.now() - startTime,
+                processingTime: Date.now() - startTime,
                 fps: this.performanceOptimizer.currentFPS,
                 aiLoad: this.performanceOptimizer.aiWorkload
             },
@@ -324,7 +320,7 @@ class OmegaHeadshotSystem {
                 targetId: this.lastTargetId,
                 instantLockActive: this.triggerResponseSystem.isHyperLockActive(),
                 distanceBasedAssist: this.aimLockController.currentDistanceProfile,
-                headVisibility: this.headLockPriority.currentHeadVisibility
+                headLockStability: this.headLockStabilizer.stabilityLevel // NEW
             }
         };
     }
@@ -332,23 +328,23 @@ class OmegaHeadshotSystem {
     getPrecisionWeaponProfiles() {
         return {
             default: {
-                bulletVelocity: 390,
+                bulletVelocity: 380,
                 stability: 0.98,
                 horizontalRecoil: 0.025,
                 verticalRecoil: 0.05,
                 aimAssistFactor: 1.05,
-                headshotPriority: 9.8
+                headshotPriority: 9.7
             },
             sniper: {
-                bulletVelocity: 1000,
+                bulletVelocity: 980,
                 stability: 0.997,
                 horizontalRecoil: 0.004,
                 verticalRecoil: 0.08,
-                aimAssistFactor: 1.4,
-                headshotPriority: 10.5
+                aimAssistFactor: 1.35,
+                headshotPriority: 10
             },
             ak47: {
-                bulletVelocity: 380,
+                bulletVelocity: 370,
                 stability: 0.95,
                 horizontalRecoil: 0.05,
                 verticalRecoil: 0.10,
@@ -356,353 +352,329 @@ class OmegaHeadshotSystem {
                 headshotPriority: 9.2
             },
             m4a1: {
-                bulletVelocity: 420,
+                bulletVelocity: 410,
                 stability: 0.97,
                 horizontalRecoil: 0.035,
                 verticalRecoil: 0.068,
-                aimAssistFactor: 1.2,
-                headshotPriority: 9.9
+                aimAssistFactor: 1.18,
+                headshotPriority: 9.8
             },
             shotgun: {
-                bulletVelocity: 330,
+                bulletVelocity: 320,
                 stability: 0.90,
                 horizontalRecoil: 0.058,
                 verticalRecoil: 0.11,
                 aimAssistFactor: 0.95,
-                headshotPriority: 8.8
+                headshotPriority: 8.7
             },
             awm: {
-                bulletVelocity: 1050,
+                bulletVelocity: 1020,
                 stability: 0.998,
-                horizontalRecoil: 0.003,
-                verticalRecoil: 0.08,
-                aimAssistFactor: 1.45,
-                headshotPriority: 10.7
+                horizontalRecoil: 0.0035,
+                verticalRecoil: 0.078,
+                aimAssistFactor: 1.38,
+                headshotPriority: 10
             },
             groza: {
-                bulletVelocity: 400,
+                bulletVelocity: 390,
                 stability: 0.94,
                 horizontalRecoil: 0.048,
-                verticalRecoil: 0.108,
+                verticalRecoil: 0.107,
                 aimAssistFactor: 1.08,
                 headshotPriority: 9.4
             },
             mp40: {
-                bulletVelocity: 360,
+                bulletVelocity: 350,
                 stability: 0.92,
                 horizontalRecoil: 0.042,
-                verticalRecoil: 0.075,
+                verticalRecoil: 0.088,
                 aimAssistFactor: 1.12,
-                headshotPriority: 9.6
+                headshotPriority: 9.1
             }
         };
     }
 }
 
-// ================== HEAD LOCK PRIORITY SYSTEM ==================
-class HeadLockPrioritySystem {
+// ================== NEW: HEADSHOT GUARANTEE SYSTEM ==================
+class HeadshotGuaranteeSystem {
     constructor() {
-        this.headPriorityFactor = 0.99;
-        this.minHeadDistance = 0.1;
-        this.maxBodyDistance = 1.5;
-        this.currentHeadVisibility = 1.0;
-        this.headLockThreshold = 0.85;
+        this.hitProbability = 0.9999;
+        this.minHeadSize = 0.3;
+        this.maxHeadSize = 0.5;
         this.distanceFactors = {
-            close: { priority: 1.3, lockStrength: 1.2 },
-            medium: { priority: 1.1, lockStrength: 1.0 },
-            far: { priority: 0.95, lockStrength: 0.9 }
+            close: 1.2,
+            medium: 1.0,
+            far: 0.9,
+            extreme: 0.85
         };
     }
     
-    applyHeadPriority(aimPosition, headHitbox, distance) {
-        // Calculate distance to head
-        const headDistance = Math.sqrt(
-            Math.pow(aimPosition.x - headHitbox.x, 2) +
-            Math.pow(aimPosition.y - headHitbox.y, 2)
+    guaranteeHit(playerPos, aimPos, target, weaponType) {
+        const headCenter = this.calculateHeadCenter(target.headHitbox);
+        const distance = this.calculateDistance(playerPos, target.position);
+        const range = this.getRangeCategory(distance);
+        const sizeFactor = this.distanceFactors[range];
+        
+        // Calculate guaranteed hit position
+        const guaranteedPos = {
+            x: headCenter.x,
+            y: headCenter.y,
+            z: headCenter.z
+        };
+        
+        // Apply weapon-specific adjustments
+        if (weaponType === 'shotgun') {
+            // Shotguns benefit from center mass targeting
+            guaranteedPos.y -= 0.05;
+        } else if (weaponType === 'sniper') {
+            // Snipers require precise head center
+            guaranteedPos.y += 0.02;
+        }
+        
+        // Add movement compensation
+        if (target.movementSpeed > 5) {
+            guaranteedPos.x += target.velocity.x * 0.18;
+            guaranteedPos.z += target.velocity.z * 0.18;
+        }
+        
+        return {
+            position: guaranteedPos,
+            confidence: this.hitProbability * sizeFactor
+        };
+    }
+    
+    calculateHeadCenter(headHitbox) {
+        return {
+            x: headHitbox.x,
+            y: headHitbox.y,
+            z: headHitbox.z
+        };
+    }
+    
+    calculateDistance(pos1, pos2) {
+        return Math.sqrt(
+            Math.pow(pos1.x - pos2.x, 2) +
+            Math.pow(pos1.y - pos2.y, 2) +
+            Math.pow(pos1.z - pos2.z, 2)
+        );
+    }
+    
+    getRangeCategory(distance) {
+        if (distance < 15) return 'close';
+        if (distance < 50) return 'medium';
+        if (distance < 120) return 'far';
+        return 'extreme';
+    }
+}
+
+// ================== NEW: ANTI DODGE SYSTEM ==================
+class AntiDodgeSystem {
+    constructor() {
+        this.dodgePatterns = {
+            strafe: { prediction: 0.85, reaction: 0.92 },
+            jump: { prediction: 0.75, reaction: 0.88 },
+            crouch: { prediction: 0.90, reaction: 0.95 },
+            slide: { prediction: 0.80, reaction: 0.85 }
+        };
+        this.dodgeHistory = new Map();
+        this.dodgePrediction = null;
+    }
+    
+    predictDodge(target, gameState) {
+        if (!target.isPlayerControlled) {
+            this.dodgePrediction = null;
+            return;
+        }
+        
+        const history = this.getDodgeHistory(target.id);
+        const lastAction = history.actions.length > 0 ? history.actions[history.actions.length - 1] : null;
+        
+        // Predict dodge based on combat situation
+        if (gameState.playerIsAimingAtTarget && target.health < 50) {
+            const dodgeProbability = this.calculateDodgeProbability(target, gameState);
+            
+            if (dodgeProbability > 0.7) {
+                const dodgeType = this.predictDodgeType(target, lastAction);
+                this.dodgePrediction = {
+                    type: dodgeType,
+                    probability: dodgeProbability,
+                    timestamp: Date.now()
+                };
+                return;
+            }
+        }
+        
+        this.dodgePrediction = null;
+    }
+    
+    getDodgeHistory(targetId) {
+        if (!this.dodgeHistory.has(targetId)) {
+            this.dodgeHistory.set(targetId, {
+                actions: [],
+                timestamps: [],
+                success: []
+            });
+        }
+        return this.dodgeHistory.get(targetId);
+    }
+    
+    calculateDodgeProbability(target, gameState) {
+        let probability = 0;
+        
+        // Health-based dodge probability
+        if (target.health < 30) probability += 0.6;
+        else if (target.health < 60) probability += 0.4;
+        
+        // Player threat level
+        if (gameState.playerIsAimingAtTarget) probability += 0.3;
+        if (gameState.playerIsShooting) probability += 0.4;
+        
+        // Target behavior
+        if (target.isMovingErratically) probability += 0.25;
+        if (target.isInCover) probability -= 0.2;
+        
+        return Math.min(0.95, probability);
+    }
+    
+    predictDodgeType(target, lastAction) {
+        // Simple pattern: alternate between dodge types
+        const dodgeTypes = Object.keys(this.dodgePatterns);
+        
+        if (!lastAction) {
+            return dodgeTypes[Math.floor(Math.random() * dodgeTypes.length)];
+        }
+        
+        const lastIndex = dodgeTypes.indexOf(lastAction);
+        const nextIndex = (lastIndex + 1) % dodgeTypes.length;
+        return dodgeTypes[nextIndex];
+    }
+    
+    getCurrentDodgePrediction() {
+        return this.dodgePrediction;
+    }
+}
+
+// ================== NEW: HEAD LOCK STABILIZER ==================
+class HeadLockStabilizer {
+    constructor() {
+        this.stabilityLevel = 0;
+        this.maxStability = 1.0;
+        this.activationTime = 0;
+        this.stabilizationFactors = {
+            close: 0.98,
+            medium: 0.97,
+            far: 0.95,
+            extreme: 0.92
+        };
+    }
+    
+    activate() {
+        this.stabilityLevel = this.maxStability;
+        this.activationTime = Date.now();
+    }
+    
+    stabilize(currentAim, previousAim, headHitbox) {
+        if (this.stabilityLevel < 0.1) return currentAim;
+        
+        const headCenter = {
+            x: headHitbox.x,
+            y: headHitbox.y,
+            z: headHitbox.z
+        };
+        
+        // Calculate distance to head center
+        const distanceToHead = Math.sqrt(
+            Math.pow(currentAim.x - headCenter.x, 2) +
+            Math.pow(currentAim.y - headCenter.y, 2)
         );
         
-        // Get distance factor
-        const range = distance < 15 ? 'close' : 
-                     distance < 45 ? 'medium' : 'far';
-        const distFactor = this.distanceFactors[range];
-        
-        // Calculate head visibility
-        this.currentHeadVisibility = this.calculateHeadVisibility(headHitbox);
-        
-        // If head is visible and within range, prioritize head
-        if (this.currentHeadVisibility > this.headLockThreshold && 
-            headDistance < this.maxBodyDistance * distFactor.priority) {
-            
-            const moveFactor = Math.min(1, headDistance / this.minHeadDistance);
-            const priorityStrength = this.headPriorityFactor * distFactor.lockStrength;
-            
-            // Move towards head center
-            return {
-                x: aimPosition.x + (headHitbox.x - aimPosition.x) * moveFactor * priorityStrength,
-                y: aimPosition.y + (headHitbox.y - aimPosition.y) * moveFactor * priorityStrength,
-                z: aimPosition.z
-            };
-        }
-        
-        return aimPosition;
-    }
-    
-    calculateHeadVisibility(headHitbox) {
-        // Simplified visibility calculation (would use game data in real implementation)
-        return 0.9 + (Math.random() * 0.1);
-    }
-}
-
-// ================== PROJECTILE STABILIZER ==================
-class ProjectileStabilizer {
-    constructor() {
-        this.stabilizationFactor = 0.98;
-        this.maxDeviation = 0.05;
-        this.distanceFactors = {
-            close: 1.1,
-            medium: 1.0,
-            far: 0.9
-        };
-    }
-    
-    stabilizeProjectile(trajectory, target, weaponType) {
-        const range = target.distance < 15 ? 'close' : 
-                     target.distance < 45 ? 'medium' : 'far';
-        const distFactor = this.distanceFactors[range];
-        
-        // Calculate deviation based on movement
-        const movementDeviation = this.calculateMovementDeviation(target);
+        // Calculate stabilization factor based on distance
+        const stabilityFactor = Math.max(0.7, 1 - (distanceToHead / (headHitbox.radius * 2)));
         
         // Apply stabilization
-        const stabilizedEnd = {
-            x: trajectory.end.x + (movementDeviation.x * this.stabilizationFactor * distFactor),
-            y: trajectory.end.y + (movementDeviation.y * this.stabilizationFactor * distFactor),
-            z: trajectory.end.z
+        const stabilizedAim = {
+            x: headCenter.x * stabilityFactor + currentAim.x * (1 - stabilityFactor),
+            y: headCenter.y * stabilityFactor + currentAim.y * (1 - stabilityFactor),
+            z: headCenter.z * 0.3 + currentAim.z * 0.7
         };
         
-        // Ensure trajectory stays within max deviation
-        const finalDeviation = {
-            x: Math.max(-this.maxDeviation, Math.min(this.maxDeviation, stabilizedEnd.x - trajectory.end.x)),
-            y: Math.max(-this.maxDeviation, Math.min(this.maxDeviation, stabilizedEnd.y - trajectory.end.y))
-        };
+        // Gradually reduce stability
+        this.stabilityLevel *= 0.96;
         
-        return {
-            ...trajectory,
-            end: {
-                x: trajectory.end.x + finalDeviation.x,
-                y: trajectory.end.y + finalDeviation.y,
-                z: trajectory.end.z
-            },
-            stabilizationApplied: true,
-            deviation: finalDeviation
-        };
-    }
-    
-    calculateMovementDeviation(target) {
-        // Calculate deviation based on target velocity
-        return {
-            x: target.velocity.x * 0.025,
-            y: target.velocity.y * 0.015
-        };
+        return stabilizedAim;
     }
 }
 
-// ================== DYNAMIC DISTANCE ADJUSTER ==================
-class DynamicDistanceAdjuster {
-    constructor() {
-        this.currentProfile = "medium";
-        this.profiles = {
-            close: {
-                headExpansion: 1.2,
-                lockStrength: 1.25,
-                recoilFactor: 0.9,
-                aimSpeed: 0.28
-            },
-            medium: {
-                headExpansion: 1.6,
-                lockStrength: 1.0,
-                recoilFactor: 1.0,
-                aimSpeed: 0.18
-            },
-            far: {
-                headExpansion: 2.2,
-                lockStrength: 0.85,
-                recoilFactor: 1.1,
-                aimSpeed: 0.12
-            },
-            sniper: {
-                headExpansion: 0.8,
-                lockStrength: 1.35,
-                recoilFactor: 0.8,
-                aimSpeed: 0.15
-            }
-        };
-    }
-    
-    adjustForDistance(distance) {
-        if (distance < 10) {
-            this.currentProfile = "close";
-        } else if (distance < 35) {
-            this.currentProfile = "medium";
-        } else if (distance < 70) {
-            this.currentProfile = "far";
-        } else {
-            this.currentProfile = "sniper";
-        }
-        
-        // Apply adjustments to global systems
-        OmegaHeadshotSystem.dynamicHeadExpansion = this.profiles[this.currentProfile].headExpansion;
-        OmegaHeadshotSystem.lockStrength = this.profiles[this.currentProfile].lockStrength;
-    }
-}
-
-// ================== STEALTH ENHANCER ==================
-class StealthEnhancer {
-    constructor() {
-        this.stealthLevel = 0.95;
-        this.behaviorPatterns = [
-            { type: 'randomOffset', max: 0.15 },
-            { type: 'timingVariation', max: 25 },
-            { type: 'imperfectTracking', chance: 0.05 }
-        ];
-        this.lastPatternChange = 0;
-    }
-    
-    applyStealth(gameData) {
-        // Change pattern every 30 seconds
-        if (Date.now() - this.lastPatternChange > 30000) {
-            this.randomizePatterns();
-            this.lastPatternChange = Date.now();
-        }
-        
-        // Apply current stealth patterns
-        this.applyPatterns(gameData);
-    }
-    
-    randomizePatterns() {
-        this.behaviorPatterns.forEach(pattern => {
-            if (pattern.type === 'randomOffset') {
-                pattern.current = Math.random() * pattern.max;
-            } else if (pattern.type === 'timingVariation') {
-                pattern.current = Math.random() * pattern.max;
-            }
+// ================== NEW: DYNAMIC PRIORITY SYSTEM ==================
+class DynamicPrioritySystem {
+    analyzeTargets(targets, gameState) {
+        // First pass: calculate base priority
+        targets.forEach(target => {
+            target.basePriority = this.calculateBasePriority(target, gameState);
         });
-    }
-    
-    applyPatterns(gameData) {
-        if (!gameData.aimPosition) return;
         
-        this.behaviorPatterns.forEach(pattern => {
-            switch (pattern.type) {
-                case 'randomOffset':
-                    gameData.aimPosition.x += (Math.random() - 0.5) * pattern.current * 2;
-                    gameData.aimPosition.y += (Math.random() - 0.5) * pattern.current;
-                    break;
-                    
-                case 'timingVariation':
-                    gameData.responseTime += pattern.current;
-                    break;
-                    
-                case 'imperfectTracking':
-                    if (Math.random() < pattern.chance) {
-                        gameData.aimPosition.x += (Math.random() - 0.5) * 0.5;
-                        gameData.aimPosition.y += (Math.random() - 0.5) * 0.3;
-                    }
-                    break;
-            }
+        // Second pass: apply situational modifiers
+        targets.forEach(target => {
+            target.priority = this.applySituationalModifiers(target, targets, gameState);
         });
-    }
-}
-
-// ================== COMBAT SCENARIO HANDLER ==================
-class CombatScenarioHandler {
-    constructor() {
-        this.scenarios = {
-            closeCombat: { priority: 'head', aggression: 0.9, aimSpeed: 1.3 },
-            sniperDuel: { priority: 'head', aggression: 0.6, aimSpeed: 0.9 },
-            multiTarget: { priority: 'threat', aggression: 0.8, aimSpeed: 1.1 },
-            lowHealth: { priority: 'survival', aggression: 1.0, aimSpeed: 1.4 },
-            movingTarget: { priority: 'prediction', aggression: 0.85, aimSpeed: 1.0 }
-        };
-        this.currentScenario = "closeCombat";
+        
+        // Sort by final priority
+        return targets.sort((a, b) => b.priority - a.priority);
     }
     
-    handleScenario(gameData, target, contextAnalyzer) {
-        // Determine current scenario
-        this.detectScenario(gameData, target, contextAnalyzer);
+    calculateBasePriority(target, gameState) {
+        let priority = 0;
         
-        // Apply scenario-specific adjustments
-        this.applyScenarioAdjustments(gameData);
+        // Threat factors
+        priority += target.threatLevel * 25;
+        
+        // Distance factor (closer = higher priority)
+        priority += (1 - Math.min(1, target.distance / 300)) * 30;
+        
+        // Visibility factor
+        priority += target.headVisibility * 20;
+        
+        // Weapon danger
+        if (target.weaponType === 'sniper') priority += 15;
+        if (target.weaponType === 'shotgun' && target.distance < 15) priority += 20;
+        
+        return priority;
     }
     
-    detectScenario(gameData, target, contextAnalyzer) {
-        const gameState = gameData.gameState;
+    applySituationalModifiers(target, allTargets, gameState) {
+        let priority = target.basePriority;
         
-        // Close combat scenario
-        if (target.distance < 10 && gameState.enemyCount > 0) {
-            this.currentScenario = "closeCombat";
-            return;
+        // Immediate threat modifier
+        if (target.isAimingAtPlayer && target.distance < 20) {
+            priority *= 1.5;
         }
         
-        // Sniper duel scenario
-        if (target.weaponType.includes('sniper') && target.distance > 60) {
-            this.currentScenario = "sniperDuel";
-            return;
-        }
-        
-        // Multi-target scenario
-        if (gameState.enemyCount > 2) {
-            this.currentScenario = "multiTarget";
-            return;
-        }
-        
-        // Low health scenario
+        // Critical health modifier
         if (gameState.playerHealth < 30) {
-            this.currentScenario = "lowHealth";
-            return;
+            if (target.distance < 15) priority *= 1.8;
+            else priority *= 1.2;
         }
         
-        // Moving target scenario
-        if (target.movementSpeed > 5) {
-            this.currentScenario = "movingTarget";
-            return;
+        // Sniper threat modifier
+        if (target.weaponType === 'sniper' && target.distance > 80) {
+            priority *= 1.6;
         }
         
-        // Default scenario
-        this.currentScenario = "closeCombat";
-    }
-    
-    applyScenarioAdjustments(gameData) {
-        const scenario = this.scenarios[this.currentScenario];
-        
-        // Apply aggression factor
-        if (gameData.aimPosition) {
-            gameData.aimPosition.x *= scenario.aggression;
-            gameData.aimPosition.y *= scenario.aggression;
+        // Flanking modifier
+        if (target.isFlanking) {
+            priority *= 1.4;
         }
         
-        // Apply aim speed
-        OmegaHeadshotSystem.lockResponseTime = 0.008 * scenario.aimSpeed;
-        
-        // Apply priority strategy
-        switch (scenario.priority) {
-            case 'head':
-                OmegaHeadshotSystem.headshotAccuracy = 1.0;
-                break;
-            case 'threat':
-                OmegaHeadshotSystem.headshotAccuracy = 0.98;
-                break;
-            case 'survival':
-                OmegaHeadshotSystem.headshotAccuracy = 0.99;
-                break;
-            case 'prediction':
-                OmegaHeadshotSystem.headshotAccuracy = 0.97;
-                break;
+        // Low health target modifier
+        if (target.health < 40) {
+            priority *= 1.3; // Prioritize weak targets
         }
+        
+        return Math.min(100, priority);
     }
 }
 
-// ================== ENHANCED NEURAL TARGET DETECTOR ==================
+// ================== NEURAL TARGET DETECTOR (UPGRADED) ==================
 class NeuralTargetDetector {
     constructor() {
         this.detectionAlgorithms = {
@@ -710,54 +682,51 @@ class NeuralTargetDetector {
             radar: new QuantumRadar(),
             predictive: new AIPredictiveTargeting(),
             thermal: new ThermalSignatureDetection(),
-            sonar: new SonicDetection() // New detection method
+            skeletal: new SkeletalTrackingSystem() // NEW
         };
-        this.targetConfidenceThreshold = 0.97; // Increased confidence
-        this.minDetectionSize = 3; // Smaller target detection
+        this.targetConfidenceThreshold = 0.97; // Increased
+        this.minDetectionSize = 4; // Smaller
         this.expansionSystem = new HeadExpansionSystem();
-        this.headFocusFactor = 1.05; // Enhanced head focus
+        this.headFocusBoost = 1.3; // NEW
     }
     
     neuralDetect(gameData) {
         const targets = [];
         
-        // Enhanced deep vision detection
+        // Deep vision detection
         if (gameData.visualData) {
             const visualTargets = this.detectionAlgorithms.visual.deepProcess(gameData.visualData);
             targets.push(...visualTargets);
         }
         
-        // Quantum radar detection with head focus
+        // Quantum radar detection
         if (gameData.radarData) {
             const radarTargets = this.detectionAlgorithms.radar.quantumScan(gameData.radarData);
             targets.push(...radarTargets);
         }
         
-        // AI predictive targeting with head prediction
+        // AI predictive targeting
         if (gameData.gameState) {
             const predictiveTargets = this.detectionAlgorithms.predictive.aiFindTargets(gameData);
             targets.push(...predictiveTargets);
         }
         
-        // Thermal signature detection with head focus
+        // Thermal signature detection
         if (gameData.thermalData) {
             const thermalTargets = this.detectionAlgorithms.thermal.detectHeatSignatures(gameData.thermalData);
             targets.push(...thermalTargets);
         }
         
-        // Sonic detection for obscured targets
-        if (gameData.soundData) {
-            const sonicTargets = this.detectionAlgorithms.sonar.detectFromSound(gameData.soundData);
-            targets.push(...sonicTargets);
+        // NEW: Skeletal tracking
+        if (gameData.skeletalData) {
+            const skeletalTargets = this.detectionAlgorithms.skeletal.trackBodies(gameData.skeletalData);
+            targets.push(...skeletalTargets);
         }
         
-        // Filter by confidence and head visibility
-        const filteredTargets = targets.filter(t => 
-            t.confidence >= this.targetConfidenceThreshold && 
-            t.headVisibility > 0.3
-        );
+        // Filter by confidence
+        const filteredTargets = targets.filter(t => t.confidence >= this.targetConfidenceThreshold);
         
-        // Merge duplicates with AI and head focus
+        // Merge duplicates with AI
         const mergedTargets = this.mergeTargetsAI(filteredTargets);
         
         // Enhance target data with head focus
@@ -766,30 +735,196 @@ class NeuralTargetDetector {
         );
     }
     
-    // ... (existing methods with enhanced head focus) ...
+    mergeTargetsAI(targets) {
+        const merged = [];
+        const positionTolerance = 0.5; // Tighter tolerance
+        
+        for (const target of targets) {
+            let existing = null;
+            let minDistance = Infinity;
+            
+            for (const mergedTarget of merged) {
+                const distance = this.calculateDistance(
+                    target.position, 
+                    mergedTarget.position
+                );
+                
+                if (distance < positionTolerance && distance < minDistance) {
+                    existing = mergedTarget;
+                    minDistance = distance;
+                }
+            }
+            
+            if (existing) {
+                // AI-powered data fusion
+                existing.confidence = Math.min(1, (existing.confidence + target.confidence) * 0.88);
+                
+                // Position fusion with velocity weighting
+                const weight = target.confidence / (existing.confidence + target.confidence);
+                existing.position = {
+                    x: existing.position.x * (1-weight) + target.position.x * weight,
+                    y: existing.position.y * (1-weight) + target.position.y * weight,
+                    z: existing.position.z * (1-weight) + target.position.z * weight
+                };
+                
+                // Head visibility fusion
+                if (target.headVisibility) {
+                    existing.headVisibility = Math.max(
+                        existing.headVisibility || 0, 
+                        target.headVisibility
+                    );
+                }
+                
+                // Merge additional properties with priority
+                Object.keys(target).forEach(key => {
+                    if (!existing[key] || key === 'priority') {
+                        existing[key] = target[key];
+                    }
+                });
+            } else {
+                merged.push({...target});
+            }
+        }
+        
+        return merged;
+    }
+    
+    enhanceTarget(target, playerPosition) {
+        // Calculate precise distance
+        target.distance = this.calculateDistance(target.position, playerPosition);
+        
+        // Calculate head hitbox with dynamic expansion
+        target.headHitbox = this.expansionSystem.calculateDynamicHeadHitbox(target);
+        
+        // NEW: Calculate head visibility
+        target.headVisibility = this.calculateHeadVisibility(target);
+        
+        // Calculate threat level with movement analysis
+        target.priority = this.calculateThreatLevel(target);
+        
+        // Add movement prediction data
+        target.movementPrediction = this.predictMovementPattern(target);
+        
+        return target;
+    }
+    
+    calculateDistance(pos1, pos2) {
+        return Math.sqrt(
+            Math.pow(pos1.x - pos2.x, 2) +
+            Math.pow(pos1.y - pos2.y, 2) +
+            Math.pow(pos1.z - pos2.z, 2)
+        );
+    }
+    
+    calculateHeadVisibility(target) {
+        if (!target.visibilityInfo) return 1.0;
+        
+        // Calculate head visibility based on obstructions
+        let visibility = 1.0;
+        
+        if (target.visibilityInfo.headObstructed) {
+            visibility -= 0.4;
+        }
+        
+        if (target.visibilityInfo.bodyObstructed) {
+            visibility -= 0.2;
+        }
+        
+        // Environmental factors
+        if (target.isInSmoke) {
+            visibility -= 0.3;
+        }
+        
+        return Math.max(0.1, visibility);
+    }
+    
+    calculateThreatLevel(target) {
+        let threat = 0;
+        
+        // Weapon danger with distance modifiers
+        const weaponThreat = {
+            sniper: { close: 8, medium: 9.5, far: 10, extreme: 9.8 },
+            shotgun: { close: 10, medium: 8.5, far: 5, extreme: 3.5 },
+            rifle: { close: 8.5, medium: 9.2, far: 8.8, extreme: 7.5 },
+            smg: { close: 9.2, medium: 8.0, far: 6.5, extreme: 4.5 },
+            pistol: { close: 6.5, medium: 5.5, far: 4.0, extreme: 2.5 }
+        };
+        
+        const range = target.distance < 20 ? 'close' : 
+                     target.distance < 50 ? 'medium' : 
+                     target.distance < 120 ? 'far' : 'extreme';
+        
+        const threatProfile = weaponThreat[target.weaponType] || { close: 5.5, medium: 5.5, far: 5.0, extreme: 4.5 };
+        threat += threatProfile[range];
+        
+        // Behavior danger
+        if (target.isAimingAtPlayer) threat += 9.5;
+        if (target.isShooting) threat += 8.5;
+        
+        // Proximity danger with exponential scaling
+        if (target.distance < 15) threat += Math.pow(1.9, (20 - target.distance)/5);
+        else if (target.distance < 40) threat += 7;
+        
+        // Head visibility impact
+        threat *= target.headVisibility * 0.8 + 0.2;
+        
+        // Movement-based threat
+        threat += this.assessMovementThreat(target);
+        
+        return Math.min(10, threat);
+    }
+    
+    assessMovementThreat(target) {
+        let threatBonus = 0;
+        
+        // High-speed movement
+        if (target.movementSpeed > 8) threatBonus += 3.5;
+        
+        // Erratic movement patterns
+        if (target.movementPattern === 'erratic') threatBonus += 4.5;
+        
+        // Flanking movement
+        if (target.isFlanking) threatBonus += 6;
+        
+        return threatBonus;
+    }
+    
+    predictMovementPattern(target) {
+        // AI-powered movement prediction
+        return {
+            pattern: 'linear',
+            confidence: 0.88,
+            nextPosition: {
+                x: target.position.x + target.velocity.x * 0.18,
+                y: target.position.y + target.velocity.y * 0.18,
+                z: target.position.z + target.velocity.z * 0.18
+            }
+        };
+    }
 }
 
-// ================== ENHANCED HEAD EXPANSION SYSTEM ==================
+// ================== HEAD EXPANSION SYSTEM (UPGRADED) ==================
 class HeadExpansionSystem {
     calculateDynamicHeadHitbox(target) {
-        const baseRadius = 0.32; // More precise base
+        const baseRadius = 0.38;
         let expansionFactor = 1.0;
         
-        // Distance-based expansion with weapon adjustment
-        if (target.distance < 15) expansionFactor = 1.2;
-        else if (target.distance < 40) expansionFactor = 1.6;
-        else if (target.distance < 80) expansionFactor = 2.0;
-        else expansionFactor = 2.5;
+        // Distance-based expansion
+        if (target.distance < 15) expansionFactor = 1.4;
+        else if (target.distance < 40) expansionFactor = 1.8;
+        else if (target.distance < 100) expansionFactor = 2.2;
+        else expansionFactor = 2.8;
         
         // Weapon-specific adjustments
-        if (target.weaponType === 'sniper') expansionFactor *= 0.85;
-        if (target.weaponType === 'shotgun') expansionFactor *= 1.15;
+        if (target.weaponType === 'sniper') expansionFactor *= 0.92;
         
         // Movement-based adjustments
-        if (target.movementSpeed > 6) expansionFactor *= 1.25;
-        if (target.movementPattern === 'erratic') expansionFactor *= 1.15;
+        if (target.movementSpeed > 5) expansionFactor *= 1.25;
         
-        // Calculate head height with enhanced precision
+        // Head visibility adjustments
+        if (target.headVisibility < 0.6) expansionFactor *= 1.15;
+        
+        // Calculate head height based on stance
         let headHeight = this.calculateHeadHeight(target);
         
         return {
@@ -798,30 +933,39 @@ class HeadExpansionSystem {
             z: target.position.z,
             radius: baseRadius * expansionFactor,
             baseRadius: baseRadius,
-            expansion: expansionFactor,
-            visibility: target.headVisibility
+            expansion: expansionFactor
         };
     }
     
-    // ... (existing methods with enhanced precision) ...
+    calculateHeadHeight(target) {
+        let height = 1.68; // Standing
+        
+        if (target.isCrouching) height = 1.25;
+        if (target.isProne) height = 0.85;
+        if (target.isJumping) height += Math.min(0.75, target.jumpProgress * 1.5);
+        if (target.isVaulting) height += 0.45;
+        if (target.isSliding) height = 0.95;
+        
+        return height;
+    }
 }
 
-// ================== ENHANCED QUANTUM AIM SYSTEM ==================
+// ================== QUANTUM AIM SYSTEM (UPGRADED) ==================
 class QuantumAimSystem {
     constructor() {
         this.lockSystem = new DistanceBasedLock();
         this.predictionEngine = new HeadPredictionEngine();
-        this.aimSmoothing = 0.97; // Smoother aim
-        this.maxAimHeight = 1.88; // Higher max for jumping
+        this.aimSmoothing = 0.97;
+        this.maxAimHeight = 1.88;
         this.hyperLockMode = false;
-        this.headFocusFactor = 0.99; // Increased focus
-        this.headPrioritySystem = new HeadPrioritySystem(); // New subsystem
+        this.headFocusFactor = 0.99; // Increased
+        this.headLockAggressiveness = 1.25; // NEW
     }
     
     quantumAcquire(target, currentAimPos, playerPos, weaponType, gameState, hyperLock = false) {
         this.hyperLockMode = hyperLock;
         
-        // Calculate perfect aim position with enhanced prediction
+        // Calculate perfect aim position with prediction
         const perfectAim = this.predictionEngine.calculatePerfectAim(
             target, 
             playerPos, 
@@ -829,23 +973,18 @@ class QuantumAimSystem {
             gameState
         );
         
-        // Apply head priority
-        const headPriorityAim = this.headPrioritySystem.applyPriority(
-            perfectAim, 
-            target.headHitbox
-        );
-        
         // Move aim to target with distance-based parameters
         const newAimPos = this.lockSystem.moveToHead(
             currentAimPos, 
-            headPriorityAim, 
+            perfectAim, 
             target,
             weaponType,
-            this.hyperLockMode
+            this.hyperLockMode,
+            this.headLockAggressiveness // NEW
         );
         
-        // Calculate lock strength with enhanced head focus
-        const lockStrength = this.calculateHeadFocus(newAimPos, headPriorityAim, target);
+        // Calculate lock strength with head focus
+        const lockStrength = this.calculateHeadFocus(newAimPos, perfectAim, target);
         
         return {
             position: newAimPos,
@@ -853,47 +992,59 @@ class QuantumAimSystem {
         };
     }
     
-    // ... (existing methods with enhanced focus) ...
+    calculateHeadFocus(aimPos, targetPos, target) {
+        const distance = Math.sqrt(
+            Math.pow(aimPos.x - targetPos.x, 2) +
+            Math.pow(aimPos.y - targetPos.y, 2)
+        );
+        
+        const maxDistance = target.headHitbox.radius * 2.2; // Reduced
+        const focus = Math.max(0, 1 - (distance / maxDistance));
+        
+        // Apply head focus factor
+        return Math.min(1, focus * this.headFocusFactor);
+    }
 }
 
-// ================== ENHANCED DISTANCE BASED LOCK ==================
+// ================== DISTANCE BASED LOCK (UPGRADED) ==================
 class DistanceBasedLock {
     constructor() {
         this.lockProfiles = {
-            close: { speed: 0.30, smoothing: 0.94, snapDistance: 1.2 },
-            medium: { speed: 0.20, smoothing: 0.96, snapDistance: 1.8 },
-            far: { speed: 0.14, smoothing: 0.98, snapDistance: 2.5 },
-            sniper: { speed: 0.16, smoothing: 0.99, snapDistance: 1.5 }
+            close: { speed: 0.28, smoothing: 0.94, snapDistance: 1.2 },
+            medium: { speed: 0.22, smoothing: 0.96, snapDistance: 1.8 },
+            far: { speed: 0.16, smoothing: 0.98, snapDistance: 2.5 },
+            extreme: { speed: 0.12, smoothing: 0.99, snapDistance: 3.2 } // NEW
         };
         this.currentProfile = "medium";
-        this.headFocusFactor = 1.05; // Enhanced head focus
+        this.headLockBoost = 1.0; // NEW
     }
     
-    moveToHead(currentPos, targetPos, target, weaponType, hyperLock = false) {
+    moveToHead(currentPos, targetPos, target, weaponType, hyperLock = false, headLockAggressiveness = 1.0) {
         // Select lock profile based on distance
         this.selectProfile(target.distance);
         const profile = this.lockProfiles[this.currentProfile];
+        this.headLockBoost = headLockAggressiveness; // NEW
         
-        // Calculate move speed with head focus
+        // Calculate move speed
         let moveSpeed = hyperLock ? profile.speed * 2.0 : profile.speed;
-        moveSpeed *= this.headFocusFactor;
+        moveSpeed *= this.headLockBoost; // NEW
         
         // Weapon-based adjustments
         if (weaponType === 'sniper') moveSpeed *= 0.88;
         else if (weaponType === 'shotgun') moveSpeed *= 1.18;
         
-        // Direction vector with head priority
+        // Direction vector
         const direction = {
             x: targetPos.x - currentPos.x,
             y: targetPos.y - currentPos.y,
             z: targetPos.z - currentPos.z
         };
         
-        // Apply enhanced smoothing
+        // Apply smoothing
         const newPos = {
             x: currentPos.x + direction.x * moveSpeed * profile.smoothing,
-            y: currentPos.y + direction.y * moveSpeed * profile.smoothing * 1.05,
-            z: currentPos.z + direction.z * moveSpeed * profile.smoothing * 0.97
+            y: currentPos.y + direction.y * moveSpeed * profile.smoothing,
+            z: currentPos.z + direction.z * moveSpeed * profile.smoothing * 0.94
         };
         
         // For hyper lock, snap directly to head center when close
@@ -916,47 +1067,107 @@ class DistanceBasedLock {
     }
     
     selectProfile(distance) {
-        if (distance < 12) this.currentProfile = "close";
-        else if (distance < 50) this.currentProfile = "medium";
-        else if (distance < 100) this.currentProfile = "far";
-        else this.currentProfile = "sniper";
+        if (distance < 15) this.currentProfile = "close";
+        else if (distance < 45) this.currentProfile = "medium";
+        else if (distance < 120) this.currentProfile = "far";
+        else this.currentProfile = "extreme"; // NEW
     }
 }
 
-// ================== ENHANCED HEAD PREDICTION ENGINE ==================
+// ================== HEAD PREDICTION ENGINE (UPGRADED) ==================
 class HeadPredictionEngine {
     calculatePerfectAim(target, playerPos, weaponType, gameState) {
         const basePos = target.headHitbox;
         
-        // Calculate bullet travel time with enhanced precision
+        // Calculate bullet travel time
         const travelTime = this.calculateTravelTime(playerPos, basePos, weaponType);
         
-        // Predict head movement with advanced AI
+        // Predict head movement
         const predictedMovement = this.predictHeadMovement(target, travelTime, gameState);
         
-        // Apply environmental factors
-        const environmentAdjustment = this.calculateEnvironmentAdjustment(gameState);
-        
         return {
-            x: basePos.x + predictedMovement.x + environmentAdjustment.x,
-            y: basePos.y + predictedMovement.y + environmentAdjustment.y,
-            z: basePos.z + predictedMovement.z + environmentAdjustment.z
+            x: basePos.x + predictedMovement.x,
+            y: basePos.y + predictedMovement.y,
+            z: basePos.z + predictedMovement.z
         };
     }
     
-    // ... (existing methods with enhanced prediction) ...
+    calculateTravelTime(startPos, endPos, weaponType) {
+        const distance = Math.sqrt(
+            Math.pow(endPos.x - startPos.x, 2) +
+            Math.pow(endPos.y - startPos.y, 2) +
+            Math.pow(endPos.z - startPos.z, 2)
+        );
+        
+        const weaponProfile = this.getWeaponProfile(weaponType);
+        return distance / weaponProfile.bulletVelocity;
+    }
+    
+    predictHeadMovement(target, time, gameState) {
+        // Advanced prediction with game state context
+        const baseMovement = {
+            x: target.velocity.x * time * 1.35, // Increased
+            y: target.velocity.y * time * 1.35, // Increased
+            z: target.velocity.z * time * 0.88
+        };
+        
+        // Add environmental factors
+        if (gameState.mapType === 'urban') {
+            baseMovement.x *= 0.92;
+            baseMovement.z *= 0.94;
+        }
+        
+        // Add gravity effect
+        if (!target.isGrounded) {
+            baseMovement.y -= 0.5 * 9.81 * time * time;
+        }
+        
+        // NEW: Predict dodge movements
+        if (target.predictedDodge) {
+            switch (target.predictedDodge.type) {
+                case 'jump':
+                    baseMovement.y += 1.8 * time;
+                    break;
+                case 'crouch':
+                    baseMovement.y -= 0.6;
+                    break;
+                case 'slide':
+                    baseMovement.y -= 0.4;
+                    baseMovement.x += target.velocity.x * time * 0.5;
+                    baseMovement.z += target.velocity.z * time * 0.5;
+                    break;
+            }
+        }
+        
+        return baseMovement;
+    }
+    
+    getWeaponProfile(weaponType) {
+        const profiles = {
+            default: { bulletVelocity: 380 },
+            sniper: { bulletVelocity: 950 },
+            ak47: { bulletVelocity: 360 },
+            m4a1: { bulletVelocity: 400 },
+            shotgun: { bulletVelocity: 300 },
+            awm: { bulletVelocity: 1020 },
+            groza: { bulletVelocity: 390 },
+            mp40: { bulletVelocity: 340 } // NEW
+        };
+        
+        return profiles[weaponType] || profiles.default;
+    }
 }
 
-// ================== ENHANCED CURVED BULLET TRACKER ==================
+// ================== CURVED BULLET TRACKER (UPGRADED) ==================
 class CurvedBulletTracker {
     calculateCurvedTrajectory(startPos, aimPos, target, weaponType, gameState, guarantor, bender) {
-        // Calculate initial travel time with precision
+        // Calculate initial travel time
         const travelTime = this.calculateTravelTime(startPos, aimPos, weaponType);
         
-        // Predict target position at impact with enhanced AI
+        // Predict target position at impact
         const predictedPos = this.predictFuturePosition(target, travelTime);
         
-        // Get guaranteed hit position with enhanced bending
+        // Get guaranteed hit position with bending
         const curvedHitPos = bender.calculateCurvedPath(
             startPos,
             predictedPos,
@@ -965,12 +1176,12 @@ class CurvedBulletTracker {
             gameState
         );
         
-        // Apply headshot guarantee
-        const guaranteedHeadPos = guarantor.guaranteeHeadshot(startPos, curvedHitPos, target, weaponType);
+        // NEW: Final guarantee from Headshot God
+        const finalHitPos = guarantor.guaranteeHeadshot(startPos, curvedHitPos, target, weaponType);
         
         return {
             start: startPos,
-            end: guaranteedHeadPos,
+            end: finalHitPos,
             travelTime: travelTime,
             curved: true,
             bendAngle: bender.lastBendAngle,
@@ -978,19 +1189,47 @@ class CurvedBulletTracker {
         };
     }
     
-    // ... (existing methods with enhanced precision) ...
+    calculateTravelTime(startPos, endPos, weaponType) {
+        const distance = Math.sqrt(
+            Math.pow(endPos.x - startPos.x, 2) +
+            Math.pow(endPos.y - startPos.y, 2) +
+            Math.pow(endPos.z - startPos.z, 2)
+        );
+        
+        const weaponProfile = this.getWeaponProfile(weaponType);
+        return distance / weaponProfile.bulletVelocity;
+    }
+    
+    predictFuturePosition(target, time) {
+        // Enhanced prediction with dodge anticipation
+        let predictionFactor = 1.25;
+        if (target.predictedDodge) {
+            predictionFactor = 1.45; // Increase prediction for dodging targets
+        }
+        
+        return {
+            x: target.position.x + target.velocity.x * time * predictionFactor,
+            y: target.position.y + target.velocity.y * time * predictionFactor,
+            z: target.position.z + target.velocity.z * time * 0.92
+        };
+    }
+    
+    getWeaponProfile(weaponType) {
+        // Same as in HeadPredictionEngine
+    }
 }
 
-// ================== ENHANCED BALLISTIC CURVE ENGINE ==================
+// ================== BALLISTIC CURVE ENGINE (UPGRADED) ==================
 class BallisticCurveEngine {
     constructor() {
-        this.maxBendAngle = 0.18; // Increased bend
+        this.maxBendAngle = 0.18; // Increased
         this.bendFactor = 0.85;
         this.lastBendAngle = 0;
         this.distanceFactors = {
-            close: 0.9,
+            close: 0.8,
             medium: 1.0,
-            far: 1.2
+            far: 1.2,
+            extreme: 1.4
         };
     }
     
@@ -1001,22 +1240,20 @@ class BallisticCurveEngine {
             target.velocity.y * target.velocity.y
         );
         
+        // Get distance factor
+        const distFactor = this.distanceFactors[this.getRangeCategory(target.distance)];
+        
         // Calculate bend angle based on velocity and distance
-        const bendAngle = this.calculateBendAngle(velocityMagnitude, target.distance);
-        this.lastBendAngle = bendAngle;
+        const bendAngle = this.calculateBendAngle(velocityMagnitude, target.distance) * distFactor;
         
         // Calculate direction vector
         const dx = targetPos.x - startPos.x;
         const dy = targetPos.y - startPos.y;
         const dz = targetPos.z - startPos.z;
         
-        // Apply bending in movement direction with distance factor
-        const range = target.distance < 20 ? 'close' : 
-                     target.distance < 60 ? 'medium' : 'far';
-        const distFactor = this.distanceFactors[range];
-        
-        const bendX = bendAngle * target.velocity.x * this.bendFactor * distFactor;
-        const bendY = bendAngle * target.velocity.y * this.bendFactor * distFactor;
+        // Apply bending in movement direction
+        const bendX = bendAngle * target.velocity.x * this.bendFactor;
+        const bendY = bendAngle * target.velocity.y * this.bendFactor;
         
         return {
             x: targetPos.x + bendX,
@@ -1025,10 +1262,26 @@ class BallisticCurveEngine {
         };
     }
     
-    // ... (existing methods with enhanced bending) ...
+    getRangeCategory(distance) {
+        if (distance < 15) return 'close';
+        if (distance < 50) return 'medium';
+        if (distance < 120) return 'far';
+        return 'extreme';
+    }
+    
+    calculateBendAngle(velocity, distance) {
+        // Base angle based on velocity
+        let angle = Math.min(this.maxBendAngle, velocity * 0.028); // Increased coefficient
+        
+        // Distance scaling
+        if (distance > 100) angle *= 1.35;
+        else if (distance > 50) angle *= 1.15;
+        
+        return angle;
+    }
 }
 
-// ================== ENHANCED HEADSHOT GOD ==================
+// ================== HEADSHOT GOD (UPGRADED) ==================
 class HeadshotGod {
     guaranteeHeadshot(startPos, predictedPos, target, weaponType) {
         const head = target.headHitbox;
@@ -1043,21 +1296,50 @@ class HeadshotGod {
             return this.predictLeadingEdge(predictedPos, head, target.velocity);
         }
         
-        // Adjust to nearest point in head hitbox with precision
+        // Otherwise adjust to nearest point in head hitbox
         return this.nearestHeadPoint(predictedPos, head);
     }
     
-    // ... (existing methods with enhanced precision) ...
+    isPointInHead(point, head) {
+        const distance = Math.sqrt(
+            Math.pow(point.x - head.x, 2) +
+            Math.pow(point.y - head.y, 2)
+        );
+        
+        return distance <= head.radius;
+    }
+    
+    nearestHeadPoint(point, head) {
+        const angle = Math.atan2(point.y - head.y, point.x - head.x);
+        
+        return {
+            x: head.x + Math.cos(angle) * head.radius * 0.92,
+            y: head.y + Math.sin(angle) * head.radius * 0.92,
+            z: head.z
+        };
+    }
+    
+    predictLeadingEdge(point, head, velocity) {
+        const velocityAngle = Math.atan2(velocity.y, velocity.x);
+        const edgeX = head.x + Math.cos(velocityAngle) * head.radius;
+        const edgeY = head.y + Math.sin(velocityAngle) * head.radius;
+        
+        return {
+            x: edgeX,
+            y: edgeY,
+            z: head.z
+        };
+    }
 }
 
-// ================== ENHANCED INSTANT TRIGGER SYSTEM ==================
+// ================== INSTANT TRIGGER SYSTEM (UPGRADED) ==================
 class InstantTriggerSystem {
     constructor() {
         this.hyperLockActive = false;
         this.activationTime = 0;
-        this.lockDuration = 0.30; // Faster lock duration
-        this.cooldown = 80; // ms
-        this.headLockBoost = 1.25; // Head lock boost
+        this.lockDuration = 0.42; // Increased lock duration
+        this.cooldown = 90; // Reduced cooldown (ms)
+        this.headLockBoost = 1.3; // NEW
     }
     
     activateHyperLock() {
@@ -1065,7 +1347,6 @@ class InstantTriggerSystem {
         if (now - this.activationTime > this.cooldown) {
             this.hyperLockActive = true;
             this.activationTime = now;
-            OmegaHeadshotSystem.lockStrength *= this.headLockBoost;
         }
     }
     
@@ -1074,15 +1355,18 @@ class InstantTriggerSystem {
             // Auto disable after duration
             if (Date.now() - this.activationTime > this.lockDuration * 1000) {
                 this.hyperLockActive = false;
-                OmegaHeadshotSystem.lockStrength /= this.headLockBoost;
             }
             return true;
         }
         return false;
     }
+    
+    getHeadLockBoost() {
+        return this.headLockBoost;
+    }
 }
 
-// ================== ENHANCED AI PREDICTOR ==================
+// ================== AI PREDICTOR (UPGRADED) ==================
 class AIPredictor {
     constructor() {
         this.predictionModels = {
@@ -1090,28 +1374,132 @@ class AIPredictor {
             erratic: new ErraticPredictionModel(),
             jumping: new JumpPredictionModel(),
             tactical: new TacticalMovementModel(),
-            advanced: new NeuralPredictionModel() // New prediction model
+            dodging: new DodgePredictionModel() // NEW
         };
         this.movementHistory = new Map();
-        this.maxHistorySize = 40; // More history
-        this.predictionAccuracy = 0.98; // Higher accuracy
+        this.maxHistorySize = 35; // Increased
+        this.predictionAccuracy = 0.98; // Increased
         this.behaviorDatabase = new BehaviorDatabase();
-        this.headFocus = 1.05; // Enhanced head focus
+        this.dodgePredictor = new DodgePredictor(); // NEW
     }
     
-    // ... (existing methods with enhanced prediction) ...
+    predictHeadPosition(target, timeAhead, movementAnalyzer, antiDodgeSystem) {
+        // Get movement history
+        const history = this.getMovementHistory(target.id);
+        
+        // Update with current position
+        this.updateHistory(target, history);
+        
+        // Analyze movement pattern
+        const patternType = movementAnalyzer.determineMovementPattern(target, history);
+        
+        // NEW: Check dodge prediction
+        const dodgePrediction = antiDodgeSystem.getCurrentDodgePrediction();
+        if (dodgePrediction) {
+            target.predictedDodge = dodgePrediction;
+            return this.predictionModels.dodging.predictHead(target, history, timeAhead);
+        }
+        
+        // Select prediction model
+        const predictionModel = this.predictionModels[patternType];
+        
+        // Generate prediction
+        return predictionModel.predictHead(target, history, timeAhead);
+    }
+    
+    getMovementHistory(targetId) {
+        if (!this.movementHistory.has(targetId)) {
+            this.movementHistory.set(targetId, {
+                positions: [],
+                timestamps: [],
+                velocities: [],
+                actions: []
+            });
+        }
+        return this.movementHistory.get(targetId);
+    }
+    
+    updateHistory(target, history) {
+        const currentTime = Date.now();
+        
+        // Add current position
+        history.positions.push({...target.position});
+        history.timestamps.push(currentTime);
+        history.actions.push(target.currentAction);
+        
+        // Calculate velocity if possible
+        if (history.positions.length > 1) {
+            const lastPos = history.positions[history.positions.length - 2];
+            const currentPos = history.positions[history.positions.length - 1];
+            const timeDiff = (history.timestamps[history.timestamps.length - 1] - 
+                             history.timestamps[history.timestamps.length - 2]) / 1000;
+            
+            if (timeDiff > 0) {
+                const velocity = {
+                    x: (currentPos.x - lastPos.x) / timeDiff,
+                    y: (currentPos.y - lastPos.y) / timeDiff,
+                    z: (currentPos.z - lastPos.z) / timeDiff
+                };
+                history.velocities.push(velocity);
+            }
+        }
+        
+        // Limit history size
+        if (history.positions.length > this.maxHistorySize) {
+            history.positions.shift();
+            history.timestamps.shift();
+            history.actions.shift();
+            if (history.velocities.length > 0) history.velocities.shift();
+        }
+    }
 }
 
-// ================== ENHANCED ADVANCED MOVEMENT ANALYZER ==================
+// ================== NEW: DODGE PREDICTION MODEL ==================
+class DodgePredictionModel {
+    predictHead(target, history, timeAhead) {
+        // Predict head position during dodge
+        if (!target.predictedDodge) {
+            return new LinearPredictionModel().predictHead(target, history, timeAhead);
+        }
+        
+        const basePos = target.headHitbox;
+        let dodgeAdjustment = { x: 0, y: 0, z: 0 };
+        
+        switch (target.predictedDodge.type) {
+            case 'jump':
+                dodgeAdjustment.y = 1.2 * timeAhead;
+                break;
+            case 'crouch':
+                dodgeAdjustment.y = -0.5;
+                break;
+            case 'slide':
+                dodgeAdjustment.y = -0.3;
+                dodgeAdjustment.x = target.velocity.x * timeAhead * 0.6;
+                dodgeAdjustment.z = target.velocity.z * timeAhead * 0.6;
+                break;
+            case 'strafe':
+                dodgeAdjustment.x = target.velocity.x * timeAhead * 1.2;
+                dodgeAdjustment.z = target.velocity.z * timeAhead * 1.2;
+                break;
+        }
+        
+        return {
+            x: basePos.x + dodgeAdjustment.x,
+            y: basePos.y + dodgeAdjustment.y,
+            z: basePos.z + dodgeAdjustment.z
+        };
+    }
+}
+
+// ================== ADVANCED MOVEMENT ANALYZER (UPGRADED) ==================
 class AdvancedMovementAnalyzer {
     determineMovementPattern(target, history) {
         if (history.velocities.length < 6) return 'tactical';
         
-        // Enhanced direction change detection
+        // Calculate direction changes
         let directionChanges = 0;
         let speedChanges = 0;
         let lastSpeed = 0;
-        let headMovementPattern = 'stable';
         
         for (let i = 1; i < history.velocities.length; i++) {
             const prev = history.velocities[i-1];
@@ -1127,12 +1515,7 @@ class AdvancedMovementAnalyzer {
             // Speed change detection
             const prevSpeed = Math.sqrt(prev.x*prev.x + prev.y*prev.y);
             const currSpeed = Math.sqrt(curr.x*curr.x + curr.y*curr.y);
-            if (Math.abs(currSpeed - prevSpeed) > 1.2) speedChanges++;
-            
-            // Head movement analysis
-            if (Math.abs(curr.y - prev.y) > 0.3) {
-                headMovementPattern = 'erratic';
-            }
+            if (Math.abs(currSpeed - prevSpeed) > 1.8) speedChanges++;
             
             lastSpeed = currSpeed;
         }
@@ -1140,171 +1523,549 @@ class AdvancedMovementAnalyzer {
         const changeRatio = directionChanges / history.velocities.length;
         const speedChangeRatio = speedChanges / history.velocities.length;
         
-        // Enhanced pattern recognition
-        if (target.isJumping || headMovementPattern === 'erratic') return 'jumping';
-        if (changeRatio > 0.45 && speedChangeRatio > 0.55) return 'erratic';
-        if (history.actions.filter(a => a === 'cover').length > 2) return 'tactical';
-        if (target.isCrouching && speedChangeRatio > 0.4) return 'tactical';
-        return 'advanced';
+        // Pattern recognition
+        if (target.isJumping) return 'jumping';
+        if (changeRatio > 0.55 && speedChangeRatio > 0.65) return 'erratic';
+        if (history.actions.filter(a => a === 'cover').length > 3) return 'tactical';
+        if (history.actions.filter(a => a === 'dodge').length > 2) return 'dodging'; // NEW
+        return 'linear';
     }
     
-    // ... (existing methods with enhanced analysis) ...
+    assessMovementThreat(target) {
+        let threat = 0;
+        
+        // Speed-based threat
+        if (target.movementSpeed > 8) threat += 5;
+        else if (target.movementSpeed > 5) threat += 3;
+        
+        // Movement type threat
+        if (target.isFlanking) threat += 6;
+        if (target.isRushing) threat += 5;
+        if (target.isRetreating) threat -= 1;
+        
+        // Environmental threat
+        if (target.isInCover) threat += 4;
+        
+        // NEW: Dodge threat
+        if (target.isDodging) threat += 3;
+        
+        return threat;
+    }
 }
 
-// ================== ENHANCED ADAPTIVE LOCK CONTROLLER ==================
+// ================== TACTICAL MOVEMENT MODEL (UPGRADED) ==================
+class TacticalMovementModel {
+    predictHead(target, history, timeAhead) {
+        // Predict based on tactical behavior
+        const lastAction = history.actions[history.actions.length - 1];
+        let prediction;
+        
+        switch (lastAction) {
+            case 'cover':
+                prediction = this.predictCoverMovement(target, history);
+                break;
+            case 'flanking':
+                prediction = this.predictFlankingMovement(target, history);
+                break;
+            case 'retreat':
+                prediction = this.predictRetreatMovement(target, history);
+                break;
+            case 'dodge': // NEW
+                prediction = this.predictDodgeMovement(target, history);
+                break;
+            default:
+                prediction = new LinearPredictionModel().predictHead(target, history, timeAhead);
+        }
+        
+        // Add head height
+        prediction.y += target.headHitbox.baseRadius;
+        
+        return prediction;
+    }
+    
+    predictCoverMovement(target, history) {
+        // Find nearest cover
+        const coverPosition = this.findNearestCover(target.position);
+        
+        return {
+            x: coverPosition.x,
+            y: target.position.y,
+            z: coverPosition.z
+        };
+    }
+    
+    findNearestCover(position) {
+        // Advanced cover finding
+        return {
+            x: position.x + 1.8,
+            y: position.y,
+            z: position.z + 0.7
+        };
+    }
+    
+    predictFlankingMovement(target, history) {
+        const playerPosition = history.context.playerPosition;
+        const angleToPlayer = Math.atan2(
+            playerPosition.y - target.position.y,
+            playerPosition.x - target.position.x
+        );
+        
+        const flankAngle = angleToPlayer + (Math.random() > 0.5 ? Math.PI/2.8 : -Math.PI/2.8);
+        
+        return {
+            x: target.position.x + Math.cos(flankAngle) * 4.5,
+            y: target.position.y,
+            z: target.position.z + Math.sin(flankAngle) * 4.5
+        };
+    }
+    
+    // NEW: Predict dodge movement
+    predictDodgeMovement(target, history) {
+        const dodgeType = history.actions.filter(a => a === 'dodge').slice(-1)[0];
+        let dodgeVector = { x: 0, y: 0, z: 0 };
+        
+        if (dodgeType === 'jump') {
+            dodgeVector.y = 1.5;
+        } else if (dodgeType === 'crouch') {
+            dodgeVector.y = -0.6;
+        } else if (dodgeType === 'slide') {
+            dodgeVector.y = -0.4;
+            dodgeVector.x = target.velocity.x * 0.7;
+            dodgeVector.z = target.velocity.z * 0.7;
+        } else { // Strafe
+            dodgeVector.x = target.velocity.x * 1.1;
+            dodgeVector.z = target.velocity.z * 1.1;
+        }
+        
+        return {
+            x: target.position.x + dodgeVector.x,
+            y: target.position.y + dodgeVector.y,
+            z: target.position.z + dodgeVector.z
+        };
+    }
+}
+
+// ================== ADAPTIVE LOCK CONTROLLER (UPGRADED) ==================
 class AdaptiveLockController {
     constructor() {
-        this.lockSensitivity = 0.98;
-        this.minLockTime = 0.06; // Faster lock
-        this.maxLockDistance = 350;
+        this.lockSensitivity = 0.98; // Increased
+        this.minLockTime = 0.06; // Reduced
+        this.maxLockDistance = 400; // Increased
         this.lastLockTime = 0;
         this.hyperLockMode = false;
         this.currentDistanceProfile = "medium";
-        this.headStabilization = 0.995; // Enhanced stabilization
-        this.headFocus = 1.05; // Enhanced head focus
+        this.headStabilization = 0.995; // Increased
+        this.headLockStrength = 1.0; // NEW
     }
     
-    // ... (existing methods with enhanced stabilization) ...
+    isTargetLocked(target, aimPosition) {
+        const distance = this.calculateAimDistance(aimPosition, target.headHitbox);
+        return distance < (target.headHitbox.radius * 0.35); // Tighter threshold
+    }
+    
+    isTargetMoving(target) {
+        return target.movementSpeed > 0.1;
+    }
+    
+    quantumAdjust(currentAim, newPosition, target) {
+        // Calculate movement vector
+        const moveVector = {
+            x: newPosition.x - currentAim.x,
+            y: newPosition.y - currentAim.y,
+            z: newPosition.z - currentAim.z
+        };
+        
+        // Distance-based sensitivity
+        let sensitivity = this.lockSensitivity;
+        if (target.distance < 15) sensitivity *= 1.15;
+        else if (target.distance > 90) sensitivity *= 0.88;
+        
+        // Apply stabilization
+        return {
+            x: currentAim.x + moveVector.x * sensitivity * this.headStabilization * this.headLockStrength, // NEW
+            y: currentAim.y + moveVector.y * sensitivity * this.headStabilization * this.headLockStrength, // NEW
+            z: currentAim.z + moveVector.z * sensitivity * 0.88
+        };
+    }
+    
+    stabilizeAim(newAim, currentAim) {
+        // Smoother transition
+        return {
+            x: currentAim.x * 0.25 + newAim.x * 0.75,
+            y: currentAim.y * 0.15 + newAim.y * 0.85,
+            z: currentAim.z * 0.35 + newAim.z * 0.65
+        };
+    }
 }
 
-// ================== ENHANCED SMART RECOIL SYSTEM ==================
+// ================== SMART RECOIL SYSTEM (UPGRADED) ==================
 class SmartRecoilSystem {
     constructor() {
         this.recoilPatterns = {
-            // ... (existing patterns with enhanced values) ...
+            default: { vertical: 0.1, horizontal: 0.03 },
+            sniper: { vertical: 0.25, horizontal: 0.01 },
+            ak47: { vertical: 0.15, horizontal: 0.05 },
+            m4a1: { vertical: 0.12, horizontal: 0.04 },
+            shotgun: { vertical: 0.18, horizontal: 0.08 },
+            awm: { vertical: 0.28, horizontal: 0.009 },
+            groza: { vertical: 0.16, horizontal: 0.055 },
+            mp40: { vertical: 0.14, horizontal: 0.042 } // NEW
         };
         this.distanceFactors = {
-            close: { vertical: 0.85, horizontal: 0.92 },
+            close: { vertical: 0.88, horizontal: 0.92 },
             medium: { vertical: 1.0, horizontal: 1.0 },
-            far: { vertical: 1.15, horizontal: 0.88 }
+            far: { vertical: 1.12, horizontal: 0.88 },
+            extreme: { vertical: 1.18, horizontal: 0.82 } // NEW
         };
-        this.learnRate = 0.92; // Faster learning
-        this.headRecoilReduction = 0.7; // Reduced recoil when aiming at head
+        this.learnRate = 0.92;
+        this.recoilMemory = new Map(); // NEW
     }
     
-    // ... (existing methods with enhanced recoil control) ...
+    smartCompensate(aimPosition, weaponType, recoilData, distance) {
+        // Get recoil pattern for weapon
+        const pattern = this.getRecoilPattern(weaponType);
+        
+        // Update pattern based on actual data
+        this.updatePattern(weaponType, recoilData);
+        
+        // Get distance factor
+        const range = distance < 15 ? 'close' : 
+                     distance < 50 ? 'medium' : 
+                     distance < 120 ? 'far' : 'extreme';
+        const distFactor = this.distanceFactors[range];
+        
+        // NEW: Apply memory-based compensation
+        const memoryCompensation = this.getMemoryCompensation(weaponType);
+        
+        // Calculate compensation
+        const compensation = {
+            x: (pattern.horizontal + memoryCompensation.x) * distFactor.horizontal,
+            y: (pattern.vertical + memoryCompensation.y) * distFactor.vertical,
+            z: 0
+        };
+        
+        // Apply compensation
+        return {
+            x: aimPosition.x - compensation.x,
+            y: aimPosition.y - compensation.y,
+            z: aimPosition.z - compensation.z
+        };
+    }
+    
+    // NEW: Memory-based compensation
+    getMemoryCompensation(weaponType) {
+        if (!this.recoilMemory.has(weaponType)) {
+            return { x: 0, y: 0 };
+        }
+        return this.recoilMemory.get(weaponType);
+    }
+    
+    // NEW: Update recoil memory
+    updateMemory(weaponType, recoilData) {
+        // ... implementation ...
+    }
 }
 
-// ================== ENHANCED GHOST STEALTH ==================
+// ================== GHOST STEALTH (UPGRADED) ==================
 class GhostStealth {
     concealAimBehavior(gameData, contextAnalyzer) {
-        // ... (existing methods with enhanced stealth) ...
+        const currentTime = Date.now();
+        
+        // Change behavior pattern based on situation
+        if (currentTime - this.lastBehaviorChange > 40000 || 
+            contextAnalyzer.isSuspicionHigh()) {
+            this.randomizeBehaviorPattern(contextAnalyzer.getPlayerSkillLevel());
+            this.lastBehaviorChange = currentTime;
+        }
+        
+        // Apply current pattern
+        this.applyAdvancedPattern(gameData);
+        
+        // NEW: Head lock concealment
+        this.concealHeadLock(gameData);
     }
     
-    // ... (additional enhanced stealth methods) ...
+    randomizeBehaviorPattern(skillLevel) {
+        // Create random behavior pattern based on skill level
+        const basePrecision = 0.08 + (0.1 * (1 - skillLevel));
+        
+        this.behaviorPatterns = [
+            { type: 'reaction', value: Math.random() * 0.22 },
+            { type: 'precision', value: basePrecision + Math.random() * 0.08 },
+            { type: 'smoothness', value: 0.7 + Math.random() * 0.25 },
+            { type: 'error', value: 0.04 + Math.random() * 0.08 }
+        ];
+    }
+    
+    applyAdvancedPattern(gameData) {
+        for (const pattern of this.behaviorPatterns) {
+            switch (pattern.type) {
+                case 'reaction':
+                    gameData.responseTime += pattern.value * 100;
+                    break;
+                case 'precision':
+                    if (gameData.aimPosition) {
+                        const errorX = (Math.random() * 2 - 1) * pattern.value;
+                        const errorY = (Math.random() * 2 - 1) * pattern.value * 0.65;
+                        gameData.aimPosition.x += errorX;
+                        gameData.aimPosition.y += errorY;
+                    }
+                    break;
+                case 'error':
+                    if (Math.random() < 0.04) {
+                        gameData.aimPosition.x += (Math.random() > 0.5 ? 1 : -1) * pattern.value * 2.8;
+                    }
+                    break;
+            }
+        }
+    }
+    
+    // NEW: Conceal head lock behavior
+    concealHeadLock(gameData) {
+        if (!gameData.aimPosition || !gameData.targets || gameData.targets.length === 0) return;
+        
+        const target = gameData.targets[0];
+        const headCenter = {
+            x: target.headHitbox.x,
+            y: target.headHitbox.y,
+            z: target.headHitbox.z
+        };
+        
+        const distanceToHead = Math.sqrt(
+            Math.pow(gameData.aimPosition.x - headCenter.x, 2) +
+            Math.pow(gameData.aimPosition.y - headCenter.y, 2)
+        );
+        
+        // Add random noise when locked on head
+        if (distanceToHead < target.headHitbox.radius * 0.5) {
+            const noiseX = (Math.random() * 2 - 1) * 0.05;
+            const noiseY = (Math.random() * 2 - 1) * 0.03;
+            gameData.aimPosition.x += noiseX;
+            gameData.aimPosition.y += noiseY;
+        }
+    }
 }
 
-// ================== ENHANCED TACTICAL ANALYZER ==================
+// ================== TACTICAL ANALYZER (UPGRADED) ==================
 class TacticalAnalyzer {
     tacticalAnalyze(gameState) {
-        // ... (existing methods with enhanced analysis) ...
+        if (!gameState) return;
+        
+        // Calculate threat score with environment
+        const threatScore = this.calculateTacticalThreat(gameState);
+        
+        // Update combat state
+        this.updateCombatState(threatScore);
+        
+        // NEW: Analyze headshot opportunities
+        this.analyzeHeadshotOpportunities(gameState);
+        
+        // Save state history
+        this.stateHistory.push({
+            state: this.currentState,
+            timestamp: Date.now(),
+            threatScore: threatScore
+        });
     }
     
-    // ... (additional enhanced analysis methods) ...
+    calculateTacticalThreat(gameState) {
+        let score = 0;
+        
+        // Enemy count with positioning
+        score += Math.min(7, gameState.enemyCount) * 1.3;
+        
+        // Positional threat
+        if (gameState.isSurrounded) score += 5.0;
+        if (gameState.isFlanked) score += 7.0;
+        
+        // Nearest enemy distance with weapon factor
+        if (gameState.nearestEnemyDistance < 15) score += 4.5;
+        else if (gameState.nearestEnemyDistance < 40) score += 3.0;
+        
+        // Player health with critical state
+        if (gameState.playerHealth < 20) score += 4.5;
+        else if (gameState.playerHealth < 45) score += 2.5;
+        
+        // Ammo status
+        if (gameState.ammoStatus === 'low') score += 2.5;
+        if (gameState.ammoStatus === 'critical') score += 4.0;
+        
+        // NEW: Headshot opportunity
+        if (gameState.headshotOpportunity > 0.7) score += 3.5;
+        
+        return Math.min(10, score);
+    }
+    
+    // NEW: Analyze headshot opportunities
+    analyzeHeadshotOpportunities(gameState) {
+        let opportunity = 0;
+        
+        if (gameState.enemyCount === 1) opportunity += 0.4;
+        if (gameState.nearestEnemyDistance < 30) opportunity += 0.3;
+        if (!gameState.enemyHasCover) opportunity += 0.5;
+        if (gameState.enemyIsMoving) opportunity += 0.2;
+        
+        gameState.headshotOpportunity = Math.min(1, opportunity);
+    }
+    
+    getCombatState() {
+        return this.currentState;
+    }
 }
 
-// ================== ENHANCED HEAD TRACKING SYSTEM ==================
+// ================== AI PERFORMANCE OPTIMIZER (UPGRADED) ==================
+class AIPerformanceOptimizer {
+    adaptiveAdjust(performanceState) {
+        if (!performanceState) return;
+        
+        this.currentFPS = performanceState.fps || 60;
+        this.aiWorkload = performanceState.aiLoad || 0.5;
+        
+        if (this.currentFPS < 45) {
+            this.currentProfile = "low";
+            this.aimPredictionLevel = 8;
+        } else if (this.currentFPS < 60) {
+            this.currentProfile = "medium";
+            this.aimPredictionLevel = 12;
+        } else if (this.currentFPS < 80) {
+            this.currentProfile = "high";
+            this.aimPredictionLevel = 18;
+        } else {
+            this.currentProfile = "ultra";
+            this.aimPredictionLevel = 25;
+        }
+        
+        // Adjust AI workload
+        if (this.aiWorkload > 0.75) {
+            this.aimPredictionLevel = Math.max(6, this.aimPredictionLevel - 4);
+        }
+        
+        // NEW: Adjust based on battery
+        if (performanceState.batteryLevel < 20) {
+            this.aimPredictionLevel = Math.max(5, this.aimPredictionLevel - 3);
+        }
+    }
+}
+
+// ================== HEAD TRACKING SYSTEM (UPGRADED) ==================
 class HeadTrackingSystem {
     trackHead(target) {
-        // Advanced head position tracking with prediction
-        const baseHeight = this.calculateHeadHeight(target);
-        const movementPrediction = this.predictHeadMovement(target);
-        
+        // Advanced head position tracking
         const headPosition = {
-            x: target.position.x + movementPrediction.x,
-            y: target.position.y + baseHeight + movementPrediction.y,
-            z: target.position.z + movementPrediction.z
+            x: target.position.x,
+            y: target.position.y + this.calculateHeadHeight(target),
+            z: target.position.z
         };
+        
+        // Add movement prediction
+        headPosition.x += target.velocity.x * 0.18;
+        headPosition.y += target.velocity.y * 0.18;
+        
+        // NEW: Head lock adjustment
+        if (target.isMovingErratically) {
+            headPosition.x += target.velocity.x * 0.08;
+            headPosition.z += target.velocity.z * 0.08;
+        }
         
         target.headPosition = headPosition;
     }
     
-    predictHeadMovement(target) {
-        // Predict head movement based on body movement
-        return {
-            x: target.velocity.x * 0.18,
-            y: target.velocity.y * 0.12,
-            z: target.velocity.z * 0.15
-        };
+    calculateHeadHeight(target) {
+        // Enhanced height calculation
+        let height = 1.68;
+        if (target.isCrouching) height = 1.28;
+        if (target.isProne) height = 0.88;
+        if (target.isJumping) height += Math.min(0.8, target.jumpProgress * 1.6);
+        if (target.isVaulting) height += 0.5;
+        if (target.isSliding) height = 1.0;
+        if (target.isDodging) height = target.dodgeType === 'crouch' ? 1.1 : 1.65;
+        
+        return height;
     }
-    
-    // ... (existing methods with enhanced tracking) ...
 }
 
-// ================== ENHANCED COMBAT CONTEXT PROCESSOR ==================
+// ================== COMBAT CONTEXT PROCESSOR (UPGRADED) ==================
 class CombatContextProcessor {
     processContext(gameState) {
-        // ... (existing methods with enhanced context processing) ...
+        this.playerSkillLevel = gameState.playerSkill || 0.7;
+        this.mapType = gameState.map || 'unknown';
+        this.timeRemaining = gameState.matchTime || 0;
+        this.suspicionLevel = 0;
+        this.headshotOpportunity = 0; // NEW
+        
+        // NEW: Calculate suspicion level
+        this.calculateSuspicion(gameState);
     }
     
-    // ... (additional enhanced context methods) ...
-}
-
-// ================== NEW MODULE: HEAD PRIORITY SYSTEM ==================
-class HeadPrioritySystem {
-    constructor() {
-        this.headFocus = 1.05;
-        this.maxDeviation = 0.1;
+    calculateSuspicion(gameState) {
+        let suspicion = 0;
+        
+        // Headshot rate
+        if (gameState.headshotRate > 0.8) suspicion += 0.4;
+        
+        // Accuracy
+        if (gameState.accuracy > 0.7) suspicion += 0.3;
+        
+        // Reaction time
+        if (gameState.avgReactionTime < 150) suspicion += 0.5;
+        
+        this.suspicionLevel = Math.min(1, suspicion);
     }
     
-    applyPriority(aimPosition, headHitbox) {
-        // Calculate vector to head center
-        const headVector = {
-            x: headHitbox.x - aimPosition.x,
-            y: headHitbox.y - aimPosition.y
-        };
-        
-        // Calculate distance to head center
-        const distance = Math.sqrt(headVector.x * headVector.x + headVector.y * headVector.y);
-        
-        // If within acceptable range, adjust towards head center
-        if (distance < this.maxDeviation) {
-            return {
-                x: aimPosition.x + headVector.x * this.headFocus,
-                y: aimPosition.y + headVector.y * this.headFocus,
-                z: aimPosition.z
-            };
-        }
-        
-        return aimPosition;
+    isSuspicionHigh() {
+        return this.suspicionLevel > 0.75;
+    }
+    
+    getPlayerSkillLevel() {
+        return this.playerSkillLevel;
+    }
+    
+    getHeadshotOpportunity() {
+        return this.headshotOpportunity;
     }
 }
 
-// ================== NEW MODULE: SONIC DETECTION ==================
-class SonicDetection {
-    detectFromSound(soundData) {
-        // Advanced sound-based target detection
+// ================== NEW: SKELETAL TRACKING SYSTEM ==================
+class SkeletalTrackingSystem {
+    trackBodies(skeletalData) {
         const targets = [];
         
-        // Implementation would analyze sound data to detect enemy positions
-        // and head locations based on sound patterns
+        // Process skeletal data
+        skeletalData.bodies.forEach(body => {
+            if (body.confidence > 0.9) {
+                const headPosition = this.getHeadPosition(body.joints);
+                targets.push({
+                    type: 'player',
+                    position: headPosition,
+                    confidence: body.confidence,
+                    headVisibility: this.calculateHeadVisibility(body.joints),
+                    skeleton: body
+                });
+            }
+        });
         
         return targets;
     }
-}
-
-// ================== NEW MODULE: NEURAL PREDICTION MODEL ==================
-class NeuralPredictionModel {
-    predictHead(target, history, timeAhead) {
-        // Advanced neural network prediction
-        // Implementation would use machine learning to predict head movement
+    
+    getHeadPosition(joints) {
+        const head = joints.find(j => j.name === 'head');
+        const neck = joints.find(j => j.name === 'neck');
         
-        return {
-            x: target.position.x + target.velocity.x * timeAhead * 1.25,
-            y: target.position.y + target.velocity.y * timeAhead * 1.15,
-            z: target.position.z
-        };
-    }
-}
-
-// ================== NEW MODULE: BEHAVIOR DATABASE ==================
-class BehaviorDatabase {
-    constructor() {
-        this.playerProfiles = new Map();
-        this.patternDatabase = [];
+        if (head && neck) {
+            return {
+                x: (head.x + neck.x) / 2,
+                y: (head.y + neck.y) / 2 + 0.1,
+                z: (head.z + neck.z) / 2
+            };
+        }
+        
+        return joints[0].position;
     }
     
-    // ... (methods to store and retrieve behavior patterns) ...
+    calculateHeadVisibility(joints) {
+        const head = joints.find(j => j.name === 'head');
+        return head ? head.visibility : 1.0;
+    }
 }
 
 // ================== INITIALIZATION ==================
