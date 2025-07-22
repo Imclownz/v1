@@ -1,42 +1,61 @@
-// QUANTUM PERFORMANCE OPTIMIZER v8.0 (Zero Latency Edition)
+// QUANTUM HEADSHOT OPTIMIZER v9.7 (Free Fire Elite Edition)
 class QuantumPerformanceOptimizer {
     constructor() {
-        // Hệ thống module AI-Driven
+        // Hệ thống module AI-Driven tối ưu cho headshot
         this.modules = {
             aim: { 
                 active: true, 
                 priority: 0, 
-                cpuBudget: 0.40, 
-                memBudget: 25,
-                aiProfile: "precision"
+                cpuBudget: 0.48, 
+                memBudget: 28,
+                aiProfile: "headshot_precision",
+                targetingMode: "head_priority",
+                predictionStrength: 0.95
             },
             recoil: { 
                 active: true, 
                 priority: 1, 
-                cpuBudget: 0.30, 
-                memBudget: 20,
-                aiProfile: "stabilization"
+                cpuBudget: 0.35, 
+                memBudget: 22,
+                aiProfile: "zero_recoil",
+                verticalCompensation: 0.88,
+                horizontalStabilization: 0.92
             },
             network: { 
                 active: true, 
                 priority: 2, 
-                cpuBudget: 0.15, 
-                memBudget: 15,
-                aiProfile: "latency_control"
+                cpuBudget: 0.18, 
+                memBudget: 18,
+                aiProfile: "latency_eliminator",
+                pingOptimization: "aggressive",
+                packetLossProtection: true
             },
             graphics: { 
                 active: true, 
-                priority: 3, 
-                cpuBudget: 0.10, 
-                memBudget: 30,
-                aiProfile: "adaptive_rendering"
+                priority: 4,  // Giảm ưu tiên đồ họa
+                cpuBudget: 0.05,  // Giảm mạnh tài nguyên
+                memBudget: 15,    // Giảm bộ nhớ
+                aiProfile: "competitive_minimal",
+                modelQuality: "low_poly",
+                textureResolution: 256
             },
             prediction: {
                 active: true,
                 priority: 0.5,
-                cpuBudget: 0.18,
-                memBudget: 18,
-                aiProfile: "neural_anticipation"
+                cpuBudget: 0.22,
+                memBudget: 20,
+                aiProfile: "neural_anticipation",
+                trajectoryCalculation: "advanced_ballistics",
+                movementPrediction: 0.93
+            },
+            touchResponse: {
+                active: true,
+                priority: 0.3,
+                cpuBudget: 0.15,
+                memBudget: 12,
+                aiProfile: "ultra_responsive",
+                touchSensitivity: 1.25,
+                inputLagReduction: 0.85
             }
         };
         
@@ -47,68 +66,49 @@ class QuantumPerformanceOptimizer {
             fps: 0, 
             temp: 0,
             jitter: 0,
-            frameTime: 0
+            frameTime: 0,
+            touchDelay: 0
         };
         
-        // Cấu hình đồ họa AI-Powered
+        // Cấu hình đồ họa tối ưu cho headshot và FPS cao
         this.graphicsPresets = {
-            quantum: { 
-                textureQuality: "ultra", 
-                shadowQuality: "dynamic_high", 
-                effectsQuality: "smart", 
-                resolutionScale: 1.0, 
-                fpsTarget: 144,
-                renderDistance: "ultra",
-                physicsQuality: "high"
-            },
-            ultra: { 
-                textureQuality: "ultra", 
-                shadowQuality: "high", 
-                effectsQuality: "high", 
-                resolutionScale: 0.98, 
-                fpsTarget: 120,
-                renderDistance: "high",
-                physicsQuality: "medium"
-            },
-            competitive: { 
-                textureQuality: "high", 
-                shadowQuality: "dynamic_medium", 
-                effectsQuality: "essential", 
-                resolutionScale: 0.95, 
+            competitive_pro: { 
+                textureQuality: "very_low", 
+                shadowQuality: "off", 
+                effectsQuality: "off", 
+                resolutionScale: 0.65, 
                 fpsTarget: 90,
                 renderDistance: "medium",
-                physicsQuality: "medium"
+                physicsQuality: "minimal",
+                modelDetail: "minimal",
+                particleEffects: "disabled"
             },
-            balanced: { 
-                textureQuality: "medium", 
-                shadowQuality: "low", 
-                effectsQuality: "medium", 
-                resolutionScale: 0.9, 
-                fpsTarget: 75,
-                renderDistance: "medium",
-                physicsQuality: "low"
-            },
-            smooth: { 
-                textureQuality: "adaptive", 
-                shadowQuality: "dynamic_low", 
-                effectsQuality: "minimal", 
-                resolutionScale: 0.85, 
-                fpsTarget: 60,
-                renderDistance: "medium",
-                physicsQuality: "low"
-            },
-            minimal: { 
+            headshot_focused: { 
                 textureQuality: "performance", 
                 shadowQuality: "off", 
                 effectsQuality: "off", 
-                resolutionScale: 0.75, 
-                fpsTarget: 45,
+                resolutionScale: 0.60, 
+                fpsTarget: 90,
                 renderDistance: "low",
-                physicsQuality: "minimal"
+                physicsQuality: "minimal",
+                modelDetail: "low",
+                particleEffects: "essential_only",
+                enemyHighlight: true
+            },
+            ultra_performance: { 
+                textureQuality: "minimum", 
+                shadowQuality: "off", 
+                effectsQuality: "off", 
+                resolutionScale: 0.55, 
+                fpsTarget: 90,
+                renderDistance: "low",
+                physicsQuality: "minimal",
+                modelDetail: "very_low",
+                particleEffects: "disabled"
             }
         };
         
-        this.currentGraphicsPreset = "competitive";
+        this.currentGraphicsPreset = "headshot_focused";
         this.thermalControl = new QuantumThermalSystem();
         this.memoryManager = new NeuralMemoryManager();
         this.gameState = null;
@@ -119,8 +119,20 @@ class QuantumPerformanceOptimizer {
         this.aimSystemIntegration = new AimSystemIntegration();
         this.recoilSystemIntegration = new RecoilSystemIntegration();
         this.networkSystemIntegration = new NetworkSystemIntegration();
-        this.powerProfile = "performance";
+        this.touchOptimizer = new TouchResponseOptimizer();
+        this.headshotEngine = new HeadshotPredictionEngine();
+        this.movementPredictor = new AdvancedMovementPredictor();
+        this.bulletCalculator = new BulletTrajectoryCalculator();
+        this.powerProfile = "extreme_performance";
         this.deviceProfile = this.detectDeviceCapabilities();
+        this.headshotMode = "aggressive";
+        this.lastHeadshotTime = 0;
+        this.combatState = {
+            inCombat: false,
+            enemiesVisible: 0,
+            closestEnemyDistance: 999,
+            currentWeapon: "assault_rifle"
+        };
     }
 
     process(body) {
@@ -128,8 +140,8 @@ class QuantumPerformanceOptimizer {
             const processStart = performance.now();
             let data = JSON.parse(body);
             
-            // Cập nhật trạng thái trò chơi
-            this.gameState = data.gameState || this.gameState;
+            // Cập nhật trạng thái trò chơi chi tiết
+            this.updateGameState(data.gameState || this.gameState);
             
             // Cập nhật thống kê hiệu năng
             if (data.performanceState) {
@@ -142,11 +154,17 @@ class QuantumPerformanceOptimizer {
             // Phân tích thời gian khung hình
             this.frameTimeAnalyzer.analyzeFrameTime(this.performanceStats.frameTime);
             
+            // Tối ưu hóa phản hồi cảm ứng
+            this.touchOptimizer.optimizeResponse(this.performanceStats.touchDelay);
+            
+            // Tính toán đường đạn
+            this.bulletCalculator.calculateTrajectory(this.combatState);
+            
             // Quản lý bộ nhớ
             this.memoryManager.cleanup();
             
-            // Tối ưu hóa hệ thống
-            if (Date.now() - this.lastOptimization > 1000 || this.performanceStats.cpu > 0.85 || this.lagSpikeDetected) {
+            // Tối ưu hóa hệ thống thường xuyên hơn
+            if (Date.now() - this.lastOptimization > 500 || this.performanceStats.cpu > 0.80 || this.lagSpikeDetected) {
                 this.optimizeSystem();
                 this.lastOptimization = Date.now();
             }
@@ -159,6 +177,11 @@ class QuantumPerformanceOptimizer {
                 data.graphicsSettings = this.applyGraphicsSettings(data.graphicsSettings);
             }
             
+            // Áp dụng cài đặt headshot
+            if (data.aimSettings) {
+                data.aimSettings = this.applyHeadshotSettings(data.aimSettings);
+            }
+            
             // Tạo dữ liệu hiệu năng
             data.performance = {
                 timestamp: Date.now(),
@@ -169,7 +192,10 @@ class QuantumPerformanceOptimizer {
                 frameAnalysis: this.frameTimeAnalyzer.getAnalysis(),
                 graphicsPreset: this.currentGraphicsPreset,
                 deviceProfile: this.deviceProfile,
-                processingTime: performance.now() - processStart
+                processingTime: performance.now() - processStart,
+                headshotRate: this.headshotEngine.getSuccessRate(),
+                touchOptimization: this.touchOptimizer.getStatus(),
+                bulletPrediction: this.bulletCalculator.getPredictionStats()
             };
 
             return JSON.stringify(data);
@@ -179,8 +205,25 @@ class QuantumPerformanceOptimizer {
         }
     }
 
+    updateGameState(newState) {
+        if (!newState) return;
+        
+        this.gameState = newState;
+        
+        // Cập nhật trạng thái chiến đấu
+        this.combatState.inCombat = newState.isInCombat || false;
+        this.combatState.enemiesVisible = newState.enemyCount || 0;
+        this.combatState.closestEnemyDistance = newState.closestEnemyDistance || 999;
+        this.combatState.currentWeapon = newState.equippedWeapon || "assault_rifle";
+        
+        // Cập nhật thời gian headshot cuối
+        if (newState.lastHit && newState.lastHit.type === "headshot") {
+            this.lastHeadshotTime = Date.now();
+        }
+    }
+
     updateStats(perf) {
-        const weight = 0.35; // Hệ số làm mượt
+        const weight = 0.45; // Tăng hệ số làm mượt
         
         // Cập nhật thống kê cơ bản
         this.performanceStats.cpu = this.calcAvg(this.performanceStats.cpu, perf.cpuUsage, weight);
@@ -189,12 +232,18 @@ class QuantumPerformanceOptimizer {
         this.performanceStats.temp = perf.temperature || this.performanceStats.temp;
         this.performanceStats.jitter = perf.jitter || this.performanceStats.jitter;
         this.performanceStats.frameTime = perf.frameTime || this.performanceStats.frameTime;
+        this.performanceStats.touchDelay = perf.touchDelay || this.performanceStats.touchDelay;
         
         // Phát hiện giật lag
-        if (perf.frameTime > 33 || perf.jitter > 15) { // >33ms = <30fps
+        if (perf.frameTime > 22 || perf.jitter > 10) { // >22ms = <45fps
             this.lagSpikeDetected = true;
-        } else if (this.lagSpikeDetected && perf.frameTime < 20 && perf.jitter < 8) {
+        } else if (this.lagSpikeDetected && perf.frameTime < 16 && perf.jitter < 6) {
             this.lagSpikeDetected = false;
+        }
+        
+        // Tự động kích hoạt chế độ headshot khi FPS ổn định
+        if (!this.combatState.inCombat && this.performanceStats.fps > 85 && this.performanceStats.frameTime < 12) {
+            this.headshotMode = "aggressive";
         }
     }
 
@@ -205,37 +254,49 @@ class QuantumPerformanceOptimizer {
     integrateExternalSystems(data) {
         // Tích hợp với hệ thống aim
         if (data.aimSystem) {
-            this.aimSystemIntegration.update(data.aimSystem, this.gameState);
+            this.aimSystemIntegration.update(data.aimSystem, this.combatState);
+            this.headshotEngine.processAimData(data.aimSystem);
         }
         
         // Tích hợp với hệ thống recoil
         if (data.recoilSystem) {
-            this.recoilSystemIntegration.update(data.recoilSystem, this.gameState);
+            this.recoilSystemIntegration.update(data.recoilSystem, this.combatState);
         }
         
         // Tích hợp với hệ thống mạng
         if (data.network) {
-            this.networkSystemIntegration.update(data.network, this.gameState);
+            this.networkSystemIntegration.update(data.network, this.combatState);
+            this.headshotEngine.adjustForLatency(data.network.stats?.ping || 0);
+        }
+        
+        // Tích hợp dữ liệu chuyển động
+        if (data.movementData) {
+            this.movementPredictor.updateMovement(data.movementData, this.combatState);
+            this.headshotEngine.updateMovementPatterns(data.movementData);
         }
     }
 
     optimizeSystem() {
         // Phân tích AI để tối ưu tài nguyên
-        this.aiOptimizer.analyze(this.performanceStats, this.gameState);
+        this.aiOptimizer.analyze(this.performanceStats, this.combatState);
         
         // Kích hoạt chế độ chiến đấu
-        if (this.gameState?.isInCombat) {
+        if (this.combatState.inCombat) {
             this.activateCombatMode();
+            
+            // Kích hoạt chế độ headshot khi có mục tiêu
+            if (this.combatState.enemiesVisible > 0) {
+                this.activateHeadshotMode();
+            }
+        } else {
+            this.deactivateCombatMode();
         }
         
         // Kiểm soát nhiệt độ
-        if (this.performanceStats.temp > 45) {
-            this.thermalControl.activateCoolingMode();
-            this.modules.graphics.cpuBudget *= 0.65;
-            this.currentGraphicsPreset = "smooth";
-            this.thermalThrottleDetected = true;
-        } else if (this.thermalThrottleDetected && this.performanceStats.temp < 38) {
-            this.thermalThrottleDetected = false;
+        if (this.performanceStats.temp > 42) {
+            this.activateCoolingProtocol();
+        } else if (this.thermalThrottleDetected && this.performanceStats.temp < 36) {
+            this.deactivateCoolingProtocol();
         }
         
         // Chế độ sinh tồn khi máu thấp
@@ -251,47 +312,111 @@ class QuantumPerformanceOptimizer {
         
         // Tối ưu cho thiết bị
         this.applyDeviceOptimizations();
+        
+        // Tối ưu hóa phản hồi cảm ứng
+        this.touchOptimizer.optimizeResponse(this.performanceStats.touchDelay);
     }
 
     activateCombatMode() {
-        // Ưu tiên tài nguyên cho aim và recoil trong chiến đấu
-        this.modules.aim.cpuBudget = Math.min(0.48, this.modules.aim.cpuBudget + 0.08);
-        this.modules.recoil.cpuBudget = Math.min(0.38, this.modules.recoil.cpuBudget + 0.06);
-        this.modules.prediction.cpuBudget = Math.min(0.25, this.modules.prediction.cpuBudget + 0.07);
+        // Ưu tiên tài nguyên cho headshot
+        this.modules.aim.cpuBudget = Math.min(0.52, this.modules.aim.cpuBudget + 0.10);
+        this.modules.recoil.cpuBudget = Math.min(0.42, this.modules.recoil.cpuBudget + 0.08);
+        this.modules.prediction.cpuBudget = Math.min(0.30, this.modules.prediction.cpuBudget + 0.09);
+        this.modules.touchResponse.cpuBudget = Math.min(0.22, this.modules.touchResponse.cpuBudget + 0.07);
         
-        // Giảm tải đồ họa
-        this.modules.graphics.cpuBudget = Math.max(0.07, this.modules.graphics.cpuBudget - 0.05);
+        // Giảm tải đồ họa tối đa
+        this.modules.graphics.cpuBudget = Math.max(0.03, this.modules.graphics.cpuBudget * 0.6);
         
         // Đặt preset đồ họa cho chiến đấu
-        this.currentGraphicsPreset = "competitive";
+        this.currentGraphicsPreset = "headshot_focused";
         
         // Kích hoạt chế độ hiệu năng tối đa
         this.powerProfile = "extreme_performance";
     }
 
+    deactivateCombatMode() {
+        // Khôi phục cài đặt khi không chiến đấu
+        this.modules.aim.cpuBudget = 0.48;
+        this.modules.recoil.cpuBudget = 0.35;
+        this.modules.prediction.cpuBudget = 0.22;
+        this.modules.touchResponse.cpuBudget = 0.15;
+        this.modules.graphics.cpuBudget = 0.05;
+        
+        // Đặt preset mặc định
+        this.currentGraphicsPreset = "competitive_pro";
+    }
+
+    activateHeadshotMode() {
+        // Tăng cường dự đoán headshot
+        this.headshotMode = "aggressive";
+        this.modules.aim.predictionStrength = 0.98;
+        this.modules.prediction.movementPrediction = 0.97;
+        
+        // Tăng độ ưu tiên cho module aim
+        this.modules.aim.priority = -1; // Mức ưu tiên cao nhất
+        
+        // Kích hoạt tính năng bắt tâm nâng cao
+        this.headshotEngine.activate();
+        
+        // Cấu hình đặc biệt cho vũ khí
+        switch(this.combatState.currentWeapon) {
+            case "sniper_rifle":
+                this.modules.aim.targetingMode = "head_lock";
+                this.modules.recoil.verticalCompensation = 0.95;
+                break;
+            case "shotgun":
+                this.modules.aim.targetingMode = "upper_body";
+                this.modules.recoil.verticalCompensation = 0.82;
+                break;
+            default: // assault_rifle, smg, etc.
+                this.modules.aim.targetingMode = "head_priority";
+                this.modules.recoil.verticalCompensation = 0.88;
+        }
+    }
+
+    activateCoolingProtocol() {
+        this.thermalControl.activateCoolingMode();
+        this.modules.graphics.cpuBudget = Math.max(0.02, this.modules.graphics.cpuBudget * 0.5);
+        this.currentGraphicsPreset = "ultra_performance";
+        this.thermalThrottleDetected = true;
+        
+        // Điều chỉnh để duy trì headshot
+        this.modules.aim.cpuBudget *= 1.05;
+    }
+
+    deactivateCoolingProtocol() {
+        this.thermalThrottleDetected = false;
+        this.thermalControl.deactivateCoolingMode();
+    }
+
     enableSurvivalMode() {
         // Tối ưu cho tình huống nguy hiểm
-        this.modules.aim.cpuBudget = 0.46;
-        this.modules.recoil.cpuBudget = 0.36;
-        this.modules.prediction.cpuBudget = 0.24;
-        this.currentGraphicsPreset = "smooth";
-        this.modules.graphics.memBudget = 20;
+        this.modules.aim.cpuBudget = 0.50;
+        this.modules.recoil.cpuBudget = 0.40;
+        this.modules.prediction.cpuBudget = 0.28;
+        this.modules.touchResponse.cpuBudget = 0.18;
+        this.currentGraphicsPreset = "ultra_performance";
+        this.modules.graphics.memBudget = 12;
         
         // Giảm hiệu ứng không cần thiết
-        this.modules.graphics.cpuBudget = 0.08;
+        this.modules.graphics.cpuBudget = 0.02;
+        
+        // Kích hoạt chế độ headshot bảo toàn mạng
+        this.headshotMode = "survival";
+        this.modules.aim.targetingMode = "critical_lock";
     }
 
     adjustGraphicsQuality() {
         const currentFpsTarget = this.graphicsPresets[this.currentGraphicsPreset].fpsTarget;
         const currentFps = this.performanceStats.fps;
         
-        // Phát hiện giảm FPS
-        if (currentFps < currentFpsTarget * 0.7) {
+        // Luôn ưu tiên duy trì 90fps
+        if (currentFps < 85) {
             this.downgradeGraphics();
         } 
-        // Nâng cấp khi có hiệu năng dư
-        else if (currentFps > currentFpsTarget * 1.3 && 
-                 this.performanceStats.cpu < 0.65 && 
+        // Chỉ nâng cấp khi FPS > 100 và nhiệt độ ổn định
+        else if (currentFps > 100 && 
+                 this.performanceStats.cpu < 0.70 && 
                  !this.thermalThrottleDetected &&
                  !this.lagSpikeDetected) {
             this.upgradeGraphics();
@@ -299,28 +424,30 @@ class QuantumPerformanceOptimizer {
         
         // Điều chỉnh dựa trên phân tích thời gian khung hình
         const frameAnalysis = this.frameTimeAnalyzer.getAnalysis();
-        if (frameAnalysis.percentile95 > 28) { // >28ms frame time
+        if (frameAnalysis.percentile95 > 18) { // >18ms frame time
             this.downgradeGraphics();
         }
     }
 
     downgradeGraphics() {
-        const presets = ["quantum", "ultra", "competitive", "balanced", "smooth", "minimal"];
-        const idx = presets.indexOf(this.currentGraphicsPreset);
-        if (idx < presets.length - 1) {
-            this.currentGraphicsPreset = presets[idx + 1];
-            // Giảm thêm tài nguyên đồ họa nếu cần
-            this.modules.graphics.cpuBudget *= 0.9;
+        const presets = ["competitive_pro", "headshot_focused", "ultra_performance"];
+        const currentIdx = presets.indexOf(this.currentGraphicsPreset);
+        
+        if (currentIdx < presets.length - 1) {
+            this.currentGraphicsPreset = presets[currentIdx + 1];
+            // Giảm thêm tài nguyên đồ họa
+            this.modules.graphics.cpuBudget = Math.max(0.01, this.modules.graphics.cpuBudget * 0.8);
         }
     }
 
     upgradeGraphics() {
-        const presets = ["quantum", "ultra", "competitive", "balanced", "smooth", "minimal"];
-        const idx = presets.indexOf(this.currentGraphicsPreset);
-        if (idx > 0) {
-            this.currentGraphicsPreset = presets[idx - 1];
-            // Tăng tài nguyên cho module khác nếu có thể
-            this.modules.aim.cpuBudget = Math.min(0.45, this.modules.aim.cpuBudget + 0.02);
+        const presets = ["competitive_pro", "headshot_focused", "ultra_performance"];
+        const currentIdx = presets.indexOf(this.currentGraphicsPreset);
+        
+        if (currentIdx > 0) {
+            this.currentGraphicsPreset = presets[currentIdx - 1];
+            // Tăng tài nguyên cho module headshot nếu có thể
+            this.modules.aim.cpuBudget = Math.min(0.55, this.modules.aim.cpuBudget + 0.03);
         }
     }
 
@@ -342,24 +469,40 @@ class QuantumPerformanceOptimizer {
         
         // Điều chỉnh dựa trên phân tích khung hình
         const frameAnalysis = this.frameTimeAnalyzer.getAnalysis();
-        if (frameAnalysis.consistency < 0.85) {
-            this.modules.graphics.cpuBudget *= 0.85;
-            this.modules.network.cpuBudget *= 1.1;
+        if (frameAnalysis.consistency < 0.9) {
+            this.modules.graphics.cpuBudget *= 0.75;
+            this.modules.touchResponse.cpuBudget *= 1.15;
+        }
+        
+        // Điều chỉnh dựa trên tỉ lệ headshot
+        const headshotRate = this.headshotEngine.getSuccessRate();
+        if (headshotRate < 0.85 && this.combatState.inCombat) {
+            this.modules.aim.cpuBudget = Math.min(0.55, this.modules.aim.cpuBudget + 0.05);
+            this.modules.prediction.cpuBudget = Math.min(0.32, this.modules.prediction.cpuBudget + 0.04);
         }
     }
 
     applyDeviceOptimizations() {
         // Tối ưu cho thiết bị cấu hình thấp
         if (this.deviceProfile.tier === "low") {
-            this.modules.graphics.cpuBudget = 0.08;
-            this.modules.graphics.memBudget = 18;
-            this.currentGraphicsPreset = "minimal";
+            this.modules.graphics.cpuBudget = 0.02;
+            this.modules.graphics.memBudget = 10;
+            this.currentGraphicsPreset = "ultra_performance";
+            this.modules.aim.targetingMode = "conservative";
+            this.headshotMode = "balanced";
         }
         // Tối ưu cho thiết bị tầm trung
         else if (this.deviceProfile.tier === "mid") {
-            this.modules.graphics.cpuBudget = 0.12;
-            this.modules.graphics.memBudget = 22;
-            this.currentGraphicsPreset = "smooth";
+            this.modules.graphics.cpuBudget = 0.04;
+            this.modules.graphics.memBudget = 14;
+            this.currentGraphicsPreset = "headshot_focused";
+            this.headshotMode = "aggressive";
+        }
+        // Thiết bị cao cấp - tập trung tối đa vào headshot
+        else {
+            this.modules.aim.cpuBudget = 0.55;
+            this.modules.prediction.cpuBudget = 0.30;
+            this.headshotMode = "extreme";
         }
     }
 
@@ -367,23 +510,67 @@ class QuantumPerformanceOptimizer {
         const preset = this.graphicsPresets[this.currentGraphicsPreset];
         const newSettings = { ...current };
         
-        // Chỉ áp dụng thay đổi nếu khác biệt đáng kể
-        if (newSettings.textureQuality !== preset.textureQuality ||
-            newSettings.shadowQuality !== preset.shadowQuality ||
-            Math.abs(newSettings.resolutionScale - preset.resolutionScale) > 0.1) {
-            
-            newSettings.textureQuality = preset.textureQuality;
-            newSettings.shadowQuality = preset.shadowQuality;
-            newSettings.effectsQuality = preset.effectsQuality;
-            newSettings.resolutionScale = preset.resolutionScale;
-            newSettings.fpsTarget = preset.fpsTarget;
-            newSettings.renderDistance = preset.renderDistance;
-            newSettings.physicsQuality = preset.physicsQuality;
+        newSettings.textureQuality = preset.textureQuality;
+        newSettings.shadowQuality = preset.shadowQuality;
+        newSettings.effectsQuality = preset.effectsQuality;
+        newSettings.resolutionScale = preset.resolutionScale;
+        newSettings.fpsTarget = preset.fpsTarget;
+        newSettings.renderDistance = preset.renderDistance;
+        newSettings.physicsQuality = preset.physicsQuality;
+        newSettings.modelDetail = preset.modelDetail;
+        newSettings.particleEffects = preset.particleEffects;
+        
+        // Kích hoạt tính năng đặc biệt
+        newSettings.enemyHighlight = preset.enemyHighlight || false;
+        newSettings.backgroundBlur = true;
+        newSettings.nonEssentialVisuals = false;
+        
+        return newSettings;
+    }
+
+    applyHeadshotSettings(current) {
+        const newSettings = { ...current };
+        
+        // Cài đặt dựa trên chế độ headshot
+        switch(this.headshotMode) {
+            case "extreme":
+                newSettings.sensitivity = 85;
+                newSettings.aimAssist = 100;
+                newSettings.lockPrecision = 99;
+                newSettings.recoilCompensation = 95;
+                newSettings.headshotPriority = 100;
+                break;
+                
+            case "aggressive":
+                newSettings.sensitivity = 80;
+                newSettings.aimAssist = 95;
+                newSettings.lockPrecision = 95;
+                newSettings.recoilCompensation = 90;
+                newSettings.headshotPriority = 98;
+                break;
+                
+            case "balanced":
+                newSettings.sensitivity = 75;
+                newSettings.aimAssist = 90;
+                newSettings.lockPrecision = 90;
+                newSettings.recoilCompensation = 85;
+                newSettings.headshotPriority = 95;
+                break;
+                
+            case "survival":
+                newSettings.sensitivity = 70;
+                newSettings.aimAssist = 85;
+                newSettings.lockPrecision = 92;
+                newSettings.recoilCompensation = 88;
+                newSettings.headshotPriority = 96;
+                break;
         }
         
-        // Áp dụng tối ưu hóa AI
-        newSettings.aiOptimized = true;
-        newSettings.dynamicScaling = "ai_controlled";
+        // Tích hợp dự đoán từ AI
+        const prediction = this.headshotEngine.getAimPrediction();
+        newSettings.predictionOffsetX = prediction.x;
+        newSettings.predictionOffsetY = prediction.y;
+        newSettings.predictionOffsetZ = prediction.z;
         
         return newSettings;
     }
@@ -394,30 +581,55 @@ class QuantumPerformanceOptimizer {
             cpuBudget: config.cpuBudget.toFixed(3),
             memBudget: config.memBudget,
             aiProfile: config.aiProfile,
-            priority: config.priority
+            priority: config.priority,
+            ...(config.targetingMode ? {targetingMode: config.targetingMode} : {}),
+            ...(config.predictionStrength ? {predictionStrength: config.predictionStrength} : {})
         }));
     }
 
     detectDeviceCapabilities() {
-        // Phát hiện khả năng thiết bị (giả lập)
+        // Phát hiện khả năng thiết bị thực tế
+        const gpuTier = this.classifyGPUTier();
+        const cpuCores = navigator.hardwareConcurrency || 4;
+        
         return {
-            gpu: "adreno_650",
-            cpu: "snapdragon_865",
-            ram: 8,
-            tier: "high" // low, mid, high
+            gpu: gpuTier.name,
+            cpu: `${cpuCores} cores`,
+            ram: performance.deviceMemory || 4,
+            tier: gpuTier.tier // low, mid, high
         };
+    }
+
+    classifyGPUTier() {
+        // Logic xác định GPU thực tế
+        const gl = document.createElement('canvas').getContext('webgl');
+        if (!gl) return { name: "unknown", tier: "low" };
+        
+        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+        if (debugInfo) {
+            const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+            
+            if (/adreno\s*6\d{2}/i.test(renderer)) return { name: renderer, tier: "high" };
+            if (/adreno\s*5/i.test(renderer)) return { name: renderer, tier: "mid" };
+            if (/mali\-g(\d+)/i.test(renderer)) {
+                const gen = parseInt(renderer.match(/mali\-g(\d+)/i)[1]);
+                return { name: renderer, tier: gen >= 7 ? "high" : gen >= 5 ? "mid" : "low" };
+            }
+        }
+        
+        return { name: "unknown", tier: "mid" };
     }
 
     handleSafeFallback(originalBody) {
         try {
             const data = JSON.parse(originalBody);
             if (data.performance) {
-                // Chế độ an toàn
+                // Chế độ an toàn tập trung vào headshot
                 data.performance.safeMode = true;
                 data.performance.moduleAllocations = [
-                    {module: "aim", cpuBudget: "0.35", memBudget: 20},
-                    {module: "recoil", cpuBudget: "0.25", memBudget: 15},
-                    {module: "graphics", cpuBudget: "0.10", memBudget: 25}
+                    {module: "aim", cpuBudget: "0.45", memBudget: 25, aiProfile: "headshot_precision"},
+                    {module: "recoil", cpuBudget: "0.35", memBudget: 20, aiProfile: "zero_recoil"},
+                    {module: "touchResponse", cpuBudget: "0.15", memBudget: 12}
                 ];
             }
             return JSON.stringify(data);
@@ -439,36 +651,14 @@ class QuantumThermalSystem {
 
     monitor(temp) {
         this.temperature = temp;
+        this.thermalHistory.push({ timestamp: Date.now(), temp });
+        if (this.thermalHistory.length > 60) this.thermalHistory.shift();
         
-        // Lưu lịch sử nhiệt độ
-        this.thermalHistory.push({
-            timestamp: Date.now(),
-            temp: temp
-        });
+        if (temp > 43 && !this.coolingMode) this.activateCoolingMode();
+        else if (temp < 37 && this.coolingMode) this.deactivateCoolingMode();
         
-        // Giữ lịch sử vừa phải
-        if (this.thermalHistory.length > 50) {
-            this.thermalHistory.shift();
-        }
-        
-        // Kích hoạt chế độ làm mát
-        if (temp > 46 && !this.coolingMode) {
-            this.activateCoolingMode();
-        } 
-        // Tắt chế độ làm mát
-        else if (temp < 40 && this.coolingMode) {
-            this.deactivateCoolingMode();
-        }
-        
-        // Điều chỉnh cường độ làm mát
         if (this.coolingMode) {
-            if (temp > 50) {
-                this.coolingIntensity = 1.5;
-            } else if (temp > 45) {
-                this.coolingIntensity = 1.2;
-            } else {
-                this.coolingIntensity = 1.0;
-            }
+            this.coolingIntensity = temp > 48 ? 1.8 : temp > 45 ? 1.5 : temp > 42 ? 1.2 : 1.0;
         }
     }
 
@@ -494,8 +684,7 @@ class QuantumThermalSystem {
     
     calculateAverageTemp() {
         if (this.thermalHistory.length === 0) return 0;
-        const sum = this.thermalHistory.reduce((acc, entry) => acc + entry.temp, 0);
-        return sum / this.thermalHistory.length;
+        return this.thermalHistory.reduce((acc, entry) => acc + entry.temp, 0) / this.thermalHistory.length;
     }
 }
 
@@ -504,9 +693,9 @@ class NeuralMemoryManager {
     constructor() {
         this.memoryCache = new Map();
         this.lastCleanup = Date.now();
-        this.maxCacheSize = 60;
+        this.maxCacheSize = 70;
         this.memUsage = 0;
-        this.cleanupThreshold = 10000; // 10 giây
+        this.cleanupThreshold = 8000; // 8 giây
     }
 
     cleanup() {
@@ -518,7 +707,7 @@ class NeuralMemoryManager {
         
         // Dọn dẹp các mục cũ
         for (const [key, entry] of this.memoryCache) {
-            if (now - entry.lastAccessed > 30000) { // 30 giây
+            if (now - entry.lastAccessed > 25000) {
                 this.memoryCache.delete(key);
                 count++;
             }
@@ -531,7 +720,6 @@ class NeuralMemoryManager {
             count += keys.length;
         }
         
-        // Cập nhật sử dụng bộ nhớ
         this.memUsage = this.memoryCache.size;
     }
 
@@ -548,119 +736,87 @@ class NeuralMemoryManager {
 class FrameTimeAnalyzer {
     constructor() {
         this.frameTimes = [];
-        this.maxSamples = 120; // ~2 giây ở 60fps
+        this.maxSamples = 180; // ~3 giây ở 60fps
         this.lastAnalysis = 0;
         this.analysisCache = null;
     }
     
     analyzeFrameTime(frameTime) {
         if (!frameTime) return;
-        
-        // Thêm thời gian khung hình mới
         this.frameTimes.push(frameTime);
-        
-        // Giới hạn số mẫu
-        if (this.frameTimes.length > this.maxSamples) {
-            this.frameTimes.shift();
-        }
+        if (this.frameTimes.length > this.maxSamples) this.frameTimes.shift();
     }
     
     getAnalysis() {
-        // Chỉ phân tích mỗi 500ms
-        if (Date.now() - this.lastAnalysis < 500 && this.analysisCache) {
-            return this.analysisCache;
-        }
-        
+        if (Date.now() - this.lastAnalysis < 400 && this.analysisCache) return this.analysisCache;
         this.lastAnalysis = Date.now();
         
-        if (this.frameTimes.length === 0) {
-            return {
-                min: 0,
-                max: 0,
-                avg: 0,
-                percentile95: 0,
-                consistency: 0
-            };
-        }
+        if (this.frameTimes.length === 0) return this.defaultAnalysis();
         
-        // Tính toán các chỉ số
         const sorted = [...this.frameTimes].sort((a, b) => a - b);
         const min = sorted[0];
         const max = sorted[sorted.length - 1];
         const sum = sorted.reduce((acc, val) => acc + val, 0);
         const avg = sum / sorted.length;
-        
-        // Phần trăm 95
         const idx95 = Math.floor(sorted.length * 0.95);
         const percentile95 = sorted[idx95];
+        const consistency = Math.max(0, 1 - (max - min) / 22);
         
-        // Tính nhất quán (1 là hoàn hảo)
-        const consistency = Math.max(0, 1 - (max - min) / 30);
-        
-        // Lưu vào bộ nhớ cache
-        this.analysisCache = {
-            min,
-            max,
-            avg,
-            percentile95,
-            consistency,
-            samples: sorted.length
-        };
-        
+        this.analysisCache = { min, max, avg, percentile95, consistency, samples: sorted.length };
         return this.analysisCache;
+    }
+    
+    defaultAnalysis() {
+        return { min: 0, max: 0, avg: 0, percentile95: 0, consistency: 0, samples: 0 };
     }
 }
 
-// TRÌNH TỐI ƯU HÓA TÀI NGUYÊN AI
+// TRÌNH TỐI ƯU HÓA TÀI NGUYÊN AI CHO HEADSHOT
 class AIResourceOptimizer {
     constructor() {
         this.learningModel = {
-            aim: { cpu: 0.40, memory: 25 },
-            recoil: { cpu: 0.30, memory: 20 },
-            prediction: { cpu: 0.18, memory: 18 },
-            network: { cpu: 0.15, memory: 15 },
-            graphics: { cpu: 0.10, memory: 30 }
+            aim: { cpu: 0.48, memory: 28 },
+            recoil: { cpu: 0.35, memory: 22 },
+            prediction: { cpu: 0.22, memory: 20 },
+            network: { cpu: 0.18, memory: 18 },
+            graphics: { cpu: 0.05, memory: 15 },
+            touchResponse: { cpu: 0.15, memory: 12 }
         };
         this.lastUpdate = 0;
+        this.headshotImportance = 1.0;
     }
     
-    analyze(perfStats, gameState) {
-        // Cập nhật mô hình mỗi 5 giây
-        if (Date.now() - this.lastUpdate < 5000) return;
+    analyze(perfStats, combatState) {
+        // Cập nhật mô hình mỗi 4 giây
+        if (Date.now() - this.lastUpdate < 4000) return;
         this.lastUpdate = Date.now();
         
         // Điều chỉnh dựa trên sử dụng CPU
-        if (perfStats.cpu > 0.85) {
+        if (perfStats.cpu > 0.82) {
             this.reduceResourceUsage();
-        } else if (perfStats.cpu < 0.65) {
+        } else if (perfStats.cpu < 0.68) {
             this.increaseResourceUsage();
         }
         
-        // Điều chỉnh cho trạng thái trò chơi
-        if (gameState?.isInCombat) {
-            this.learningModel.aim.cpu = Math.min(0.48, this.learningModel.aim.cpu + 0.05);
-            this.learningModel.recoil.cpu = Math.min(0.38, this.learningModel.recoil.cpu + 0.04);
-            this.learningModel.graphics.cpu = Math.max(0.07, this.learningModel.graphics.cpu - 0.04);
-        }
+        // Điều chỉnh cho headshot
+        this.headshotImportance = combatState.inCombat ? 1.2 : 0.9;
         
-        // Ưu tiên dự đoán khi FPS cao
-        if (perfStats.fps > 100) {
-            this.learningModel.prediction.cpu = Math.min(0.24, this.learningModel.prediction.cpu + 0.03);
+        // Ưu tiên dự đoán khi có nhiều kẻ địch
+        if (combatState.enemiesVisible > 1) {
+            this.learningModel.prediction.cpu = Math.min(0.28, this.learningModel.prediction.cpu + 0.04);
         }
     }
     
     reduceResourceUsage() {
-        // Giảm tải các module ít quan trọng hơn
-        this.learningModel.graphics.cpu *= 0.85;
-        this.learningModel.network.cpu *= 0.9;
-        this.learningModel.prediction.cpu *= 0.92;
+        this.learningModel.graphics.cpu *= 0.7;
+        this.learningModel.network.cpu *= 0.85;
+        this.learningModel.touchResponse.cpu *= 0.9;
     }
     
     increaseResourceUsage() {
-        // Tăng cường các module quan trọng
-        this.learningModel.aim.cpu = Math.min(0.45, this.learningModel.aim.cpu * 1.08);
-        this.learningModel.recoil.cpu = Math.min(0.35, this.learningModel.recoil.cpu * 1.07);
-        this.learningModel.prediction.cpu = Math.min(0.22, this.learningModel.prediction.cpu * 1.06);
+        this.learningModel.aim.cpu = Math.min(0.55, this.learningModel.aim.cpu * 1.12 * this.headshotImportance);
+        this.learningModel.recoil.cpu = Math.min(0.42, this.learningModel.recoil.cpu * 1.10);
+        this.learningModel.prediction.cpu = Math.min(0.30, this.learningModel.prediction.cpu * 1.08);
     }
     
     getRecommendations() {
@@ -668,12 +824,12 @@ class AIResourceOptimizer {
             aim: { 
                 cpu: this.learningModel.aim.cpu,
                 memory: this.learningModel.aim.memory,
-                aiProfile: "precision"
+                aiProfile: "headshot_precision"
             },
             recoil: { 
                 cpu: this.learningModel.recoil.cpu,
                 memory: this.learningModel.recoil.memory,
-                aiProfile: "stabilization"
+                aiProfile: "zero_recoil"
             },
             prediction: { 
                 cpu: this.learningModel.prediction.cpu,
@@ -683,12 +839,17 @@ class AIResourceOptimizer {
             network: { 
                 cpu: this.learningModel.network.cpu,
                 memory: this.learningModel.network.memory,
-                aiProfile: "latency_control"
+                aiProfile: "latency_eliminator"
             },
             graphics: { 
                 cpu: this.learningModel.graphics.cpu,
                 memory: this.learningModel.graphics.memory,
-                aiProfile: "adaptive_rendering"
+                aiProfile: "competitive_minimal"
+            },
+            touchResponse: { 
+                cpu: this.learningModel.touchResponse.cpu,
+                memory: this.learningModel.touchResponse.memory,
+                aiProfile: "ultra_responsive"
             }
         };
     }
@@ -699,69 +860,284 @@ class AimSystemIntegration {
     constructor() {
         this.lastLockStrength = 0;
         this.lockStability = 0;
+        this.headshotAccuracy = 0;
     }
     
-    update(aimSystem, gameState) {
+    update(aimSystem, combatState) {
         if (!aimSystem) return;
         
         this.lastLockStrength = aimSystem.lockPrecision || 0;
         
         // Tính toán độ ổn định khóa
-        if (gameState?.isInCombat) {
-            this.lockStability = Math.min(1.0, this.lockStability + 0.05);
+        if (combatState.inCombat) {
+            this.lockStability = Math.min(1.0, this.lockStability + 0.08);
         } else {
-            this.lockStability = Math.max(0.5, this.lockStability - 0.02);
+            this.lockStability = Math.max(0.6, this.lockStability - 0.03);
+        }
+        
+        // Cập nhật độ chính xác headshot
+        if (aimSystem.lastHitType === "headshot") {
+            this.headshotAccuracy = Math.min(1.0, this.headshotAccuracy + 0.05);
+        } else if (aimSystem.lastHitType === "body") {
+            this.headshotAccuracy = Math.max(0.7, this.headshotAccuracy - 0.03);
         }
     }
     
     getOptimizationRecommendation() {
-        if (this.lastLockStrength > 0.98) {
-            return { cpuBoost: 0.05 };
+        if (this.headshotAccuracy < 0.85) {
+            return { cpuBoost: 0.08 };
         }
         return {};
     }
 }
 
-// TÍCH HỢP HỆ THỐNG RECOIL
-class RecoilSystemIntegration {
+// TỐI ƯU HÓA PHẢN HỒI CẢM ỨNG
+class TouchResponseOptimizer {
     constructor() {
-        this.lastStability = 0;
-        this.compensationEfficiency = 0;
+        this.touchLatency = 0;
+        this.optimizationLevel = 1.0;
+        this.lastOptimization = 0;
     }
     
-    update(recoilSystem, gameState) {
-        if (!recoilSystem) return;
+    optimizeResponse(touchDelay) {
+        if (!touchDelay) return;
+        this.touchLatency = touchDelay;
         
-        this.lastStability = recoilSystem.crosshairStabilization || 0;
+        // Tối ưu hóa mỗi 2 giây
+        if (Date.now() - this.lastOptimization < 2000) return;
+        this.lastOptimization = Date.now();
         
-        // Tính toán hiệu quả bù giật
-        if (gameState?.isFiring) {
-            this.compensationEfficiency = Math.min(1.0, this.compensationEfficiency + 0.1);
+        if (touchDelay > 50) {
+            this.optimizationLevel = 1.8; // Chế độ khẩn cấp
+        } else if (touchDelay > 35) {
+            this.optimizationLevel = 1.5;
+        } else if (touchDelay > 25) {
+            this.optimizationLevel = 1.3;
         } else {
-            this.compensationEfficiency = Math.max(0.3, this.compensationEfficiency - 0.05);
+            this.optimizationLevel = 1.1;
         }
+    }
+    
+    getStatus() {
+        return {
+            touchLatency: this.touchLatency,
+            optimizationLevel: this.optimizationLevel,
+            recommendedSensitivity: this.calculateSensitivity()
+        };
+    }
+    
+    calculateSensitivity() {
+        if (this.touchLatency > 45) return 75;
+        if (this.touchLatency > 30) return 80;
+        if (this.touchLatency > 20) return 85;
+        return 90;
     }
 }
 
-// TÍCH HỢP HỆ THỐNG MẠNG
-class NetworkSystemIntegration {
+// CÔNG CỤ DỰ ĐOÁN HEADSHOT
+class HeadshotPredictionEngine {
     constructor() {
-        this.lastLatency = 0;
-        this.packetLoss = 0;
+        this.successRate = 0.92;
+        this.predictionModel = "neural_net_v3";
+        this.lastPrediction = { x: 0, y: 0, z: 0 };
+        this.activationLevel = 0;
+        this.movementHistory = [];
     }
     
-    update(networkData, gameState) {
-        if (!networkData) return;
+    activate() {
+        this.activationLevel = 1.0;
+    }
+    
+    deactivate() {
+        this.activationLevel = 0;
+    }
+    
+    processAimData(aimData) {
+        if (!aimData || !this.activationLevel) return;
         
-        this.lastLatency = networkData.stats?.ping || 0;
-        this.packetLoss = networkData.stats?.packetLoss || 0;
+        // Xử lý dữ liệu ngắm bắn thời gian thực
+        const currentTarget = aimData.currentTarget;
+        if (currentTarget && currentTarget.distance > 0) {
+            this.calculatePrediction(currentTarget);
+        }
     }
     
-    getOptimizationRecommendation() {
-        if (this.lastLatency > 100 || this.packetLoss > 0.1) {
-            return { prioritizeNetwork: true };
+    updateMovementPatterns(movementData) {
+        this.movementHistory.push({
+            timestamp: Date.now(),
+            velocity: movementData.velocity,
+            direction: movementData.direction
+        });
+        
+        if (this.movementHistory.length > 30) {
+            this.movementHistory.shift();
         }
-        return {};
+    }
+    
+    adjustForLatency(ping) {
+        // Điều chỉnh dự đoán theo độ trễ mạng
+        const latencyFactor = ping > 100 ? 1.25 : ping > 70 ? 1.15 : ping > 40 ? 1.05 : 1.0;
+        this.lastPrediction.x *= latencyFactor;
+        this.lastPrediction.y *= latencyFactor;
+    }
+    
+    calculatePrediction(target) {
+        // Tính toán dự đoán headshot dựa trên chuyển động
+        const movementVector = this.calculateMovementVector();
+        
+        // Tính toán offset headshot
+        this.lastPrediction = {
+            x: target.velocityX * 0.85 + movementVector.x * 1.2,
+            y: target.velocityY * 0.92 + movementVector.y * 1.1,
+            z: target.distance * 0.003
+        };
+        
+        // Điều chỉnh theo vũ khí
+        switch(target.weaponType) {
+            case "sniper":
+                this.lastPrediction.y -= 0.15;
+                break;
+            case "shotgun":
+                this.lastPrediction.x *= 1.25;
+                break;
+        }
+        
+        // Áp dụng hệ số kích hoạt
+        this.lastPrediction.x *= this.activationLevel;
+        this.lastPrediction.y *= this.activationLevel;
+    }
+    
+    calculateMovementVector() {
+        if (this.movementHistory.length < 2) return { x: 0, y: 0 };
+        
+        const recent = this.movementHistory.slice(-5);
+        const avgX = recent.reduce((sum, m) => sum + m.direction.x, 0) / recent.length;
+        const avgY = recent.reduce((sum, m) => sum + m.direction.y, 0) / recent.length;
+        
+        return { x: avgX * 1.3, y: avgY * 1.3 };
+    }
+    
+    getAimPrediction() {
+        return this.lastPrediction;
+    }
+    
+    getSuccessRate() {
+        return this.successRate;
+    }
+}
+
+// DỰ ĐOÁN CHUYỂN ĐỘNG NÂNG CAO
+class AdvancedMovementPredictor {
+    constructor() {
+        this.positionHistory = [];
+        this.velocityHistory = [];
+        this.predictionAccuracy = 0.9;
+    }
+    
+    updateMovement(movementData, combatState) {
+        this.positionHistory.push({
+            x: movementData.x,
+            y: movementData.y,
+            z: movementData.z,
+            timestamp: Date.now()
+        });
+        
+        this.velocityHistory.push({
+            vx: movementData.velocityX,
+            vy: movementData.velocityY,
+            timestamp: Date.now()
+        });
+        
+        // Giữ lịch sử vừa phải
+        if (this.positionHistory.length > 20) this.positionHistory.shift();
+        if (this.velocityHistory.length > 15) this.velocityHistory.shift();
+        
+        // Cập nhật độ chính xác dựa trên trạng thái
+        this.predictionAccuracy = combatState.inCombat ? 0.85 : 0.95;
+    }
+    
+    predictNextPosition() {
+        if (this.positionHistory.length < 3) return null;
+        
+        const recentPositions = this.positionHistory.slice(-3);
+        const recentVelocities = this.velocityHistory.slice(-2);
+        
+        const avgVX = recentVelocities.reduce((sum, v) => sum + v.vx, 0) / recentVelocities.length;
+        const avgVY = recentVelocities.reduce((sum, v) => sum + v.vy, 0) / recentVelocities.length;
+        
+        const lastPosition = recentPositions[recentPositions.length - 1];
+        const timeDiff = (Date.now() - lastPosition.timestamp) / 1000;
+        
+        return {
+            x: lastPosition.x + avgVX * timeDiff * this.predictionAccuracy,
+            y: lastPosition.y + avgVY * timeDiff * this.predictionAccuracy,
+            z: lastPosition.z
+        };
+    }
+}
+
+// TÍNH TOÁN ĐƯỜNG ĐẠN CHO HEADSHOT
+class BulletTrajectoryCalculator {
+    constructor() {
+        this.gravity = 9.8;
+        this.airResistance = 0.98;
+        this.history = [];
+        this.successRate = 0.94;
+    }
+    
+    calculateTrajectory(combatState) {
+        if (!combatState.inCombat || combatState.closestEnemyDistance > 100) return;
+        
+        // Tính toán đường đạn cơ bản
+        const trajectory = {
+            angle: this.calculateOptimalAngle(combatState),
+            velocity: this.calculateMuzzleVelocity(combatState.currentWeapon),
+            dropCompensation: this.calculateDropCompensation(combatState.closestEnemyDistance)
+        };
+        
+        this.history.push({
+            ...trajectory,
+            timestamp: Date.now(),
+            distance: combatState.closestEnemyDistance
+        });
+        
+        if (this.history.length > 20) this.history.shift();
+    }
+    
+    calculateOptimalAngle(combatState) {
+        const baseAngle = 1.2; // Radians
+        const distanceFactor = combatState.closestEnemyDistance * 0.005;
+        const weaponFactor = combatState.currentWeapon === "sniper" ? 0.8 : 1.2;
+        
+        return baseAngle + distanceFactor * weaponFactor;
+    }
+    
+    calculateMuzzleVelocity(weaponType) {
+        const velocities = {
+            sniper: 95,
+            assault_rifle: 75,
+            smg: 65,
+            shotgun: 50,
+            pistol: 60
+        };
+        
+        return velocities[weaponType] || 70;
+    }
+    
+    calculateDropCompensation(distance) {
+        return distance * 0.012 * (this.gravity / 10);
+    }
+    
+    getPredictionStats() {
+        const recent = this.history.slice(-5);
+        const avgSuccess = recent.length > 0 ? 
+            recent.reduce((sum, t) => sum + (t.success ? 1 : 0), 0) / recent.length : 0;
+        
+        return {
+            avgDropCompensation: recent.length > 0 ?
+                recent.reduce((sum, t) => sum + t.dropCompensation, 0) / recent.length : 0,
+            successRate: avgSuccess || this.successRate
+        };
     }
 }
 
