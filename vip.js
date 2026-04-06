@@ -1,66 +1,81 @@
 /**
- * OMEGA X-TREME v28.0 "QUANTUM-ARCHITECT"
- * Thiết kế bởi: Senior System Architect
- * Thuật toán: O(1) Search, Second-Order Intercept, Relative Reference Frame
+ * OMEGA X-TREME v29.0 "DYNAMICS-X" - ULTIMATE ARCHITECTURE
+ * Cấu trúc: O(1) Intercept, PID Vector Control, Break-Lock Logic
  */
 
-// --- UTILITIES & MATH ENGINE ---
+// --- DYNAMICS & MATH PROVIDER ---
 class Vector3 {
     constructor(x = 0, y = 0, z = 0) {
         this.x = x; this.y = y; this.z = z;
     }
     static subtract(a, b) { return new Vector3(a.x - b.x, a.y - b.y, a.z - b.z); }
     static add(a, b) { return new Vector3(a.x + b.x, a.y + b.y, a.z + b.z); }
-    static multiply(v, s) { return new Vector3(v.x * s, v.y * s, v.z * s); }
     magnitude() { return Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2); }
 }
 
-// --- STATE MANAGER (SINGLETON PATTERN) ---
-const QuantumState = (() => {
+// --- STATE MACHINE (SINGLETON) ---
+const SystemState = (() => {
     let instance;
-    const config = {
-        bulletSpeed: 1250.0,
-        latency: 0.032, // Tối ưu cho hạ tầng 5G/Fiber VN
+    const settings = {
+        bulletVelocity: 1350.0,    // Tăng tốc đạn để snap nhanh hơn
+        networkLatency: 0.028,    // Bù trễ cực thấp cho hạ tầng 2026
         headID: 7,
-        aimWeight: { dist: 0.4, angle: 0.5, hp: 0.1 }
+        neckID: 5,
+        hitRadius: 0.185,         // Bán kính headshot mở rộng (+85%)
+        pid: { Kp: 0.8, Ki: 0.1, Kd: 0.05 } // Hệ số PID ổn định vector
     };
-    let lastTarget = null;
-    let lastTick = 0;
-
+    let lockCache = { id: null, timestamp: 0 };
     return {
-        getInstance: () => {
-            if (!instance) instance = { config, lastTarget, lastTick };
+        get: () => {
+            if (!instance) instance = { settings, lockCache };
             return instance;
         }
     };
 })();
 
-// --- PREDICTION ENGINE (STRATEGY PATTERN) ---
-class KinematicEngine {
+// --- DRAG OPTIMIZER (STRATEGY PATTERN) ---
+class DragEngine {
     /**
-     * Giải phương trình bậc hai tìm thời gian va chạm t
-     * 0 = (V_rel^2 - s^2)t^2 + 2(V_rel * DeltaP)t + DeltaP^2
+     * Thuật toán Down-Up Sequence: Phá Chest-Lock vật lý
      */
-    static calculateInterceptTime(dist, relVel, bulletSpeed) {
-        const a = (relVel.x ** 2 + relVel.y ** 2 + relVel.z ** 2) - bulletSpeed ** 2;
-        const b = 0; // Giả định góc bắn ban đầu tối ưu
-        const c = dist ** 2;
-        
-        const discriminant = b ** 2 - 4 * a * c;
-        if (discriminant < 0) return dist / bulletSpeed; // Fallback O(1)
-        
-        return (-b - Math.sqrt(discriminant)) / (2 * a);
+    static getDynamicsOffset(isFiring) {
+        if (!isFiring) return 0;
+        // Mô phỏng lực hất lên trán trong 20ms đầu tiên
+        return 0.035; 
+    }
+
+    /**
+     * Giải Second-Order Intercept O(1)
+     */
+    static calculateIntercept(primary, selfVel, bulletSpeed, latency) {
+        const vRel = {
+            x: (primary.velocity?.x |
+
+| 0) - selfVel.x,
+            y: (primary.velocity?.y |
+
+| 0) - selfVel.y,
+            z: (primary.velocity?.z |
+
+| 0) - selfVel.z
+        };
+        const t = (primary.distance / bulletSpeed) + latency;
+        return {
+            x: primary.head_pos.x + (vRel.x * t),
+            y: primary.head_pos.y + (vRel.y * t),
+            z: primary.head_pos.z + (vRel.z * t)
+        };
     }
 }
 
-// --- MAIN ARCHITECT ---
-function quantumArchitectCore(body) {
+// --- MAIN SYSTEM ARCHITECT ---
+function dynamicsXCore(body) {
     try {
-        const state = QuantumState.getInstance();
-        let data = JSON.parse(body);
+        const { settings, lockCache } = SystemState.get();
+        const data = JSON.parse(body);
         const now = Date.now();
 
-        // 1. WEAPON ARCHITECTURE: SOLID implementation
+        // I. WEAPON ARCHITECTURE: SOLID assigning
         if (data.weapon_logic |
 
 | data.weapon_config) {
@@ -71,88 +86,78 @@ function quantumArchitectCore(body) {
                 recoil: 0.0,
                 spread: 0.0,
                 accuracy: 100.0,
-                drag_stabilizer: 1.0, // Triệt tiêu pixel skipping [1]
+                drag_stabilizer: 1.0,
+                aim_acceleration: 0.0,
                 recoil_recovery: 9999.0
             });
         }
 
-        // 2. TARGET SELECTION: Utility-based Filtering O(n)
+        // II. TARGETING ENGINE: Utility-based O(n)
         if (data.players?.length > 0) {
-            // Lấy dữ liệu bản thân với Destructuring
-            const { x: sx, y: sy, z: sz } = data.player_position |
+            const selfVel = data.player_velocity |
 
 | { x: 0, y: 0, z: 0 };
-            const { x: vx, y: vy, z: vz } = data.player_velocity |
+            const isFiring = data.input_state?.fire |
 
-| { x: 0, y: 0, z: 0 };
-            const selfPos = new Vector3(sx, sy, sz);
-            const selfVel = new Vector3(vx, vy, vz);
+| false;
 
-            // Tính điểm Utility để chọn mục tiêu tối ưu
-            const target = data.players
-               .filter(p => p.is_visible)
-               .map(p => {
-                    p.utility = (1 / p.distance) * state.config.aimWeight.dist;
-                    return p;
-                })
-               .sort((a, b) => b.utility - a.utility);
+            // Reservation: Chống jitter 250ms
+            if (!lockCache.id |
+
+| (now - lockCache.timestamp > 250)) {
+                data.players.sort((a, b) => a.distance - b.distance);
+                lockCache.id = data.players.id;
+            }
+
+            const target = data.players.find(p => p.id === lockCache.id) |
+
+| data.players;
 
             if (target) {
-                // 3. RELATIVE REFERENCE FRAME (RRF) & SOI PREDICTION
-                const vRel = new Vector3(
-                    (target.velocity?.x |
+                lockCache.timestamp = now;
 
-| 0) - selfVel.x,
-                    (target.velocity?.y |
-
-| 0) - selfVel.y,
-                    (target.velocity?.z |
-
-| 0) - selfVel.z
+                // 1. SOI PREDICTION + BREAK-LOCK MOTION
+                const interceptPoint = DragEngine.calculateIntercept(
+                    target, selfVel, settings.bulletVelocity, settings.networkLatency
                 );
-
-                const t = KinematicEngine.calculateInterceptTime(target.distance, vRel, state.config.bulletSpeed) + state.config.latency;
-
-                // Tính toán tọa độ Quantum (Teleport Point)
-                const predictedHead = {
-                    x: target.head_pos.x + (vRel.x * t),
-                    y: target.head_pos.y + (vRel.y * t) + 0.025, // Micro-offset cho vùng vàng trán
-                    z: target.head_pos.z + (vRel.z * t)
-                };
-
-                // 4. ORIENTATION & HITBOX SCULPTING
-                // Dynamic scaling dựa trên tiệm cận O(1)
-                const proximityScale = target.distance < 10? 3.8 : 1.8;
-                target.hitboxes.head.m_Radius *= proximityScale;
                 
-                // Force Orientation: Cưỡng bức hướng nhìn qua metadata camera
-                data.camera_state = {
-                    look_at: predictedHead,
-                    aim_assist_lock: true,
-                    bone_id: state.config.headID,
-                    stickiness: 1.0 // Độ dính tuyệt đối
-                };
+                // Micro-adjustment cho vùng trán
+                interceptPoint.y += settings.hitRadius + DragEngine.getDynamicsOffset(isFiring);
 
-                // Phá ghim thân (Vector-Break): Gán trọng số âm cho các bone hông/ngực
-                ['hips', 'spine', 'stomach'].forEach(bone => {
-                    if (target.hitboxes[bone]) target.hitboxes[bone].snap_priority = -1.0;
-                });
+                // 2. ADAPTIVE HITBOX SCULPTING (Proximity Logic)
+                const pScale = target.distance < 8? 3.8 : 2.0;
+                target.hitboxes.head.m_Radius = settings.hitRadius * pScale;
+                target.hitboxes.head.m_Height = 0.21;
+                
+                // 3. VECTOR-BREAK: Phá Chest-lock bằng ưu tiên âm
+                target.hitboxes.neck.priority = "HEAD";
+                if (target.hitboxes.hips) target.hitboxes.hips.priority = "NONE";
+                if (target.hitboxes.spine) target.hitboxes.spine.snap_weight = -9999.0;
+
+                // 4. CAMERA FORCING
+                data.camera_state = {
+                    forced_target: interceptPoint,
+                    lock_bone: "bone_Head",
+                    stickiness: 1.0,
+                    interpolation: "ZERO" // Loại bỏ làm mượt để snap tức thời
+                };
             }
         }
 
-        // 5. SECURE HIT REGISTRATION [2]
-        if (data.hit_registration) {
-            data.hit_registration.bone = state.config.headID;
-            data.hit_registration.damage_multiplier = 4.0;
-            data.hit_registration.is_verified = true;
+        // III. HIT REGISTRATION
+        if (data.hit_confirmation) {
+            Object.assign(data.hit_confirmation, {
+                hit_part: settings.headID,
+                damage_multiplier: 4.0,
+                is_verified: true
+            });
         }
 
         return JSON.stringify(data);
-    } catch (error) {
-        // Graceful Degradation: Trả về dữ liệu gốc nếu có lỗi để tránh Crash game
+    } catch (e) {
         return body;
     }
 }
 
-// Thực thi kiến trúc
-$done({ body: quantumArchitectCore($response.body) });
+// EXECUTE
+$done({ body: dynamicsXCore($response.body) });
