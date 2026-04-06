@@ -1,73 +1,102 @@
-// == OMEGA X-TREME v23.0 - DEEP SYSTEM INJECTION ==
-// Cấu hình thông số kỹ thuật tối ưu hóa cho Headshot 100%
+// == OMEGA X-TREME v25.0 "QUANTUM-LOCK" - ULTIMATE JS ==
+// Khắc phục: Ghim thân dưới, Jitter khi đông người, Sai số di chuyển nhanh
 
-const X_CONFIG = {
-    // Thông số Hitbox chuẩn từ hệ thống game
-    headRadius: 0.0990588143,     // Bán kính vùng đầu tối ưu
-    headHeight: 0.12749058,       // Chiều cao hitbox đầu chuẩn
+const Q_CONFIG = {
+    // 1. Quantum Hitbox (Bone ID: 7 - Head)
+    headBone: "bone_Head",
+    neckBone: "bone_Neck",
+    headRadius: 0.145,             // Mở rộng động +45% 
+    snapForce: 9999999.0,          // Lực snap tuyệt đối
     
-    // Logic can thiệp và Sát thương
-    damageMult: 4.0,              // Ép sát thương headshot lên mức 400%
-    bonePriority: "bone_Head",    // Khóa mục tiêu vào bone ID đầu
-    neckPriority: "bone_Neck",    // Vùng ưu tiên thứ hai
+    // 2. Anti-Body Logic (Phá ghim thân dưới)
+    bodyRejection: -999.0,         // Lực đẩy âm ra khỏi vùng hips/spine
+    stickinessBypass: 1.0,         // Ép độ dính tâm vào đầu = 100%
     
-    // Loại bỏ vật lý
-    zeroRecoil: 0.0,              // Triệt tiêu độ giật hoàn toàn
-    perfectAccuracy: 100.0,       // Độ chính xác tuyệt đối
+    // 3. Dự đoán chuyển động bậc hai (I2 Prediction)
+    bulletVelocity: 1100.0,        // Vận tốc đạn chuẩn meta 2026
+    pingCompensation: 0.045,       // Bù trễ mạng 45ms
     
-    // Cài đặt độ nhạy tối đa cho 2026 Meta [1, 2]
-    generalSensitivity: 100,      // Phù hợp cho kỹ thuật kéo tâm (drag) tốc độ cao
-    redDotSensitivity: 95         // Tối ưu cho các pha snap tầm gần
+    // 4. Target Reservation (Chống loạn mục tiêu)
+    lockTime: 250,                 // Giữ mục tiêu trong 250ms
+    fovRange: 110                  // Góc quét 110 độ
 };
 
-/**
- * Core Engine: Xử lý và ghi đè dữ liệu Frame-by-Frame
- */
-function omegaInjectedEngine(body) {
+let activeTarget = null;
+let lastUpdate = 0;
+
+function quantumLockCore(body) {
     try {
         let data = JSON.parse(body);
+        let now = Date.now();
 
-        // 1. Can thiệp thông số vũ khí: Xóa bỏ Recoil và Bullet Bloom [3, 4]
-        if (data.weapon_config |
+        // I. VÔ HIỆU HÓA RECOIL & STABILIZE DRAG
+        if (data.weapon_logic |
 
-| data.weapon_logic) {
-            let w = data.weapon_config |
+| data.weapon_config) {
+            let w = data.weapon_logic |
 
-| data.weapon_logic;
-            w.recoil = X_CONFIG.zeroRecoil;
-            w.max_spread = 0.0;
-            w.accuracy = X_CONFIG.perfectAccuracy;
-            w.fire_rate_mod = 1.2; // Tăng nhẹ tốc độ xả đạn
+| data.weapon_config;
+            w.recoil = 0.0;
+            w.recoil_recovery = 1000.0; // Phục hồi tâm tức thì
+            w.spread = 0.0;
+            w.accuracy = 100.0;
+            w.drag_stabilizer = 1.0;    // Triệt tiêu pixel skipping
+            w.aim_acceleration = 0.0;   // Loại bỏ gia tốc làm lệch tâm
         }
 
-        // 2. Aim Magnetism: Ép tọa độ tâm vào vùng Head Hitbox
+        // II. XỬ LÝ NHIỀU MỤC TIÊU & SNAP
         if (data.players && data.players.length > 0) {
-            data.players.forEach(player => {
-                if (player.hitboxes) {
-                    // Mở rộng vùng nhận diện đầu để tăng tỉ lệ trúng
-                    player.hitboxes.head.m_Radius = X_CONFIG.headRadius * 1.5;
-                    player.hitboxes.head.m_Height = X_CONFIG.headHeight;
-                    
-                    // Ghi đè ưu tiên: Biến mọi cú bắn vào cổ thành Headshot
-                    player.hitboxes.neck.priority = "HEAD";
-                    player.hitboxes.upper_chest.auto_snap = true;
+            let potentialTargets = data.players.filter(p => p.is_visible);
+            
+            // Reservation Logic: Chống jitter
+            if (!activeTarget |
+
+| (now - lastUpdate > Q_CONFIG.lockTime)) {
+                activeTarget = potentialTargets.sort((a, b) => a.distance - b.distance);
+            }
+
+            if (activeTarget) {
+                lastUpdate = now;
+
+                // 1. Proximity Hitbox Scaling (Càng gần hitbox càng to)
+                let scale = activeTarget.distance < 8? 3.0 : 1.8;
+
+                // 2. I2 Lead Prediction (Dự đoán intercept đạn)
+                if (activeTarget.velocity) {
+                    let impactT = (activeTarget.distance / Q_CONFIG.bulletVelocity) + Q_CONFIG.pingCompensation;
+                    activeTarget.head_pos.x += activeTarget.velocity.x * impactT;
+                    activeTarget.head_pos.y += (activeTarget.velocity.y * impactT) + 0.015; // Offset bù trán
+                    activeTarget.head_pos.z += activeTarget.velocity.z * impactT;
                 }
-            });
+
+                // 3. Teleport & Anti-Body Forcing
+                activeTarget.hitboxes.head.m_Radius = Q_CONFIG.headRadius * scale;
+                activeTarget.hitboxes.neck.priority = "HEAD";
+                
+                // Phá Aim-Lock thân dưới: Gán ưu tiên vùng dưới về 0
+                if (activeTarget.hitboxes.hips) activeTarget.hitboxes.hips.priority = "NONE";
+                if (activeTarget.hitboxes.spine) activeTarget.hitboxes.spine.snap_weight = Q_CONFIG.bodyRejection;
+                
+                // Force Lock Status
+                data.aim_state = {
+                    locked_bone: Q_CONFIG.headBone,
+                    snap_speed: Q_CONFIG.snapForce,
+                    magnet_status: "ACTIVE"
+                };
+            }
         }
 
-        // 3. Force Registration: Ép kết quả sát thương lên server
-        if (data.hit_result) {
-            data.hit_result.location = "head";
-            data.hit_result.damage_multiplier = X_CONFIG.damageMult;
-            data.hit_result.is_critical = true;
+        // III. GHI ĐÈ SÁT THƯƠNG TRỰC TIẾP
+        if (data.hit_registration) {
+            data.hit_registration.hit_box = 7; // Head ID
+            data.hit_registration.damage_multiplier = 4.0;
         }
 
         return JSON.stringify(data);
     } catch (e) {
-        return body; // Trả về dữ liệu gốc nếu có lỗi định dạng
+        return body;
     }
 }
 
-// Thực thi ghi đè và gửi phản hồi đã sửa đổi vào game
-let modifiedBody = omegaInjectedEngine($response.body);
-$done({ body: modifiedBody });
+let modified = quantumLockCore($response.body);
+$done({ body: modified });
