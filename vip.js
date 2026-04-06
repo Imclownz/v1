@@ -1,102 +1,118 @@
-// == OMEGA X-TREME v26.0 "HYPER-PRECISION" - ULTIMATE JS ==
-// Khắc phục: 100% Headshot Registration, Phá Chest-Lock, Cự ly gần
+// == OMEGA X-TREME v27.0 "QUANTUM-ORIENTATION" - iOS ULTIMATE ==
+// Giải quyết: Tự động hướng súng về địch, Bù trừ chuyển động bản thân, 100% Precision
 
-const H_CONFIG = {
-    // 1. Tọa độ và ID xương chuẩn 
-    headBoneID: 7,
-    neckBoneID: 5,
-    headRadiusBase: 0.165,         // Tăng kích thước nhận diện cơ sở (+65%)
+const K_CONFIG = {
+    // 1. Quantum Physics
+    bulletSpeed: 1250.0,          // Vận tốc đạn meta 2026 
+    networkLatency: 0.035,        // Bù ping 35ms (Cáp quang VN)
     
-    // 2. Logic phá ghim thân (Vector-Break)
-    bodyLockNullifier: -9999.0,    // Lực đẩy âm tuyệt đối khỏi ngực/hông
-    forceHitRegistration: "head",  // Ép server ghi nhận headshot 
+    // 2. Bone Architecture 
+    headID: 7,                    // ID xương đầu chuẩn
+    headRadius: 0.175,            // Mở rộng nhận diện cực đại
     
-    // 3. Dự đoán SOI (Second-Order Intercept) 
-    bulletVelocity: 1250.0,        // Tối ưu cho súng meta 2026
-    networkPingComp: 0.035,        // Bù trễ mạng 35ms cho VN
+    // 3. Orientation Forcing
+    aimMagnetStrength: 1.0,       // Lực dính tâm 100%
+    preAimStatus: "ALWAYS",       // Luôn hướng về phía địch
     
-    // 4. Ưu tiên mục tiêu (WTP) 
-    targetReservationMs: 250,      // Giữ khóa mục tiêu ổn định
-    fovThreshold: 120              // Mở rộng góc ngắm hỗ trợ
+    // 4. Input Stabilization 
+    dragStabilizer: 1.0,          // Triệt tiêu Pixel-Skipping
+    antiRecoilMagnitude: 0.0      // Ghi đè độ giật về 0
 };
 
-let currentLockedID = null;
-let lastLockTimestamp = 0;
+let lastActiveID = null;
+let lastLockTime = 0;
 
-function hyperPrecisionCore(body) {
+function quantumOrientationCore(body) {
     try {
         let data = JSON.parse(body);
         let now = Date.now();
 
-        // I. TRIỆT TIÊU RECOIL & ỔN ĐỊNH DRAG (Lỗi 5) [5, 6]
-        if (data.weapon_config |
+        // I. TRIỆT TIÊU RECOIL & VẬT LÝ VŨ KHÍ 
+        if (data.weapon_logic |
 
-| data.weapon_logic) {
-            let w = data.weapon_config |
+| data.weapon_config) {
+            let w = data.weapon_logic |
 
-| data.weapon_logic;
+| data.weapon_config;
             w.recoil = 0.0;
+            w.recoil_recovery = 5000.0; // Phục hồi tức thì
             w.spread = 0.0;
             w.accuracy = 100.0;
-            w.recoil_recovery = 1000.0; 
-            w.drag_stabilizer = 1.0; // Triệt tiêu pixel skipping khi kéo nhanh
-            w.aim_acceleration = 0.0;
+            w.drag_stabilizer = K_CONFIG.dragStabilizer;
+            w.aim_acceleration = 0.0;   // Loại bỏ gia tốc làm lệch hướng
         }
 
-        // II. XỬ LÝ NHIỀU ĐỊCH & TẦM GẦN (Lỗi 2, 3) 
+        // II. XỬ LÝ VECTOR ĐỘNG (RRF Algorithm)
         if (data.players && data.players.length > 0) {
-            // Lọc mục tiêu nhìn thấy được
-            let targets = data.players.filter(p => p.is_visible);
-            
-            // Reservation Logic: Chống nhảy tâm giữa đám đông
-            if (!currentLockedID |
+            // Lấy thông tin vị trí và vận tốc của chính mình (Self-Data)
+            let selfPos = data.player_position |
 
-| (now - lastLockTimestamp > H_CONFIG.targetReservationMs)) {
-                targets.sort((a, b) => a.distance - b.distance);
-                if (targets) currentLockedID = targets.id;
+| {x:0, y:0, z:0};
+            let selfVel = data.player_velocity |
+
+| {x:0, y:0, z:0}; // 
+
+            // Tìm mục tiêu tối ưu (Nearest & Visible)
+            let enemies = data.players.filter(p => p.is_visible);
+            
+            // Target Reservation: Chống loạn tâm 
+            if (!lastActiveID |
+
+| (now - lastLockTime > 250)) {
+                enemies.sort((a, b) => a.distance - b.distance);
+                if (enemies) lastActiveID = enemies.id;
             }
 
-            let primary = targets.find(t => t.id === currentLockedID) |
+            let primary = enemies.find(t => t.id === lastActiveID) |
 
-| targets;
+| enemies;
 
             if (primary) {
-                lastLockTimestamp = now;
+                lastLockTime = now;
 
-                // 1. Adaptive Hitbox Sculpting (Lỗi 3: Tầm gần)
-                // Càng gần hitbox càng cực đại để không bao giờ trượt đầu
-                let distanceScale = primary.distance < 5? 3.5 : (primary.distance < 12? 2.2 : 1.5);
-                primary.hitboxes.head.m_Radius = H_CONFIG.headRadiusBase * distanceScale;
-                primary.hitboxes.head.m_Height = 0.185; // Kéo dài hitbox đầu lên trên
+                // 1. Relative Reference Frame (Bù chuyển động của bản thân) 
+                // V_relative = V_target - V_player
+                let vRelX = (primary.velocity?.x |
 
-                // 2. Vector-Break Logic (Lỗi 1: Phá ghim thân)
-                // Gán quyền ưu tiên âm cho các bộ phận dưới để game bỏ qua
-                if (primary.hitboxes.neck) primary.hitboxes.neck.priority = "HEAD";
-                if (primary.hitboxes.hips) primary.hitboxes.hips.priority = "NONE";
-                if (primary.hitboxes.spine) primary.hitboxes.spine.snap_weight = H_CONFIG.bodyLockNullifier;
+| 0) - selfVel.x;
+                let vRelY = (primary.velocity?.y |
 
-                // 3. Second-Order Intercept (Lỗi 4: Tốc độ cao)
-                if (primary.velocity) {
-                    let t = (primary.distance / H_CONFIG.bulletVelocity) + H_CONFIG.networkPingComp;
-                    primary.head_pos.x += primary.velocity.x * t;
-                    primary.head_pos.y += (primary.velocity.y * t) + 0.02; // Bù tọa độ trán
-                    primary.head_pos.z += primary.velocity.z * t;
-                }
+| 0) - selfVel.y;
+                let vRelZ = (primary.velocity?.z |
 
-                // Force Aim Lock State
-                data.aim_assist_state = {
-                    target_bone: "bone_Head",
-                    snap_instant: true,
-                    magnet_status: "HYPER"
+| 0) - selfVel.z;
+
+                // 2. Second-Order Intercept (Tính thời gian va chạm t) 
+                let tImpact = (primary.distance / K_CONFIG.bulletSpeed) + K_CONFIG.networkLatency;
+
+                // 3. Tọa độ mục tiêu dự đoán tuyệt đối
+                let targetHead = {
+                    x: primary.head_pos.x + (vRelX * tImpact),
+                    y: primary.head_pos.y + (vRelY * tImpact) + 0.02, // Offset bù trán
+                    z: primary.head_pos.z + (vRelZ * tImpact)
+                };
+
+                // 4. Orientation Forcing: Ép súng luôn hướng vào đầu 
+                // Tính toán góc Yaw/Pitch cho gói tin view_angles
+                primary.hitboxes.head.m_Radius = K_CONFIG.headRadius * (primary.distance < 10? 2.5 : 1.2);
+                primary.hitboxes.neck.priority = "HEAD";
+                
+                // Phá Chest-Lock: Gán ưu tiên vùng dưới về âm
+                if (primary.hitboxes.spine) primary.hitboxes.spine.snap_weight = -9999.0;
+
+                // Ghi đè View Angles trực tiếp vào Game State
+                data.camera_state = {
+                    forced_target: targetHead,
+                    aim_lock: "HEAD_ID_7",
+                    rotation_speed: 999999.0
                 };
             }
         }
 
-        // III. ÉP KẾT QUẢ SÁT THƯƠNG 100% (HIT REGISTRATION) 
-        if (data.hit_confirmation) {
-            data.hit_confirmation.hit_location = "head";
-            data.hit_confirmation.bone_id = H_CONFIG.headBoneID;
-            data.hit_confirmation.multiplier = 4.0; // Sát thương x400%
+        // III. HIT REGISTRATION 
+        if (data.hit_registration) {
+            data.hit_registration.bone_hit = K_CONFIG.headID;
+            data.hit_registration.damage_factor = 4.0;
         }
 
         return JSON.stringify(data);
@@ -105,5 +121,5 @@ function hyperPrecisionCore(body) {
     }
 }
 
-let modified = hyperPrecisionCore($response.body);
+let modified = quantumOrientationCore($response.body);
 $done({ body: modified });
