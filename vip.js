@@ -1,50 +1,81 @@
 /**
- * OMEGA X-TREME v30.0 "ABSOLUTE-KINETIC"
- * Thuật toán: Euler-PID Control, Second-Order Intercept, Adaptive Hitbox Expansion
- * Độ phức tạp: O(n) Filtering, O(1) Kinematic Solving
+ * OMEGA X-TREME v29.0 "DYNAMICS-X" - ULTIMATE ARCHITECTURE
+ * Cấu trúc: O(1) Intercept, PID Vector Control, Break-Lock Logic
  */
 
-// --- KINETIC MATH PROVIDER ---
-const K_ENGINE = {
-    // Giải phương trình bậc 2 để tìm thời điểm va chạm chính xác (t)
-    solveIntercept: (dist, vRel, s) => {
-        const a = (vRel.x ** 2 + vRel.y ** 2 + vRel.z ** 2) - (s ** 2);
-        const b = 0; // Giả định hướng bắn tối ưu
-        const c = dist ** 2;
-        const disc = (b ** 2) - (4 * a * c);
-        return disc < 0? (dist / s) : (-b - Math.sqrt(disc)) / (2 * a);
-    },
-    // Tính toán góc Euler (Yaw/Pitch) từ Vector hướng
-    toEuler: (v) => {
-        const mag = Math.sqrt(v.x ** 2 + v.y ** 2 + v.z ** 2);
+// --- DYNAMICS & MATH PROVIDER ---
+class Vector3 {
+    constructor(x = 0, y = 0, z = 0) {
+        this.x = x; this.y = y; this.z = z;
+    }
+    static subtract(a, b) { return new Vector3(a.x - b.x, a.y - b.y, a.z - b.z); }
+    static add(a, b) { return new Vector3(a.x + b.x, a.y + b.y, a.z + b.z); }
+    magnitude() { return Math.sqrt(this.x ** 2 + this.y ** 2 + this.z ** 2); }
+}
+
+// --- STATE MACHINE (SINGLETON) ---
+const SystemState = (() => {
+    let instance;
+    const settings = {
+        bulletVelocity: 1350.0,    // Tăng tốc đạn để snap nhanh hơn
+        networkLatency: 0.028,    // Bù trễ cực thấp cho hạ tầng 2026
+        headID: 7,
+        neckID: 5,
+        hitRadius: 0.185,         // Bán kính headshot mở rộng (+85%)
+        pid: { Kp: 0.8, Ki: 0.1, Kd: 0.05 } // Hệ số PID ổn định vector
+    };
+    let lockCache = { id: null, timestamp: 0 };
+    return {
+        get: () => {
+            if (!instance) instance = { settings, lockCache };
+            return instance;
+        }
+    };
+})();
+
+// --- DRAG OPTIMIZER (STRATEGY PATTERN) ---
+class DragEngine {
+    /**
+     * Thuật toán Down-Up Sequence: Phá Chest-Lock vật lý
+     */
+    static getDynamicsOffset(isFiring) {
+        if (!isFiring) return 0;
+        // Mô phỏng lực hất lên trán trong 20ms đầu tiên
+        return 0.035; 
+    }
+
+    /**
+     * Giải Second-Order Intercept O(1)
+     */
+    static calculateIntercept(primary, selfVel, bulletSpeed, latency) {
+        const vRel = {
+            x: (primary.velocity?.x |
+
+| 0) - selfVel.x,
+            y: (primary.velocity?.y |
+
+| 0) - selfVel.y,
+            z: (primary.velocity?.z |
+
+| 0) - selfVel.z
+        };
+        const t = (primary.distance / bulletSpeed) + latency;
         return {
-            pitch: -Math.asin(v.y / mag) * (180 / Math.PI),
-            yaw: Math.atan2(v.x, v.z) * (180 / Math.PI)
+            x: primary.head_pos.x + (vRel.x * t),
+            y: primary.head_pos.y + (vRel.y * t),
+            z: primary.head_pos.z + (vRel.z * t)
         };
     }
-};
+}
 
-// --- SYSTEM CONFIG (SINGLETON) ---
-const QuantumConfig = Object.freeze({
-    boneHead: 7, boneNeck: 5, 
-    bulletVelocity: 1450.0, // Overclocked velocity
-    pingComp: 0.028,        // 28ms compensation for VN Fiber
-    headRadius: 0.185,      // Standard: 0.099 -> v30: 0.185 (+87%)
-    bodyNullPriority: -99999.0
-});
-
-// --- CORE ARCHITECT ---
-function absoluteKineticCore(body) {
+// --- MAIN SYSTEM ARCHITECT ---
+function dynamicsXCore(body) {
     try {
-        let data = JSON.parse(body);
-        const selfVel = data.player_velocity |
+        const { settings, lockCache } = SystemState.get();
+        const data = JSON.parse(body);
+        const now = Date.now();
 
-| { x: 0, y: 0, z: 0 };
-        const isFiring = data.input_state?.fire |
-
-| false;
-
-        // 1. WEAPON DECORATOR: Ghi đè sâu vào hệ thống vật lý
+        // I. WEAPON ARCHITECTURE: SOLID assigning
         if (data.weapon_logic |
 
 | data.weapon_config) {
@@ -55,83 +86,78 @@ function absoluteKineticCore(body) {
                 recoil: 0.0,
                 spread: 0.0,
                 accuracy: 100.0,
-                drag_stabilizer: 1.0,  // Khử Pixel Skipping khi hất mạnh [1]
-                recoil_recovery: 99999.0,
-                aim_acceleration: 0.0  // Loại bỏ gia tốc làm trượt tâm
+                drag_stabilizer: 1.0,
+                aim_acceleration: 0.0,
+                recoil_recovery: 9999.0
             });
         }
 
-        // 2. TARGETING PIPELINE: O(n) Complexity
+        // II. TARGETING ENGINE: Utility-based O(n)
         if (data.players?.length > 0) {
-            // Lọc và sắp xếp mục tiêu theo Utility Score (Độ ưu tiên)
-            const target = data.players
-               .filter(p => p.is_visible)
-               .sort((a, b) => a.distance - b.distance);
+            const selfVel = data.player_velocity |
+
+| { x: 0, y: 0, z: 0 };
+            const isFiring = data.input_state?.fire |
+
+| false;
+
+            // Reservation: Chống jitter 250ms
+            if (!lockCache.id |
+
+| (now - lockCache.timestamp > 250)) {
+                data.players.sort((a, b) => a.distance - b.distance);
+                lockCache.id = data.players.id;
+            }
+
+            const target = data.players.find(p => p.id === lockCache.id) |
+
+| data.players;
 
             if (target) {
-                // A. Tính toán Vector vận tốc tương đối (RRF v4)
-                const vRel = {
-                    x: (target.velocity?.x |
+                lockCache.timestamp = now;
 
-| 0) - selfVel.x,
-                    y: (target.velocity?.y |
+                // 1. SOI PREDICTION + BREAK-LOCK MOTION
+                const interceptPoint = DragEngine.calculateIntercept(
+                    target, selfVel, settings.bulletVelocity, settings.networkLatency
+                );
+                
+                // Micro-adjustment cho vùng trán
+                interceptPoint.y += settings.hitRadius + DragEngine.getDynamicsOffset(isFiring);
 
-| 0) - selfVel.y,
-                    z: (target.velocity?.z |
+                // 2. ADAPTIVE HITBOX SCULPTING (Proximity Logic)
+                const pScale = target.distance < 8? 3.8 : 2.0;
+                target.hitboxes.head.m_Radius = settings.hitRadius * pScale;
+                target.hitboxes.head.m_Height = 0.21;
+                
+                // 3. VECTOR-BREAK: Phá Chest-lock bằng ưu tiên âm
+                target.hitboxes.neck.priority = "HEAD";
+                if (target.hitboxes.hips) target.hitboxes.hips.priority = "NONE";
+                if (target.hitboxes.spine) target.hitboxes.spine.snap_weight = -9999.0;
 
-| 0) - selfVel.z
-                };
-
-                // B. Giải phương trình Intercept đón đầu mục tiêu
-                const t = K_ENGINE.solveIntercept(target.distance, vRel, QuantumConfig.bulletVelocity) + QuantumConfig.pingComp;
-
-                const predictedPoint = {
-                    x: target.head_pos.x + (vRel.x * t),
-                    y: target.head_pos.y + (vRel.y * t) + 0.025, // Bù tọa độ đỉnh đầu
-                    z: target.head_pos.z + (vRel.z * t)
-                };
-
-                // C. ADAPTIVE HITBOX SCULPTING (Xử lý lỗi tầm gần)
-                // Càng gần, hitbox đầu càng to để bao phủ toàn bộ camera
-                const pScale = target.distance < 7? 4.5 : 2.5;
-                target.hitboxes.head.m_Radius = QuantumConfig.headRadius * pScale;
-                target.hitboxes.head.m_Height = 0.25;
-
-                // D. VECTOR-BREAK (Xử lý lỗi ghim thân)
-                // Gán quyền ưu tiên ÂM TUYỆT ĐỐI cho toàn bộ vùng ngực/hông
-                ['hips', 'spine', 'stomach', 'chest'].forEach(bone => {
-                    if (target.hitboxes[bone]) {
-                        target.hitboxes[bone].priority = "NONE";
-                        target.hitboxes[bone].snap_weight = QuantumConfig.bodyNullPriority;
-                    }
-                });
-
-                // E. CAMERA & VIEW ORIENTATION FORCING
-                // Chuyển hướng súng và camera về tọa độ đón đầu
+                // 4. CAMERA FORCING
                 data.camera_state = {
-                    look_at: predictedPoint,
-                    force_bone: "bone_Head",
-                    rotation_mode: "INSTANT", // Phá bỏ Smooth để Snap ngay lập tức
-                    stickiness: 1.0           // Độ dính tuyệt đối 100%
+                    forced_target: interceptPoint,
+                    lock_bone: "bone_Head",
+                    stickiness: 1.0,
+                    interpolation: "ZERO" // Loại bỏ làm mượt để snap tức thời
                 };
             }
         }
 
-        // 3. SECURE HIT REGISTRATION: Ép kết quả 400% Damage [2]
+        // III. HIT REGISTRATION
         if (data.hit_confirmation) {
             Object.assign(data.hit_confirmation, {
-                bone_id: QuantumConfig.boneHead,
+                hit_part: settings.headID,
                 damage_multiplier: 4.0,
-                registration_type: "headshot",
-                is_verified: true // Bypass server-side check
+                is_verified: true
             });
         }
 
         return JSON.stringify(data);
     } catch (e) {
-        return body; // Fallback an toàn
+        return body;
     }
 }
 
-// EXECUTE v30.0
-$done({ body: absoluteKineticCore($response.body) });
+// EXECUTE
+$done({ body: dynamicsXCore($response.body) });
