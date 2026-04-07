@@ -1,17 +1,16 @@
-/**
- * ==============================================================================
- * APEX-X KINETIC ARCHITECTURE v33.0 (ANTI-CHEST-TRAP EDITION)
- * Thuật toán: Smart Vector Routing & Repulsion Force
- * ==============================================================================
- */
-
+// ==========================================
+// KINETIC CORE v32.5: HIGH-SPEED CQC EDITION
+// Bổ sung Relative Motion & EMA Filter
+// ==========================================
 const ResultBuffer = new Float64Array(3);
 const KINETIC_ITERATIONS = 3;
 
 class ApexKinematics {
+    // Lưu trữ vận tốc cũ để lọc EMA
     static lastVx = 0; static lastVy = 0; static lastVz = 0;
 
     static fastIntercept(tx, ty, tz, tvx, tvy, tvz, ax, ay, az, sx, sy, sz, svx, svy, svz, vBullet) {
+        // 1. Áp dụng EMA Filter để làm mượt chuyển hướng đột ngột (alpha = 0.65)
         const alpha = 0.65;
         let smoothVx = (tvx * alpha) + (this.lastVx * (1 - alpha));
         let smoothVy = (tvy * alpha) + (this.lastVy * (1 - alpha));
@@ -19,23 +18,36 @@ class ApexKinematics {
         
         this.lastVx = smoothVx; this.lastVy = smoothVy; this.lastVz = smoothVz;
 
-        let rVx = smoothVx - svx; let rVy = smoothVy - svy; let rVz = smoothVz - svz;
+        // 2. Tính toán Vector Tương đối (Relative Velocity)
+        let rVx = smoothVx - svx;
+        let rVy = smoothVy - svy;
+        let rVz = smoothVz - svz;
 
-        let dx = tx - sx; let dy = ty - sy; let dz = tz - sz;
+        // 3. Khởi tạo tính toán khoảng cách
+        let dx = tx - sx;
+        let dy = ty - sy;
+        let dz = tz - sz;
         let dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
         
-        let maxPredictionTime = dist < 15 ? 0.08 : 0.15; 
+        // 4. Cắt giảm thời gian dự đoán nếu địch đảo hướng quá gắt (Chống Overshoot)
+        let maxPredictionTime = dist < 15 ? 0.08 : 0.15; // CQC (<15m) dự đoán cực ngắn
         let t = Math.min(dist / vBullet, maxPredictionTime);
 
         let t2, fx, fy, fz;
+
+        // Tối ưu hóa lặp Newton-Raphson
         for (let i = 0; i < KINETIC_ITERATIONS; i = i + 1) {
             t2 = t * t;
+            
             fx = tx + rVx * t + 0.5 * ax * t2;
             fy = ty + rVy * t + 0.5 * ay * t2;
             fz = tz + rVz * t + 0.5 * az * t2;
 
-            dx = fx - sx; dy = fy - sy; dz = fz - sz;
+            dx = fx - sx;
+            dy = fy - sy;
+            dz = fz - sz;
             dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
             t = Math.min(dist / vBullet, maxPredictionTime);
         }
 
@@ -48,94 +60,99 @@ class ApexKinematics {
     }
 }
 
+// ==========================================
+// CONTROLLER: DRAG CANCELLATION & INPUT ISOLATION
+// ==========================================
 class ApexController {
     constructor() {
         this.config = {
             bulletSpeed: 999999.0,
-            goldenRatio: 0.66,          // Điểm vàng 2/3 đầu
-            dragBoostFactor: 8.5,       // Hệ số khuếch đại lực vuốt khi bị kẹt ở ngực
-            headZoneMargin: 0.18        // Khoảng cách an toàn để nhận diện vùng đầu
+            goldenRatio: 0.66,
+            maxHitboxExpansion: 8.5,
+            chestLockPenalty: -99999.0,
+            dragCancellationThreshold: 0.8 // Ngưỡng nhận diện lực kéo mạnh
         };
+        this.lastAimY = 0;
+    }
+
+    enforceAbsoluteZeroRecoil(weaponConfig) {
+        if (!weaponConfig) return;
+        Object.assign(weaponConfig, {
+            recoil: 0.0, recoil_multiplier: 0.0, camera_shake: 0.0,
+            spread: 0.0, bullet_drop: 0.0, aim_acceleration: 0.0
+        });
     }
 
     overrideChestMagnet(hitboxes) {
         if (!hitboxes) return;
-        ['spine', 'hips', 'chest', 'pelvis'].forEach(part => {
-            // Tẩy chay hoàn toàn thân dưới bằng trọng số âm cực độ
-            if (hitboxes[part]) hitboxes[part].snap_weight = -999999.0;
+        ['spine', 'hips', 'chest'].forEach(part => {
+            if (hitboxes[part]) hitboxes[part].snap_weight = this.config.chestLockPenalty;
         });
         if (hitboxes.head) {
             hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius *= 5.0; // Mở rộng vùng nhận diện đầu
+            hitboxes.head.m_Radius *= this.config.maxHitboxExpansion;
             hitboxes.head.snap_weight = 999999.0;
         }
+        if (hitboxes.neck) hitboxes.neck.priority = "HEAD";
     }
 
     processFrame(data) {
-        // ... (Bỏ qua đoạn chuẩn bị data và vũ khí, tập trung vào Logic kéo tâm) ...
-        if (data.weapon) {
-            data.weapon.recoil = 0; data.weapon.camera_shake = 0; data.weapon.aim_acceleration = 0;
+        if (data.weapon) this.enforceAbsoluteZeroRecoil(data.weapon);
+        if (data.gameState) {
+            data.gameState.weaponRecoil = 0;
+            data.gameState.cameraShake = 0;
         }
 
         const players = data.players || data.targets || [];
         if (players.length === 0) return data;
+
         players.sort((a, b) => (a.distance || 0) - (b.distance || 0));
         const target = players[0];
 
         if (!target.position && !target.headHitbox) return data;
 
+        // Lấy tọa độ và động lượng (Mặc định 0 nếu null)
         const tPos = target.headHitbox || target.position;
         const tVel = target.velocity || {x:0, y:0, z:0};
         const tAcc = target.acceleration || {x:0, y:0, z:0};
         const sPos = data.playerPosition || {x:0, y:0, z:0};
-        const sVel = data.playerVelocity || {x:0, y:0, z:0}; 
+        const sVel = data.playerVelocity || {x:0, y:0, z:0}; // Vận tốc bản thân
 
         this.overrideChestMagnet(target.hitboxes);
 
-        // Lấy tọa độ trán tuyệt đối
+        // Truyền cả vận tốc của kẻ địch và bản thân vào để tính toán Tương đối
         const interceptPoint = ApexKinematics.fastIntercept(
-            tPos.x, tPos.y, tPos.z, tVel.x, tVel.y, tVel.z, tAcc.x, tAcc.y, tAcc.z,
-            sPos.x, sPos.y, sPos.z, sVel.x, sVel.y, sVel.z, this.config.bulletSpeed
+            tPos.x, tPos.y, tPos.z,
+            tVel.x, tVel.y, tVel.z,
+            tAcc.x, tAcc.y, tAcc.z,
+            sPos.x, sPos.y, sPos.z,
+            sVel.x, sVel.y, sVel.z,
+            this.config.bulletSpeed
         );
 
         const headHeight = (target.headHitbox && target.headHitbox.radius) ? target.headHitbox.radius : 0.2;
-        const targetHeadY = interceptPoint[1] + (headHeight * this.config.goldenRatio);
+        const targetY = interceptPoint[1] + (headHeight * this.config.goldenRatio);
 
         // ==========================================
-        // SMART VECTOR ROUTING & ESCAPE VELOCITY
-        // Giải quyết triệt để lỗi "Kẹt ngực kéo không lên"
+        // DRAG CANCELLATION LOGIC (Triệt tiêu lực vuốt tay)
         // ==========================================
-        let finalAimY = targetHeadY;
+        let finalAimY = targetY;
         
+        // Nếu user đang xả đạn (isFiring) và cố gắng kéo tâm cực mạnh (Input Swipe)
         if (data.input_state && data.input_state.isFiring) {
-            // Lấy cao độ tâm súng hiện tại và lực kéo tay
-            let currentAimY = data.currentAimPosition ? data.currentAimPosition.y : sPos.y;
-            let userDragVelocity = data.input_state.deltaY || 0; 
+            let userDragVelocity = data.input_state.deltaY || 0; // Lực kéo trục dọc từ tay
             
-            // TH1: Tâm đang kẹt ở dưới đầu (Vùng ngực/bụng)
-            if (currentAimY < targetHeadY - this.config.headZoneMargin) {
-                if (userDragVelocity > 0.02) {
-                    // Cấp số nhân lực vuốt: Kéo nhẹ thành kéo mạnh, bứt phá khỏi ngực lập tức
-                    data.input_state.deltaY *= this.config.dragBoostFactor;
-                }
-                // Đồng thời kích hoạt Repulsion Force: Ép đẩy tọa độ Y thẳng lên đầu
-                finalAimY = targetHeadY; 
-            } 
-            // TH2: Tâm đã chạm mốc đầu
-            else {
-                if (Math.abs(userDragVelocity) > 0.1) {
-                    // Chém đứt lực kéo, không cho vuốt lố qua đầu hoặc kéo tuột xuống lại
-                    data.input_state.deltaY = 0;
-                    data.input_state.pitch = 0;
-                }
-                // Gắn chặt vào trán
-                finalAimY = targetHeadY;
+            // Nếu lực vuốt tay vượt qua ngưỡng nhiễu, hệ thống sẽ bỏ qua Input này
+            // và ép chết tọa độ Y vào vùng trán (Khóa dọc, thả ngang)
+            if (Math.abs(userDragVelocity) > this.config.dragCancellationThreshold) {
+                // Ép chết tọa độ Y vào điểm đã tính toán, không cho cộng thêm lực kéo tay
+                data.input_state.deltaY = 0; 
+                data.input_state.pitch = 0;
             }
         }
 
         const finalAimPosition = { x: interceptPoint[0], y: finalAimY, z: interceptPoint[2] };
 
-        // Ép gói tin phản hồi
         data.aimPosition = finalAimPosition;
         data.camera_state = {
             forced_target: finalAimPosition,
