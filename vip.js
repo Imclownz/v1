@@ -1,11 +1,3 @@
-/**
- * ==============================================================================
- * APEX-X KINETIC ARCHITECTURE v36.0 (ABSOLUTE CEILING EDITION)
- * Core: Dynamic Delta Clamping + Hitbox Nullification + Zero Recoil
- * Goal: Ép tâm trượt cực nhanh lên đầu, triệt tiêu lực kéo xuống, chống vượt đầu 100%
- * ==============================================================================
- */
-
 if (typeof $response === "undefined") { var $response = { body: '{}' }; }
 if (typeof $done === "undefined") { var $done = function(obj) { return obj; }; }
 
