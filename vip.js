@@ -1,146 +1,130 @@
 /**
- * ENTERPRISE-GRADE: CONFIG MUTATOR SYSTEM v37.0
- * Architecture: Recursive JSON Traverser, Global Gene Mutation
- * Status: Maximum Performance. Safety Protocols: BYPASSED.
- * Directives: Zero-Recoil, Anti-Chest Lock, Absolute Head Priority.
+ * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM - NETWORK INJECTOR
+ * Deployment: Shadowrocket / Proxy Packet Interception
+ * Core Logic: Bone ID Spoofing & Dynamic Y-Offset Magnetism
  */
 
 // ==========================================
-// 1. ECOSYSTEM: LOGGER & VALIDATOR
+// 1. UTILS: TOÁN HỌC KHÔNG GIAN
 // ==========================================
-class PerformanceLogger {
-    static log(action, latency, mutations) {
-        // Chỉ log khi có độ trễ lớn để giữ sạch console, nhưng hiển thị số lượng "đột biến"
-        if (latency > 50) {
-            console.warn(`[WARN] T-Spike: ${latency}ms | Action: ${action} | Mutations: ${mutations}`);
-        } else {
-            console.log(`[SUCCESS] ${action} completed | Latency: ${latency}ms | Mutations injected: ${mutations}`);
-        }
-    }
-}
-
-// ==========================================
-// 2. CORE LOGIC: RECURSIVE GENE MUTATOR
-// ==========================================
-class ConfigMutator {
-    constructor() {
-        this.config = {
-            voidWeight: -99999.0,   // Đánh sập lực hút
-            maxWeight: 99999.0,     // Lực kéo cực đại
-            headMultiplier: 5.0,    // Phóng to bán kính nhận diện đầu
-            goldenRatioOffset: 0.66 // Giới hạn bù Y
-        };
-        this.mutationCount = 0;
+class AdvancedMath {
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     /**
-     * Thuật toán Đệ quy: Quét sâu vào từng lớp của file JSON.
-     * Tự động tìm kiếm và ghi đè bất kể cấu trúc dữ liệu bị nhà phát hành thay đổi hay xáo trộn.
+     * Tính toán Delta Y (Khoảng cách bù trừ từ Ngực lên Đầu) dựa trên cự ly.
+     * Càng gần kẻ địch, mô hình càng lớn -> Delta Y phải lớn hơn.
      */
-    traverseAndMutate(obj) {
-        if (typeof obj !== 'object' || obj === null) return obj;
-
-        for (let key in obj) {
-            if (Object.prototype.hasOwnProperty.call(obj, key)) {
-                let value = obj[key];
-                let lowerKey = key.toLowerCase();
-
-                // Nếu là Object lồng nhau, tiếp tục đệ quy đi xuống
-                if (typeof value === 'object' && value !== null) {
-                    obj[key] = this.traverseAndMutate(value);
-                } 
-                // Nếu là giá trị số (thông số vật lý, từ tính)
-                else if (typeof value === 'number') {
-                    
-                    // Lệnh 1: Triệt tiêu mọi độ giật, rung, lan tỏa và gia tốc
-                    if (lowerKey.includes('recoil') || lowerKey.includes('shake') || lowerKey.includes('spread') || lowerKey.includes('drop') || lowerKey.includes('accel')) {
-                        obj[key] = 0.0;
-                        this.mutationCount++;
-                    }
-                    
-                    // Lệnh 2: Phá bỏ lực hút thân (Anti-Chest Lock)
-                    else if (lowerKey.includes('chest') || lowerKey.includes('spine') || lowerKey.includes('pelvis') || lowerKey.includes('hips')) {
-                        if (lowerKey.includes('weight') || lowerKey.includes('magnet') || lowerKey.includes('snap') || lowerKey.includes('force')) {
-                            obj[key] = this.config.voidWeight;
-                            this.mutationCount++;
-                        }
-                        // Thu nhỏ hitbox thân
-                        else if (lowerKey.includes('radius') || lowerKey.includes('size')) {
-                            obj[key] = 0.01;
-                            this.mutationCount++;
-                        }
-                    }
-                    
-                    // Lệnh 3: Ưu tiên vùng Đầu tuyệt đối
-                    else if (lowerKey.includes('head') || lowerKey.includes('neck')) {
-                        if (lowerKey.includes('weight') || lowerKey.includes('magnet') || lowerKey.includes('snap') || lowerKey.includes('force')) {
-                            obj[key] = this.config.maxWeight;
-                            this.mutationCount++;
-                        }
-                        // Cường hóa bán kính nhận diện đầu
-                        else if (lowerKey.includes('radius') || lowerKey.includes('size')) {
-                            obj[key] = value * this.config.headMultiplier;
-                            this.mutationCount++;
-                        }
-                    }
-
-                    // Lệnh 4: Tiêm Golden Ratio Y-Offset nếu có trường center_of_mass hoặc offset
-                    else if ((lowerKey.includes('head') || lowerKey.includes('aim')) && lowerKey.includes('y_offset')) {
-                        obj[key] = this.config.goldenRatioOffset;
-                        this.mutationCount++;
-                    }
-                } 
-                // Nếu là chuỗi (String) quy định mức độ ưu tiên
-                else if (typeof value === 'string') {
-                    if ((lowerKey.includes('head') || lowerKey.includes('neck')) && lowerKey.includes('priority')) {
-                        obj[key] = "MAXIMUM";
-                        this.mutationCount++;
-                    }
-                    else if ((lowerKey.includes('chest') || lowerKey.includes('spine') || lowerKey.includes('pelvis')) && lowerKey.includes('priority')) {
-                        obj[key] = "IGNORE";
-                        this.mutationCount++;
-                    }
-                    // Đảm bảo không làm mượt (Interpolation = ZERO)
-                    else if (lowerKey.includes('interpolation') || lowerKey.includes('smoothing')) {
-                        obj[key] = "ZERO";
-                        this.mutationCount++;
-                    }
-                }
-            }
-        }
-        return obj;
-    }
-
-    processPayload(bodyString) {
-        const startTime = Date.now();
-        this.mutationCount = 0; // Reset counter cho mỗi packet
-
-        try {
-            // Khởi tạo cây JSON
-            const payload = JSON.parse(bodyString);
-            
-            // Kích hoạt phản ứng dây chuyền đột biến
-            const mutatedPayload = this.traverseAndMutate(payload);
-            
-            const latency = Date.now() - startTime;
-            PerformanceLogger.log('Global Config Mutated', latency, this.mutationCount);
-            
-            // Trả về bộ gen mới
-            return JSON.stringify(mutatedPayload);
-        } catch (e) {
-            console.warn("[ERROR] JSON Parse failed. Fallback to original packet to prevent crash.");
-            return bodyString; 
-        }
+    static calculateDynamicYOffset(distance) {
+        const BASE_OFFSET = 0.65; // Đơn vị đo lường engine (m)
+        const MAX_DISTANCE = 100.0;
+        
+        if (distance <= 0) return BASE_OFFSET;
+        if (distance >= MAX_DISTANCE) return BASE_OFFSET * 0.3; // Xa thì bù trừ ít lại
+        
+        // Tuyến tính suy giảm theo khoảng cách
+        const scaleFactor = 1 - (distance / MAX_DISTANCE);
+        return BASE_OFFSET * (0.3 + (0.7 * scaleFactor));
     }
 }
 
 // ==========================================
-// 3. BỘ ĐIỀU PHỐI ENTRY POINT (SHADOWROCKET)
+// 2. CORE MUTATOR: BỘ THAO TÚNG DỮ LIỆU
 // ==========================================
-const EngineInstance = new ConfigMutator();
+class MagnetismHijacker {
+    constructor() {
+        this.voidWeight = -99999.0;
+        this.maxWeight = 99999.0;
+        this.targetBone = "bone_Head";
+    }
 
-// Giao thức thực thi của Shadowrocket
+    /**
+     * Sửa đổi trực tiếp mảng Hitbox trong gói tin để đánh lừa thuật toán Raycast của game.
+     * Game sẽ tưởng vùng Đầu có trọng lượng từ tính lớn nhất.
+     */
+    spoofBoneIDs(hitboxes) {
+        if (!hitboxes) return;
+
+        // 1. Phá bỏ lực hút thân (Anti-Chest Lock)
+        const torsoBones = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
+        torsoBones.forEach(bone => {
+            if (hitboxes[bone]) {
+                hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].priority = "IGNORE";
+                hitboxes[bone].m_Radius = 0.01; // Thu nhỏ hitbox thân về gần mức 0
+            }
+        });
+
+        // 2. Khuếch đại lực hút Đầu
+        if (hitboxes.head) {
+            hitboxes.head.snap_weight = this.maxWeight;
+            hitboxes.head.priority = "MAXIMUM";
+            // Tăng bán kính nhận diện để Raycast dễ chạm hơn, nhưng không làm to mô hình
+            hitboxes.head.m_Radius *= 4.5; 
+        }
+    }
+
+    /**
+     * Ghi đè tọa độ của Center of Mass (Trọng tâm) để hút tâm lên trán.
+     */
+    injectYOffset(player) {
+        if (!player || !player.head_pos || !player.chest_pos) return;
+
+        const distance = player.distance || 10.0; // Mặc định 10m nếu không có dữ liệu
+        const deltaY = AdvancedMath.calculateDynamicYOffset(distance);
+
+        // Ghi đè trọng tâm (Center of Mass) mà game dùng để tính Aim Assist
+        // Thay vì hút vào chest_pos, ép nó hút vào chest_pos + deltaY (vùng đầu/trán)
+        if (player.center_of_mass) {
+            player.center_of_mass.y = player.chest_pos.y + deltaY;
+            
+            // Đảm bảo không vẩy vượt quá đỉnh đầu (Y-Axis Clamping)
+            const absoluteHeadTop = player.head_pos.y + 0.15; // +0.15 là đỉnh mô hình
+            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop);
+        }
+    }
+
+    processPacketData(data) {
+        if (!data || !Array.isArray(data.players)) return data;
+
+        // Quét qua toàn bộ danh sách kẻ địch trong vùng Render
+        for (let i = 0; i < data.players.length; i++) {
+            const enemy = data.players[i];
+            
+            // 1. Đánh lừa ID xương để game tự dồn lực vào đầu
+            this.spoofBoneIDs(enemy.hitboxes);
+            
+            // 2. Tiêm tọa độ bù trừ ảo để khóa chặt vào vị trí trán
+            this.injectYOffset(enemy);
+        }
+
+        return data;
+    }
+}
+
+// ==========================================
+// 3. SHADOWROCKET INTERCEPTOR (ENTRY POINT)
+// ==========================================
+const hijacker = new MagnetismHijacker();
+
+function processGamePayload(bodyString) {
+    try {
+        // Parse gói tin JSON từ Server gửi về Client
+        const payload = JSON.parse(bodyString);
+        
+        // Thực thi Hijack logic
+        const mutatedPayload = hijacker.processPacketData(payload);
+        
+        // Đóng gói lại và gửi cho Client
+        return JSON.stringify(mutatedPayload);
+    } catch (error) {
+        // Fallback: Trả về gói tin gốc nếu lỗi để tránh Crash game
+        return bodyString; 
+    }
+}
+
+// Giao thức thực thi của Shadowrocket ($done)
 if (typeof $response !== "undefined" && $response.body) {
-    // Chỉ xử lý nếu có body để tránh lỗi undefined
-    $done({ body: EngineInstance.processPayload($response.body) });
+    $done({ body: processGamePayload($response.body) });
 }
