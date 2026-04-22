@@ -1,164 +1,114 @@
 /**
- * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v38.5
- * Architecture: Magnetism Hijacker + Kinetic Prediction (Standalone)
- * Optimization: SMG/AR Anti-Bloom & Perfect Hit-Registration
+ * ENTERPRISE-GRADE: TARGETING SYSTEM v39.5 (APEX)
+ * Focus: Immediate Displacement (Drag-to-Head) & Sticky-Lock
+ * Base: vip 2.js logic
  */
 
-// ==========================================
-// 1. UTILS: TOÁN HỌC CỰC HẠN
-// ==========================================
-class AdvancedMath {
-    static clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    /**
-     * Thuật toán chặn đầu (Intercept) dành cho SMG/AR
-     * Tính toán điểm rơi dựa trên vận tốc và độ trễ thực tế
-     */
-    static calculateIntercept(pos, vel, selfVel, dist, bulletSpeed, ping) {
-        const timeToHit = (dist / bulletSpeed) + (ping / 1000);
-        return {
-            x: pos.x + ((vel.x - selfVel.x) * timeToHit),
-            y: pos.y + ((vel.y - selfVel.y) * timeToHit),
-            z: pos.z + ((vel.z - selfVel.z) * timeToHit)
+class ApexTargetingEngine {
+    constructor() {
+        this.config = {
+            bulletSpeed: 9999.0, // Hit-scan
+            goldenRatio: 0.68, // Khóa vùng trán
+            maxStickiness: 1.0, // Khóa cứng tuyệt đối
+            zeroSmoothing: "ZERO" // Dịch chuyển tức thời
         };
     }
 
-    static calculateDynamicYOffset(distance) {
-        const BASE_OFFSET = 0.66; // Golden Ratio v38.5
-        const MAX_DISTANCE = 120.0;
-        if (distance <= 0) return BASE_OFFSET;
-        const scaleFactor = 1 - (distance / MAX_DISTANCE);
-        return AdvancedMath.clamp(BASE_OFFSET * (0.4 + (0.6 * scaleFactor)), 0.2, 0.8);
-    }
-}
+    /**
+     * TRUYỀN TINH THẦN TỪ VIP 2.JS: Xóa lực hút thân, dồn vào đầu
+     */
+    hijackMagnetism(enemy) {
+        if (!enemy.hitboxes) return;
+        const voidWeight = -99999.0;
+        const maxWeight = 99999.0;
 
-// ==========================================
-// 2. CORE: THE MAGNETISM HIJACKER v38.5
-// ==========================================
-class MagnetismHijacker {
-    constructor() {
-        this.voidWeight = -99999.0;
-        this.maxWeight = 99999.0;
-        this.bulletSpeed = 9999.0; // Hit-scan logic
+        // Triệt tiêu thân dưới
+        const bones = ['spine', 'chest', 'pelvis', 'hips'];
+        bones.forEach(b => {
+            if (enemy.hitboxes[b]) {
+                enemy.hitboxes[b].snap_weight = voidWeight;
+                enemy.hitboxes[b].priority = "IGNORE";
+            }
+        });
+
+        // Cường hóa đầu
+        if (enemy.hitboxes.head) {
+            enemy.hitboxes.head.snap_weight = maxWeight;
+            enemy.hitboxes.head.priority = "MAXIMUM";
+            enemy.hitboxes.head.m_Radius *= 5.0; 
+        }
     }
 
     /**
-     * KHẮC PHỤC LỆCH ĐẠN SMG: Triệt tiêu mọi biến số động của súng
+     * KHẮC PHỤC LỆCH ĐẠN TIỂU LIÊN: Triệt tiêu biến số động
      */
-    enforceWeaponStability(weapon) {
+    stabilizeWeapon(weapon) {
         if (!weapon) return;
-        // Triệt tiêu cơ bản
         weapon.recoil = 0.0;
         weapon.spread = 0.0;
-        weapon.camera_shake = 0.0;
-        // SMG/AR FIX: Chặn nở tâm và cộng dồn giật
-        weapon.progressive_spread = 0.0; 
-        weapon.recoil_accumulation = 0.0;
-        weapon.recoil_multiplier = 0.0;
-        weapon.horizontal_recoil = 0.0;
-        weapon.vertical_recoil = 0.0;
-        weapon.bloom = 0.0; 
-        weapon.max_spread = 0.0;
+        weapon.progressive_spread = 0.0; // Chặn nở tâm
+        weapon.recoil_accumulation = 0.0; // Chặn cộng dồn giật
+        weapon.bloom = 0.0;
     }
 
     /**
-     * BẢO LƯU LOGIC GỐC: Phá hủy trọng số thân, dồn lực vào đầu
+     * LOGIC DỊCH CHUYỂN (DISPLACEMENT): Snap trực tiếp đến đầu
      */
-    spoofBoneIDs(hitboxes) {
-        if (!hitboxes) return;
-        const torsoBones = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
-        for (let bone of torsoBones) {
-            if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidWeight;
-                hitboxes[bone].priority = "IGNORE";
-                hitboxes[bone].m_Radius = 0.01;
-            }
-        }
-        if (hitboxes.head) {
-            hitboxes.head.snap_weight = this.maxWeight;
-            hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius *= 5.0; // Phóng đại x5
-        }
-    }
+    calculateSnapPoint(player) {
+        if (!player.head_pos || !player.chest_pos) return null;
 
-    /**
-     * TIÊM TỌA ĐỘ DỰ ĐOÁN (Kinetic Injection)
-     */
-    injectKineticOffset(player, selfVel, ping) {
-        if (!player || !player.head_pos || !player.chest_pos) return;
-
-        const dist = player.distance || 10.0;
-        const tVel = player.velocity || { x: 0, y: 0, z: 0 };
-        
-        // Dự đoán vị trí đầu ở tương lai dựa trên vận tốc
-        const predictedHead = AdvancedMath.calculateIntercept(
-            player.head_pos, tVel, selfVel, dist, this.bulletSpeed, ping
-        );
-
-        const deltaY = AdvancedMath.calculateDynamicYOffset(dist);
         const headHeight = player.hitboxes?.head?.m_Height || 0.2;
+        // Tính toán tọa độ trán
+        const targetY = player.head_pos.y + (headHeight * this.config.goldenRatio);
 
-        if (player.center_of_mass) {
-            // Tiêm tọa độ dự đoán vào trọng tâm nội suy
-            player.center_of_mass.x = predictedHead.x;
-            player.center_of_mass.z = predictedHead.z;
-            player.center_of_mass.y = player.chest_pos.y + deltaY;
-            
-            // Giới hạn trục Y chuẩn v38.5
-            const absoluteMaxY = player.head_pos.y + (headHeight * 0.85);
-            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteMaxY);
-        }
+        return {
+            x: player.head_pos.x,
+            y: targetY,
+            z: player.head_pos.z
+        };
     }
 
-    processPacketData(data) {
+    processFrame(data) {
         if (!data) return data;
-        
-        // 1. Ổn định súng (Fix SMG/AR)
-        if (data.weapon) this.enforceWeaponStability(data.weapon);
 
-        if (!Array.isArray(data.players)) return data;
+        // 1. Luôn ổn định súng để đạn đi theo tâm ngắm
+        if (data.weapon) this.stabilizeWeapon(data.weapon);
 
-        const selfVel = data.player_velocity || { x: 0, y: 0, z: 0 };
-        const currentPing = data.ping || 15;
+        if (data.players && data.players.length > 0) {
+            data.players.sort((a, b) => a.distance - b.distance);
+            const target = data.players[0];
 
-        for (let enemy of data.players) {
-            // 2. Thực thi luật từ tính (Logic gốc từ vip 2.js)
-            this.spoofBoneIDs(enemy.hitboxes);
-            
-            // 3. Tiêm tọa độ dự đoán chuyển động
-            this.injectKineticOffset(enemy, selfVel, currentPing);
-        }
+            // 2. Thực thi luật từ tính từ vip 2.js
+            this.hijackMagnetism(target);
 
-        // 4. Khóa cứng Camera (Stickiness Maxima)
-        if (data.players.length > 0) {
+            // 3. Tính toán điểm Snap
+            const snapPoint = this.calculateSnapPoint(target);
+
+            // 4. KÍCH HOẠT DỊCH CHUYỂN VÀ DUY TRÌ KHÓA (Logic v31.0)
+            // Việc thiết lập interpolation: "ZERO" sẽ ép tâm dịch chuyển ngay lập tức
             data.camera_state = {
-                stickiness: 1.0,
-                interpolation: "ZERO",
-                lock_bone: "bone_Head"
+                forced_target: snapPoint,
+                lock_bone: "bone_Head",
+                stickiness: this.config.maxStickiness,
+                interpolation: this.config.zeroSmoothing 
             };
         }
-
         return data;
     }
 }
 
-// ==========================================
-// 3. ENTRY POINT (SHADOWROCKET)
-// ==========================================
-const hijacker = new MagnetismHijacker();
+const ApexEngine = new ApexTargetingEngine();
 
-function processGamePayload(bodyString) {
+function interceptAndProcessPacket(bodyString) {
     try {
         const payload = JSON.parse(bodyString);
-        const mutatedPayload = hijacker.processPacketData(payload);
-        return JSON.stringify(mutatedPayload);
-    } catch (error) {
+        const processedPayload = ApexEngine.processFrame(payload);
+        return JSON.stringify(processedPayload);
+    } catch (e) {
         return bodyString; 
     }
 }
 
 if (typeof $response !== "undefined" && $response.body) {
-    $done({ body: processGamePayload($response.body) });
+    $done({ body: interceptAndProcessPacket($response.body) });
 }
