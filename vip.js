@@ -1,11 +1,11 @@
 /**
- * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM - NETWORK INJECTOR
- * Deployment: Shadowrocket / Proxy Packet Interception
- * Core Logic: Bone ID Spoofing & Dynamic Y-Offset Magnetism
+ * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v38.5
+ * Architecture: Magnetism Hijacker + Kinetic Prediction (Standalone)
+ * Optimization: SMG/AR Anti-Bloom & Perfect Hit-Registration
  */
 
 // ==========================================
-// 1. UTILS: TOÁN HỌC KHÔNG GIAN
+// 1. UTILS: TOÁN HỌC CỰC HẠN
 // ==========================================
 class AdvancedMath {
     static clamp(value, min, max) {
@@ -13,90 +13,131 @@ class AdvancedMath {
     }
 
     /**
-     * Tính toán Delta Y (Khoảng cách bù trừ từ Ngực lên Đầu) dựa trên cự ly.
-     * Càng gần kẻ địch, mô hình càng lớn -> Delta Y phải lớn hơn.
+     * Thuật toán chặn đầu (Intercept) dành cho SMG/AR
+     * Tính toán điểm rơi dựa trên vận tốc và độ trễ thực tế
      */
+    static calculateIntercept(pos, vel, selfVel, dist, bulletSpeed, ping) {
+        const timeToHit = (dist / bulletSpeed) + (ping / 1000);
+        return {
+            x: pos.x + ((vel.x - selfVel.x) * timeToHit),
+            y: pos.y + ((vel.y - selfVel.y) * timeToHit),
+            z: pos.z + ((vel.z - selfVel.z) * timeToHit)
+        };
+    }
+
     static calculateDynamicYOffset(distance) {
-        const BASE_OFFSET = 0.65; // Đơn vị đo lường engine (m)
-        const MAX_DISTANCE = 100.0;
-        
+        const BASE_OFFSET = 0.66; // Golden Ratio v38.5
+        const MAX_DISTANCE = 120.0;
         if (distance <= 0) return BASE_OFFSET;
-        if (distance >= MAX_DISTANCE) return BASE_OFFSET * 0.3; // Xa thì bù trừ ít lại
-        
-        // Tuyến tính suy giảm theo khoảng cách
         const scaleFactor = 1 - (distance / MAX_DISTANCE);
-        return BASE_OFFSET * (0.3 + (0.7 * scaleFactor));
+        return AdvancedMath.clamp(BASE_OFFSET * (0.4 + (0.6 * scaleFactor)), 0.2, 0.8);
     }
 }
 
 // ==========================================
-// 2. CORE MUTATOR: BỘ THAO TÚNG DỮ LIỆU
+// 2. CORE: THE MAGNETISM HIJACKER v38.5
 // ==========================================
 class MagnetismHijacker {
     constructor() {
         this.voidWeight = -99999.0;
         this.maxWeight = 99999.0;
-        this.targetBone = "bone_Head";
+        this.bulletSpeed = 9999.0; // Hit-scan logic
     }
 
     /**
-     * Sửa đổi trực tiếp mảng Hitbox trong gói tin để đánh lừa thuật toán Raycast của game.
-     * Game sẽ tưởng vùng Đầu có trọng lượng từ tính lớn nhất.
+     * KHẮC PHỤC LỆCH ĐẠN SMG: Triệt tiêu mọi biến số động của súng
+     */
+    enforceWeaponStability(weapon) {
+        if (!weapon) return;
+        // Triệt tiêu cơ bản
+        weapon.recoil = 0.0;
+        weapon.spread = 0.0;
+        weapon.camera_shake = 0.0;
+        // SMG/AR FIX: Chặn nở tâm và cộng dồn giật
+        weapon.progressive_spread = 0.0; 
+        weapon.recoil_accumulation = 0.0;
+        weapon.recoil_multiplier = 0.0;
+        weapon.horizontal_recoil = 0.0;
+        weapon.vertical_recoil = 0.0;
+        weapon.bloom = 0.0; 
+        weapon.max_spread = 0.0;
+    }
+
+    /**
+     * BẢO LƯU LOGIC GỐC: Phá hủy trọng số thân, dồn lực vào đầu
      */
     spoofBoneIDs(hitboxes) {
         if (!hitboxes) return;
-
-        // 1. Phá bỏ lực hút thân (Anti-Chest Lock)
         const torsoBones = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
-        torsoBones.forEach(bone => {
+        for (let bone of torsoBones) {
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight;
                 hitboxes[bone].priority = "IGNORE";
-                hitboxes[bone].m_Radius = 0.01; // Thu nhỏ hitbox thân về gần mức 0
+                hitboxes[bone].m_Radius = 0.01;
             }
-        });
-
-        // 2. Khuếch đại lực hút Đầu
+        }
         if (hitboxes.head) {
             hitboxes.head.snap_weight = this.maxWeight;
             hitboxes.head.priority = "MAXIMUM";
-            // Tăng bán kính nhận diện để Raycast dễ chạm hơn, nhưng không làm to mô hình
-            hitboxes.head.m_Radius *= 4.5; 
+            hitboxes.head.m_Radius *= 5.0; // Phóng đại x5
         }
     }
 
     /**
-     * Ghi đè tọa độ của Center of Mass (Trọng tâm) để hút tâm lên trán.
+     * TIÊM TỌA ĐỘ DỰ ĐOÁN (Kinetic Injection)
      */
-    injectYOffset(player) {
+    injectKineticOffset(player, selfVel, ping) {
         if (!player || !player.head_pos || !player.chest_pos) return;
 
-        const distance = player.distance || 10.0; // Mặc định 10m nếu không có dữ liệu
-        const deltaY = AdvancedMath.calculateDynamicYOffset(distance);
+        const dist = player.distance || 10.0;
+        const tVel = player.velocity || { x: 0, y: 0, z: 0 };
+        
+        // Dự đoán vị trí đầu ở tương lai dựa trên vận tốc
+        const predictedHead = AdvancedMath.calculateIntercept(
+            player.head_pos, tVel, selfVel, dist, this.bulletSpeed, ping
+        );
 
-        // Ghi đè trọng tâm (Center of Mass) mà game dùng để tính Aim Assist
-        // Thay vì hút vào chest_pos, ép nó hút vào chest_pos + deltaY (vùng đầu/trán)
+        const deltaY = AdvancedMath.calculateDynamicYOffset(dist);
+        const headHeight = player.hitboxes?.head?.m_Height || 0.2;
+
         if (player.center_of_mass) {
+            // Tiêm tọa độ dự đoán vào trọng tâm nội suy
+            player.center_of_mass.x = predictedHead.x;
+            player.center_of_mass.z = predictedHead.z;
             player.center_of_mass.y = player.chest_pos.y + deltaY;
             
-            // Đảm bảo không vẩy vượt quá đỉnh đầu (Y-Axis Clamping)
-            const absoluteHeadTop = player.head_pos.y + 0.15; // +0.15 là đỉnh mô hình
-            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop);
+            // Giới hạn trục Y chuẩn v38.5
+            const absoluteMaxY = player.head_pos.y + (headHeight * 0.85);
+            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteMaxY);
         }
     }
 
     processPacketData(data) {
-        if (!data || !Array.isArray(data.players)) return data;
+        if (!data) return data;
+        
+        // 1. Ổn định súng (Fix SMG/AR)
+        if (data.weapon) this.enforceWeaponStability(data.weapon);
 
-        // Quét qua toàn bộ danh sách kẻ địch trong vùng Render
-        for (let i = 0; i < data.players.length; i++) {
-            const enemy = data.players[i];
-            
-            // 1. Đánh lừa ID xương để game tự dồn lực vào đầu
+        if (!Array.isArray(data.players)) return data;
+
+        const selfVel = data.player_velocity || { x: 0, y: 0, z: 0 };
+        const currentPing = data.ping || 15;
+
+        for (let enemy of data.players) {
+            // 2. Thực thi luật từ tính (Logic gốc từ vip 2.js)
             this.spoofBoneIDs(enemy.hitboxes);
             
-            // 2. Tiêm tọa độ bù trừ ảo để khóa chặt vào vị trí trán
-            this.injectYOffset(enemy);
+            // 3. Tiêm tọa độ dự đoán chuyển động
+            this.injectKineticOffset(enemy, selfVel, currentPing);
+        }
+
+        // 4. Khóa cứng Camera (Stickiness Maxima)
+        if (data.players.length > 0) {
+            data.camera_state = {
+                stickiness: 1.0,
+                interpolation: "ZERO",
+                lock_bone: "bone_Head"
+            };
         }
 
         return data;
@@ -104,27 +145,20 @@ class MagnetismHijacker {
 }
 
 // ==========================================
-// 3. SHADOWROCKET INTERCEPTOR (ENTRY POINT)
+// 3. ENTRY POINT (SHADOWROCKET)
 // ==========================================
 const hijacker = new MagnetismHijacker();
 
 function processGamePayload(bodyString) {
     try {
-        // Parse gói tin JSON từ Server gửi về Client
         const payload = JSON.parse(bodyString);
-        
-        // Thực thi Hijack logic
         const mutatedPayload = hijacker.processPacketData(payload);
-        
-        // Đóng gói lại và gửi cho Client
         return JSON.stringify(mutatedPayload);
     } catch (error) {
-        // Fallback: Trả về gói tin gốc nếu lỗi để tránh Crash game
         return bodyString; 
     }
 }
 
-// Giao thức thực thi của Shadowrocket ($done)
 if (typeof $response !== "undefined" && $response.body) {
     $done({ body: processGamePayload($response.body) });
 }
