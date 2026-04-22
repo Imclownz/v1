@@ -1,6 +1,7 @@
 /**
- * ENTERPRISE-GRADE: TARGETING SYSTEM v39.0
- * Core Focus: "Slingshot" Drag-to-Head & "Super-Glue" Lock-Head
+ * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v40.0
+ * Architecture: Quantum Snap (Teleportation & Continuous Hold)
+ * Core Base: vip 2.js Inherited & Supercharged
  * Status: Max Performance. Safety: Bypassed.
  */
 
@@ -9,153 +10,140 @@
 // ==========================================
 class AdvancedMath {
     static clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
+        return Math.max(min, Math.min(max, value)); // Kế thừa từ vip 2.js
     }
 
-    // Tỉ lệ vàng của vùng trán
-    static getGoldenRatio() {
-        return 0.68; 
+    /**
+     * Tính toán Delta Y dựa trên khoảng cách.
+     * Tinh chỉnh gắt hơn để đảm bảo dịch chuyển chính xác vào "Golden Ratio".
+     */
+    static calculateDynamicYOffset(distance) {
+        const BASE_OFFSET = 0.68; // Đẩy lên 0.68 (Trán) thay vì 0.65
+        const MAX_DISTANCE = 150.0; // Mở rộng tầm quét
+        
+        if (distance <= 0) return BASE_OFFSET;
+        if (distance >= MAX_DISTANCE) return BASE_OFFSET * 0.25; 
+        
+        const scaleFactor = 1 - (distance / MAX_DISTANCE);
+        return BASE_OFFSET * (0.25 + (0.75 * scaleFactor));
     }
 }
 
 // ==========================================
-// 2. ENGINE 1: DRAG-TO-HEAD (SLINGSHOT)
+// 2. CORE: QUANTUM SNAP ENGINE
 // ==========================================
-class DragAssistEngine {
+class QuantumSnapEngine {
     constructor() {
-        this.voidWeight = -99999.0;
-        this.catapultForce = 99999.0;
+        // Đẩy thông số lên mức cực đoan (Extreme Values)
+        this.voidWeight = -999999.0; // Xóa sổ hoàn toàn lực hút
+        this.quantumWeight = 999999.0; // Lực hút hố đen (Teleport)
     }
 
     /**
-     * Triệt tiêu lực cản của thân, tạo đường băng trơn tru để vuốt tâm
+     * KHÓA SÚNG XUYÊN SUỐT: Đảm bảo đường đạn không bị văng khi giữ nút bắn
      */
-    eliminateFriction(hitboxes) {
+    enforceContinuousHold(weapon) {
+        if (!weapon) return;
+        weapon.recoil = 0.0;
+        weapon.spread = 0.0;
+        weapon.camera_shake = 0.0;
+        // Triệt tiêu cơ chế nảy đạn của tiểu liên/AR
+        weapon.progressive_spread = 0.0; 
+        weapon.recoil_accumulation = 0.0;
+        weapon.recoil_multiplier = 0.0;
+        weapon.horizontal_recoil = 0.0;
+        weapon.bloom = 0.0;
+    }
+
+    /**
+     * TẠO ĐIỂM KỲ DỊ TỪ TÍNH (Magnetic Singularity)
+     * Kế thừa và nâng cấp logic spoofBoneIDs từ vip 2.js
+     */
+    annihilateBodyAndMagnetizeHead(hitboxes) {
         if (!hitboxes) return;
-        const frictionBones = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
-        for (let bone of frictionBones) {
+
+        // 1. Xóa sổ hoàn toàn sự tồn tại của thân dưới trong mắt Aim Assist
+        const torsoBones = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
+        for (let i = 0; i < torsoBones.length; i++) {
+            const bone = torsoBones[i];
             if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidWeight; // Đánh sập từ tính ngực
+                hitboxes[bone].snap_weight = this.voidWeight; // Kế thừa logic voidWeight
                 hitboxes[bone].priority = "IGNORE";
-                hitboxes[bone].friction = 0.0; // Triệt tiêu lực cản khi vuốt qua ngực
+                hitboxes[bone].m_Radius = 0.001; // Thu nhỏ gần bằng 0
+                hitboxes[bone].friction = 0.0; // Triệt tiêu lực cản
             }
         }
-    }
 
-    /**
-     * Tạo lực hút nhân tạo (Slingshot) thẳng đứng lên vùng đầu
-     */
-    igniteCatapult(hitboxes) {
-        if (!hitboxes || !hitboxes.head) return;
-        
-        hitboxes.head.priority = "MAXIMUM";
-        hitboxes.head.snap_weight = this.catapultForce;
-        
-        // Mở rộng lồng đón raycast hình nón (Cone-expansion) để bắt Drag dễ hơn
-        hitboxes.head.m_Radius *= 6.0; 
-        
-        // Nếu Engine hỗ trợ, buff độ nhạy trục dọc
-        if (hitboxes.head.vertical_magnetism_multiplier) {
-            hitboxes.head.vertical_magnetism_multiplier = 5.0; 
+        // 2. Cường hóa đầu thành hố đen từ tính
+        if (hitboxes.head) {
+            hitboxes.head.snap_weight = this.quantumWeight;
+            hitboxes.head.priority = "MAXIMUM";
+            // Mở rộng bán kính cực đại để Crosshair bắt sóng ngay khi nhấp nhả nút bắn
+            hitboxes.head.m_Radius *= 8.0; 
         }
     }
-}
 
-// ==========================================
-// 3. ENGINE 2: LOCK-HEAD (SUPER-GLUE)
-// ==========================================
-class LockHeadEngine {
-    
     /**
-     * Kẹp chặt trục Y (Y-Axis Clamping) và ép tọa độ nội suy (Center of Mass)
+     * CƠ CHẾ DỊCH CHUYỂN (TELEPORT VECTORS)
+     * Thay vì cộng dồn, ghi đè trực tiếp tọa độ Center of Mass vào trán.
      */
-    applySuperGlue(player) {
+    teleportCenterOfMass(player) {
         if (!player || !player.head_pos || !player.chest_pos) return;
 
-        const headHeight = player.hitboxes?.head?.m_Height || 0.2;
-        
-        // 1. Tọa độ mục tiêu hoàn hảo: Trán (Golden Ratio)
-        const perfectLockY = player.head_pos.y + (headHeight * AdvancedMath.getGoldenRatio());
-        
-        // 2. Tọa độ giới hạn tuyệt đối: Đỉnh đầu
-        const absoluteTopY = player.head_pos.y + (headHeight * 0.85);
+        const distance = player.distance || 10.0;
+        const deltaY = AdvancedMath.calculateDynamicYOffset(distance);
 
-        // Ghi đè trọng tâm nội suy của Engine game
         if (player.center_of_mass) {
-            // Ép trọng tâm lên hẳn vùng đầu
-            player.center_of_mass.y = perfectLockY;
+            // Dịch chuyển tuyệt đối: Ép Center of Mass trùng khớp với tọa độ X, Z của Đầu
+            player.center_of_mass.x = player.head_pos.x;
+            player.center_of_mass.z = player.head_pos.z;
             
-            // Khóa cứng, không bao giờ được phép vượt quá đỉnh đầu
-            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteTopY);
-        }
-
-        return { x: player.head_pos.x, y: perfectLockY, z: player.head_pos.z };
-    }
-
-    /**
-     * Đóng băng trạng thái súng và camera khi đã Lock
-     */
-    freezeState(weapon, camera, perfectPoint) {
-        // Khóa súng (Zero-Recoil cho SMG/AR)
-        if (weapon) {
-            weapon.recoil = 0.0;
-            weapon.spread = 0.0;
-            weapon.progressive_spread = 0.0;
-            weapon.recoil_accumulation = 0.0;
-            weapon.bloom = 0.0;
-            weapon.horizontal_recoil = 0.0;
-        }
-
-        // Khóa Camera (Stickiness)
-        if (camera) {
-            camera.forced_target = perfectPoint;
-            camera.lock_bone = "bone_Head";
-            camera.stickiness = 1.0; // Dán keo tâm ngắm
-            camera.interpolation = "ZERO"; // Xóa độ trễ trượt tâm
+            // Ép trục Y lên thẳng trán
+            player.center_of_mass.y = player.chest_pos.y + deltaY;
+            
+            // CHỐNG VƯỢT ĐẦU: Kế thừa logic Clamping chuẩn xác từ vip 2.js
+            const absoluteHeadTop = player.head_pos.y + 0.12; // Siết chặt giới hạn đỉnh đầu hơn nữa
+            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop); //
         }
     }
-}
 
-// ==========================================
-// 4. BỘ ĐIỀU PHỐI (SHADOWROCKET INTEGRATION)
-// ==========================================
-class V39Coordinator {
-    constructor() {
-        this.dragEngine = new DragAssistEngine();
-        this.lockEngine = new LockHeadEngine();
-    }
+    processPacketData(data) {
+        if (!data) return data;
 
-    process(data) {
-        if (!data || !Array.isArray(data.players)) return data;
+        // 1. Kích hoạt khóa súng cho SMG/AR
+        if (data.weapon) this.enforceContinuousHold(data.weapon);
 
-        let perfectLockPoint = null;
+        if (!Array.isArray(data.players)) return data;
 
-        for (let enemy of data.players) {
-            // Giai đoạn 1: Chuẩn bị đường băng Drag
-            this.dragEngine.eliminateFriction(enemy.hitboxes);
-            this.dragEngine.igniteCatapult(enemy.hitboxes);
-
-            // Giai đoạn 2: Tính toán điểm Lock bằng keo dán
-            perfectLockPoint = this.lockEngine.applySuperGlue(enemy);
-        }
-
-        // Giai đoạn 3: Đóng băng Camera và Vũ khí để duy trì Lock
-        if (data.players.length > 0 && perfectLockPoint) {
-            if (!data.camera_state) data.camera_state = {};
-            this.lockEngine.freezeState(data.weapon, data.camera_state, perfectLockPoint);
+        for (let i = 0; i < data.players.length; i++) {
+            const enemy = data.players[i];
+            
+            // 2. Tạo điểm kỳ dị từ tính
+            this.annihilateBodyAndMagnetizeHead(enemy.hitboxes);
+            
+            // 3. Thực thi Dịch chuyển (Teleport) tọa độ ngắm
+            this.teleportCenterOfMass(enemy);
         }
 
         return data;
     }
 }
 
-// Thực thi
-const coordinator = new V39Coordinator();
-if (typeof $response !== "undefined" && $response.body) {
+// ==========================================
+// 3. SHADOWROCKET INTERCEPTOR (ENTRY POINT)
+// ==========================================
+const EngineInstance = new QuantumSnapEngine();
+
+function processGamePayload(bodyString) {
     try {
-        const payload = JSON.parse($response.body);
-        $done({ body: JSON.stringify(coordinator.process(payload)) });
-    } catch (e) {
-        $done({ body: $response.body }); 
+        const payload = JSON.parse(bodyString); //
+        const mutatedPayload = EngineInstance.processPacketData(payload); //
+        return JSON.stringify(mutatedPayload); //
+    } catch (error) {
+        return bodyString; //
     }
+}
+
+if (typeof $response !== "undefined" && $response.body) {
+    $done({ body: processGamePayload($response.body) }); //
 }
