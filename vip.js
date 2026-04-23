@@ -1,11 +1,11 @@
 /**
- * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v46.0
- * Architecture: True Legacy 'vip 2.js' + Vector Intercept
- * Status: Absolute Zero Recoil. Maximum Stickiness. 
+ * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v47.0
+ * Architecture: True Legacy 'vip 2.js' + Adaptive Distance Engine
+ * Status: No Overshooting at Long Range. Zero Chest Friction at Close Range.
  */
 
 // ==========================================
-// 1. UTILS: TOÁN HỌC GỐC TỪ VIP 2.JS
+// 1. UTILS: TOÁN HỌC THÍCH ỨNG (ADAPTIVE MATH)
 // ==========================================
 class AdvancedMath {
     static clamp(value, min, max) {
@@ -13,22 +13,24 @@ class AdvancedMath {
     }
 
     /**
-     * Tỷ lệ vàng nguyên bản từ vip 2.js - Không thay đổi!
+     * THUẬT TOÁN KHOẢNG CÁCH THÍCH ỨNG (Giải quyết lỗi Vượt Đầu & Lệch Tâm)
+     * Chia làm 3 phân đoạn rõ rệt thay vì tuyến tính.
      */
-    static calculateDynamicYOffset(distance) { //
-        const BASE_OFFSET = 0.65; //
-        const MAX_DISTANCE = 100.0; //
+    static calculateAdaptiveYOffset(distance) {
+        // Tầm Cận Chiến (0-15m): Khóa thẳng Trán/Đỉnh đầu để đạn ghim ngay lập tức
+        if (distance <= 15.0) return 0.68; 
         
-        if (distance <= 0) return BASE_OFFSET; //
-        if (distance >= MAX_DISTANCE) return BASE_OFFSET * 0.3; //
+        // Tầm Trung (15-50m): Khóa Mũi/Mắt
+        if (distance > 15.0 && distance <= 50.0) {
+            const scale = 1 - ((distance - 15) / 35);
+            return 0.50 + (0.18 * scale); 
+        }
         
-        const scaleFactor = 1 - (distance / MAX_DISTANCE); //
-        return BASE_OFFSET * (0.3 + (0.7 * scaleFactor)); //
+        // Tầm Xa (>50m): Khóa Yết Hầu/Cổ. Giải quyết triệt để lỗi đạn bay qua đầu.
+        return 0.35; 
     }
 
-    /**
-     * CHỈ BỔ SUNG: Tính toán điểm rơi khi địch chạy ngang
-     */
+    // Đón đầu hướng di chuyển
     static calculateIntercept(pos, vel, selfVel, dist, pingMs) {
         const timeToHit = (dist / 9999.0) + ((pingMs || 20) / 1000);
         return {
@@ -40,18 +42,16 @@ class AdvancedMath {
 }
 
 // ==========================================
-// 2. CORE: ĐỘNG CƠ TỪ TÍNH TỐI ĐA
+// 2. CORE: ĐỘNG CƠ TỪ TÍNH KHÔNG GIAN
 // ==========================================
 class MagnetismHijacker {
     constructor() {
-        // Thông số nguyên bản đã được chứng minh hiệu quả
         this.voidWeight = -99999.0; //
         this.maxWeight = 99999.0; //
     }
 
     enforceZeroRecoil(weapon) {
         if (!weapon) return;
-        // Ép về 0.0 tuyệt đối. Không dùng số thập phân!
         weapon.recoil = 0.0;
         weapon.spread = 0.0;
         weapon.camera_shake = 0.0;
@@ -62,49 +62,61 @@ class MagnetismHijacker {
         weapon.bloom = 0.0;
     }
 
-    spoofBoneIDs(hitboxes) { //
+    /**
+     * QUẢN LÝ THỂ TÍCH (Giải quyết lỗi kẹt ngực tầm gần)
+     */
+    spoofBoneIDs(hitboxes, distance) { 
         if (!hitboxes) return;
 
-        // Triệt tiêu thân dưới
+        // Triệt tiêu thân dưới và XÓA SỔ THỂ TÍCH
         const torso = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
         for (let i = 0; i < torso.length; i++) { //
             const bone = torso[i];
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight; //
                 hitboxes[bone].priority = "IGNORE"; //
-                hitboxes[bone].m_Radius = 0.01; //
-                hitboxes[bone].friction = 0.0; // Xóa lực cản vuốt
+                
+                // Thu nhỏ thể tích ngực xuống mức "hạt bụi". Tia ngắm sẽ đâm xuyên qua.
+                hitboxes[bone].m_Radius = 0.001; 
+                hitboxes[bone].friction = 0.0; 
             }
         }
 
-        // Cường hóa Đầu
+        // Cường hóa Đầu (Magnetic Hitbox) ở mức VỪA ĐỦ ôm sát viền sọ, không mở rộng quá lố
         if (hitboxes.head) {
             hitboxes.head.snap_weight = this.maxWeight; //
             hitboxes.head.priority = "MAXIMUM"; //
-            hitboxes.head.m_Radius *= 6.0; // Phóng to vừa đủ để bắt tâm nhanh
+            
+            // Nếu ở gần, phóng to nhẹ để dễ vẩy. Nếu ở xa, giữ nguyên để không bị lệch sát thương.
+            hitboxes.head.m_Radius *= (distance < 20) ? 5.0 : 2.5; 
+            
+            // Bơm lực vẩy (Drag Force) cho trục dọc
+            if ('vertical_magnetism_multiplier' in hitboxes.head) {
+                hitboxes.head.vertical_magnetism_multiplier = 4.0;
+            }
         }
     }
 
-    injectYOffset(player, selfVel, ping) { //
+    injectAdaptiveOffset(player, selfVel, ping) { 
         if (!player || !player.head_pos || !player.chest_pos) return; //
 
-        const dist = player.distance || 10.0; //
+        const dist = player.distance || 15.0; //
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
-        const deltaY = AdvancedMath.calculateDynamicYOffset(dist); //
+        
+        // Gọi thuật toán tính Delta Y Thích ứng Khoảng cách
+        const deltaY = AdvancedMath.calculateAdaptiveYOffset(dist); 
 
-        // Tính toán tọa độ chặn đầu để kéo đạn trúng khi địch chạy
         const interceptPos = AdvancedMath.calculateIntercept(player.head_pos, targetVel, selfVel, dist, ping);
 
         if (player.center_of_mass) { //
-            // Áp dụng tọa độ đón đầu cho X và Z
             player.center_of_mass.x = interceptPos.x;
             player.center_of_mass.z = interceptPos.z;
             
-            // Kéo trọng tâm nội suy lên Trán (Giữ nguyên logic vip 2.js)
+            // Ghi đè trọng tâm nội suy
             player.center_of_mass.y = player.chest_pos.y + deltaY; //
             
-            // GIỚI HẠN TUYỆT ĐỐI
-            const absoluteHeadTop = player.head_pos.y + 0.15; //
+            // Giới hạn tuyệt đối bảo vệ
+            const absoluteHeadTop = player.head_pos.y + 0.12; 
             player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop); //
         }
     }
@@ -120,11 +132,14 @@ class MagnetismHijacker {
 
             for (let i = 0; i < data.players.length; i++) { //
                 const enemy = data.players[i]; //
-                this.spoofBoneIDs(enemy.hitboxes); //
-                this.injectYOffset(enemy, selfVel, pingMs); //
+                const dist = enemy.distance || 15.0;
+                
+                // Truyền tham số Khoảng cách vào để tự điều chỉnh Thể tích Hitbox
+                this.spoofBoneIDs(enemy.hitboxes, dist); 
+                this.injectAdaptiveOffset(enemy, selfVel, pingMs); 
             }
 
-            // ÉP CỨNG CAMERA: Khóa cứng độ dính, bắt chết mục tiêu
+            // Ép cứng độ dính Camera
             if (data.players.length > 0 && data.camera_state) {
                 data.camera_state.stickiness = 1.0; 
                 data.camera_state.interpolation = "ZERO";
