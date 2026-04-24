@@ -1,119 +1,138 @@
-const SystemConfig = {
-    voidWeight: -99999.0,
-    maxWeight: 99999.0,
-    bulletSpeed: 9999.0,
-    basePing: 20
-};
+/**
+ * ==============================================================================
+ * TARGETING & LOCK-HEAD SYSTEM v50.0 (QUANTUM REACH)
+ * Architecture: Hybrid Kinetic Prediction + Adaptive Volumetric Hijacking
+ * Status: Absolute Optimization. Independent Execution.
+ * ==============================================================================
+ */
 
-class QuantumMath {
-    static clamp(val, min, max) {
-        return Math.max(min, Math.min(max, val));
+class AdvancedMath {
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
     }
 
-    static getAdaptiveY(distance) {
+    static calculateAdaptiveYOffset(distance) {
         if (distance <= 10.0) return 0.68;
-        if (distance <= 50.0) return 0.68 - (0.33 * ((distance - 10.0) / 40.0));
-        return 0.35;
+        if (distance <= 40.0) {
+            const scale = (distance - 10.0) / 30.0;
+            return 0.68 - (0.33 * scale);
+        }
+        if (distance <= 80.0) return 0.35;
+        return 0.15;
     }
 
-    static getIntercept(pos, tVel, sVel, dist, ping) {
-        const t = (dist / SystemConfig.bulletSpeed) + (ping / 1000.0);
+    static predictIntercept(targetPos, targetVel, selfVel, distance, pingMs) {
+        const BULLET_SPEED = 9999.0;
+        const timeOffset = (distance / BULLET_SPEED) + (pingMs / 1000.0) + 0.02;
         return {
-            x: pos.x + ((tVel.x - sVel.x) * t),
-            y: pos.y + ((tVel.y - sVel.y) * t),
-            z: pos.z + ((tVel.z - sVel.z) * t)
+            x: targetPos.x + ((targetVel.x - selfVel.x) * timeOffset),
+            y: targetPos.y + ((targetVel.y - selfVel.y) * timeOffset),
+            z: targetPos.z + ((targetVel.z - selfVel.z) * timeOffset)
         };
     }
 }
 
-class QuantumEngine {
-    static optimizeWeapon(w) {
-        if (!w) return;
-        
-        const zeroParams = [
-            'recoil', 'spread', 'progressive_spread', 'recoil_accumulation', 
-            'recoil_multiplier', 'bloom', 'horizontal_recoil', 'vertical_recoil', 
-            'movement_penalty', 'jump_penalty', 'strafe_penalty', 'camera_shake'
-        ];
-        
-        for (let i = 0; i < zeroParams.length; i++) {
-            if (zeroParams[i] in w) w[zeroParams[i]] = 0.0;
-        }
-        
-        if ('aim_assist_range' in w) w.aim_assist_range = 9999.0;
-        if ('auto_aim_angle' in w) w.auto_aim_angle = 360.0;
-        if ('bullet_speed' in w) w.bullet_speed = SystemConfig.bulletSpeed;
+class QuantumReachEngine {
+    constructor() {
+        this.voidWeight = -99999.0;
+        this.singularityWeight = 99999.0;
     }
 
-    static hijackHitboxes(hb, dist) {
-        if (!hb) return;
+    enforceZeroNormalization(weapon) {
+        if (!weapon) return;
         
-        const torso = ['root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
-        const torsoRadius = dist < 12.0 ? 0.0001 : 0.01;
-        
-        for (let i = 0; i < torso.length; i++) {
-            const bone = torso[i];
-            if (hb[bone]) {
-                hb[bone].snap_weight = SystemConfig.voidWeight;
-                hb[bone].priority = "IGNORE";
-                hb[bone].m_Radius = torsoRadius;
-                hb[bone].friction = 0.0;
+        const nullifyProps = [
+            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
+            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
+            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty', 'strafe_penalty'
+        ];
+
+        for (let i = 0; i < nullifyProps.length; i++) {
+            if (nullifyProps[i] in weapon) {
+                weapon[nullifyProps[i]] = 0.0;
             }
         }
 
-        if (hb.head) {
-            hb.head.snap_weight = SystemConfig.maxWeight;
-            hb.head.priority = "MAXIMUM";
-            
-            let radiusMulti = 8.0;
-            if (dist < 15.0) radiusMulti = 15.0;
-            else if (dist > 50.0) radiusMulti = 4.0;
-            
-            hb.head.m_Radius *= radiusMulti;
-            hb.head.vertical_magnetism_multiplier = 5.0;
+        if ('aim_assist_range' in weapon) weapon.aim_assist_range = 9999.0;
+        if ('auto_aim_angle' in weapon) weapon.auto_aim_angle = 360.0;
+        if ('bullet_speed' in weapon) weapon.bullet_speed = 9999.0;
+    }
+
+    manipulateHitboxes(hitboxes, distance) {
+        if (!hitboxes) return;
+
+        const torso = ['root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
+        const torsoRadius = distance < 12.0 ? 0.0001 : 0.01;
+
+        for (let i = 0; i < torso.length; i++) {
+            const bone = torso[i];
+            if (hitboxes[bone]) {
+                hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].priority = "IGNORE";
+                hitboxes[bone].m_Radius = torsoRadius;
+                hitboxes[bone].friction = 0.0;
+            }
+        }
+
+        if (hitboxes.head) {
+            let headMultiplier = 8.0;
+            if (distance < 15.0) headMultiplier = 15.0;
+            else if (distance > 50.0) headMultiplier = 4.0;
+
+            hitboxes.head.snap_weight = this.singularityWeight;
+            hitboxes.head.priority = "MAXIMUM";
+            hitboxes.head.m_Radius *= headMultiplier;
+            hitboxes.head.vertical_magnetism_multiplier = 10.0;
+        }
+
+        if (hitboxes.neck) {
+            hitboxes.neck.snap_weight = this.singularityWeight * 0.5;
+            hitboxes.neck.priority = "HIGH";
+            hitboxes.neck.friction = 0.0;
         }
     }
 
-    static calculateKineticState(player, sVel, ping) {
+    injectQuantumIntercept(player, selfVel, ping) {
         if (!player || !player.head_pos || !player.chest_pos || !player.center_of_mass) return;
 
         const dist = player.distance || 15.0;
-        const tVel = player.velocity || { x: 0, y: 0, z: 0 };
+        const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
         
-        const intercept = QuantumMath.getIntercept(player.head_pos, tVel, sVel, dist, ping);
-        const deltaY = QuantumMath.getAdaptiveY(dist);
+        const predictedPos = AdvancedMath.predictIntercept(player.head_pos, targetVel, selfVel, dist, ping);
+        const adaptiveY = AdvancedMath.calculateAdaptiveYOffset(dist);
 
-        player.center_of_mass.x = intercept.x;
-        player.center_of_mass.z = intercept.z;
-        player.center_of_mass.y = player.chest_pos.y + deltaY;
-
-        const safetyOffset = dist > 50.0 ? 0.05 : 0.15;
-        const maxY = player.head_pos.y + safetyOffset;
-        player.center_of_mass.y = QuantumMath.clamp(player.center_of_mass.y, player.chest_pos.y, maxY);
+        player.center_of_mass.x = predictedPos.x;
+        player.center_of_mass.z = predictedPos.z;
+        player.center_of_mass.y = player.chest_pos.y + adaptiveY;
+        
+        const safetyCeiling = player.head_pos.y + (dist > 40.0 ? 0.05 : 0.15);
+        player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, safetyCeiling);
     }
 
-    static processPayload(data) {
+    process(data) {
         if (!data || typeof data !== 'object') return data;
 
-        if (data.weapon) this.optimizeWeapon(data.weapon);
+        if (data.weapon) {
+            this.enforceZeroNormalization(data.weapon);
+        }
 
         if (Array.isArray(data.players)) {
-            const sVel = data.player_velocity || { x: 0, y: 0, z: 0 };
-            const ping = data.ping || SystemConfig.basePing;
+            const selfVel = data.player_velocity || { x: 0, y: 0, z: 0 };
+            const pingMs = data.ping || 20;
 
             for (let i = 0; i < data.players.length; i++) {
                 const enemy = data.players[i];
                 const dist = enemy.distance || 15.0;
                 
-                this.hijackHitboxes(enemy.hitboxes, dist);
-                this.calculateKineticState(enemy, sVel, ping);
+                this.manipulateHitboxes(enemy.hitboxes, dist);
+                this.injectQuantumIntercept(enemy, selfVel, pingMs);
             }
 
             if (data.players.length > 0 && data.camera_state) {
                 data.camera_state.stickiness = 1.0;
                 data.camera_state.interpolation = "ZERO";
-                data.camera_state.lock_bone = "bone_Head";
                 data.camera_state.aim_acceleration = 0.0;
+                data.camera_state.lock_bone = "bone_Head";
             }
         }
 
@@ -121,12 +140,16 @@ class QuantumEngine {
     }
 }
 
+// ==============================================================================
+// EXECUTION BLOCK
+// ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
     try {
         const payload = JSON.parse($response.body);
-        const mutatedPayload = QuantumEngine.processPayload(payload);
+        const Engine = new QuantumReachEngine();
+        const mutatedPayload = Engine.process(payload);
         $done({ body: JSON.stringify(mutatedPayload) });
-    } catch (e) {
+    } catch (error) {
         $done({ body: $response.body });
     }
 }
