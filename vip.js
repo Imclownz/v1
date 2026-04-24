@@ -1,34 +1,40 @@
 /**
- * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v46.0
- * Architecture: True Legacy 'vip 2.js' + Vector Intercept
- * Status: Absolute Zero Recoil. Maximum Stickiness. 
+ * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM v47.0
+ * Architecture: True Legacy v46 + Adaptive Volumetric Hijacking
+ * Focus: 100% Headshot Accuracy across ALL Distances.
+ * Status: Complete File. Do not truncate.
  */
 
 // ==========================================
-// 1. UTILS: TOÁN HỌC GỐC TỪ VIP 2.JS
+// 1. UTILS: TOÁN HỌC KHÔNG GIAN ĐỘNG (ADAPTIVE MATH)
 // ==========================================
-class AdvancedMath {
+class AdaptiveMath {
     static clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value)); //
+        return Math.max(min, Math.min(max, value));
     }
 
     /**
-     * Tỷ lệ vàng nguyên bản từ vip 2.js - Không thay đổi!
+     * NÂNG CẤP: Đường cong bù Y phi tuyến tính (Non-linear Curve)
+     * Giải quyết triệt để lỗi Overshoot (Bay qua đầu) ở tầm xa
      */
-    static calculateDynamicYOffset(distance) { //
-        const BASE_OFFSET = 0.65; //
-        const MAX_DISTANCE = 100.0; //
+    static calculateAdaptiveYOffset(distance) {
+        // Tầm siêu gần (< 10m): Khóa ngay đỉnh trán (Golden Ratio v46)
+        if (distance <= 10.0) return 0.68; 
         
-        if (distance <= 0) return BASE_OFFSET; //
-        if (distance >= MAX_DISTANCE) return BASE_OFFSET * 0.3; //
+        // Tầm trung (10m - 40m): Nội suy mượt mà
+        if (distance <= 40.0) {
+            const scale = (distance - 10.0) / 30.0; // 0.0 -> 1.0
+            return 0.68 - (0.28 * scale); // Hạ dần từ 0.68 xuống 0.40
+        }
         
-        const scaleFactor = 1 - (distance / MAX_DISTANCE); //
-        return BASE_OFFSET * (0.3 + (0.7 * scaleFactor)); //
+        // Tầm xa (> 40m): Khóa cứng vào Cằm/Cổ. 
+        // Đạn bay xa sẽ có độ rơi (Drop) hoặc rung vi mô. Khóa thấp để đạn găm lên não.
+        if (distance <= 80.0) return 0.35;
+        
+        // Tầm siêu xa (Sniper Range > 80m): Ép sát trọng tâm gốc
+        return 0.15; 
     }
 
-    /**
-     * CHỈ BỔ SUNG: Tính toán điểm rơi khi địch chạy ngang
-     */
     static calculateIntercept(pos, vel, selfVel, dist, pingMs) {
         const timeToHit = (dist / 9999.0) + ((pingMs || 20) / 1000);
         return {
@@ -40,18 +46,16 @@ class AdvancedMath {
 }
 
 // ==========================================
-// 2. CORE: ĐỘNG CƠ TỪ TÍNH TỐI ĐA
+// 2. CORE: ĐỘNG CƠ TỪ TÍNH KHÔNG GIAN ĐỘNG
 // ==========================================
-class MagnetismHijacker {
+class MagnetismHijackerV47 {
     constructor() {
-        // Thông số nguyên bản đã được chứng minh hiệu quả
-        this.voidWeight = -99999.0; //
-        this.maxWeight = 99999.0; //
+        this.voidWeight = -99999.0; 
+        this.maxWeight = 99999.0; 
     }
 
     enforceZeroRecoil(weapon) {
         if (!weapon) return;
-        // Ép về 0.0 tuyệt đối. Không dùng số thập phân!
         weapon.recoil = 0.0;
         weapon.spread = 0.0;
         weapon.camera_shake = 0.0;
@@ -62,69 +66,83 @@ class MagnetismHijacker {
         weapon.bloom = 0.0;
     }
 
-    spoofBoneIDs(hitboxes) { //
+    /**
+     * NÂNG CẤP: Thay đổi thể tích Hitbox theo cự ly (Volumetric Resizing)
+     * Giải quyết lỗi dính ngực ở tầm gần
+     */
+    spoofBoneIDsAdaptive(hitboxes, distance) {
         if (!hitboxes) return;
 
-        // Triệt tiêu thân dưới
-        const torso = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
-        for (let i = 0; i < torso.length; i++) { //
+        // Tính toán hệ số nở của Đầu dựa trên khoảng cách
+        // Gần (< 10m): Đầu to x12. Xa (> 50m): Đầu to x3 (Tránh hút nhầm sau vật cản)
+        let headMultiplier = 5.0;
+        if (distance < 15.0) headMultiplier = 12.0; 
+        else if (distance > 50.0) headMultiplier = 3.0;
+
+        // Tính toán độ teo tóp của Ngực
+        // Càng gần, ngực càng phải teo nhỏ để chống kẹt tia Raycast
+        let torsoRadius = distance < 15.0 ? 0.0001 : 0.01;
+
+        const torso = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 'left_arm', 'right_arm'];
+        for (let i = 0; i < torso.length; i++) {
             const bone = torso[i];
             if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidWeight; //
-                hitboxes[bone].priority = "IGNORE"; //
-                hitboxes[bone].m_Radius = 0.01; //
-                hitboxes[bone].friction = 0.0; // Xóa lực cản vuốt
+                hitboxes[bone].snap_weight = this.voidWeight; 
+                hitboxes[bone].priority = "IGNORE"; 
+                hitboxes[bone].m_Radius = torsoRadius; // Bóp nghẹt diện tích ngực
+                hitboxes[bone].friction = 0.0; 
             }
         }
 
-        // Cường hóa Đầu
         if (hitboxes.head) {
-            hitboxes.head.snap_weight = this.maxWeight; //
-            hitboxes.head.priority = "MAXIMUM"; //
-            hitboxes.head.m_Radius *= 6.0; // Phóng to vừa đủ để bắt tâm nhanh
+            hitboxes.head.snap_weight = this.maxWeight; 
+            hitboxes.head.priority = "MAXIMUM"; 
+            hitboxes.head.m_Radius *= headMultiplier; // Bơm to đầu theo khoảng cách
         }
     }
 
-    injectYOffset(player, selfVel, ping) { //
-        if (!player || !player.head_pos || !player.chest_pos) return; //
+    injectAdaptiveOffset(player, selfVel, ping) {
+        if (!player || !player.head_pos || !player.chest_pos) return;
 
-        const dist = player.distance || 10.0; //
+        const dist = player.distance || 10.0; 
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
-        const deltaY = AdvancedMath.calculateDynamicYOffset(dist); //
+        
+        // Sử dụng thuật toán Y động lực học mới
+        const deltaY = AdaptiveMath.calculateAdaptiveYOffset(dist); 
 
-        // Tính toán tọa độ chặn đầu để kéo đạn trúng khi địch chạy
-        const interceptPos = AdvancedMath.calculateIntercept(player.head_pos, targetVel, selfVel, dist, ping);
+        const interceptPos = AdaptiveMath.calculateIntercept(player.head_pos, targetVel, selfVel, dist, ping);
 
-        if (player.center_of_mass) { //
-            // Áp dụng tọa độ đón đầu cho X và Z
+        if (player.center_of_mass) {
             player.center_of_mass.x = interceptPos.x;
             player.center_of_mass.z = interceptPos.z;
             
-            // Kéo trọng tâm nội suy lên Trán (Giữ nguyên logic vip 2.js)
-            player.center_of_mass.y = player.chest_pos.y + deltaY; //
+            player.center_of_mass.y = player.chest_pos.y + deltaY; 
             
-            // GIỚI HẠN TUYỆT ĐỐI
-            const absoluteHeadTop = player.head_pos.y + 0.15; //
-            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop); //
+            // Siết chặt Clamping ở tầm xa để chống đạn bay quá đầu
+            let safetyOffset = dist > 40.0 ? 0.05 : 0.15;
+            const absoluteHeadTop = player.head_pos.y + safetyOffset; 
+            player.center_of_mass.y = AdaptiveMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop); 
         }
     }
 
-    processPacketData(data) { //
+    processPacketData(data) {
         if (!data || typeof data !== 'object') return data;
 
         if (data.weapon) this.enforceZeroRecoil(data.weapon);
 
-        if (Array.isArray(data.players)) { //
+        if (Array.isArray(data.players)) {
             const selfVel = data.player_velocity || { x: 0, y: 0, z: 0 };
             const pingMs = data.ping || 20;
 
-            for (let i = 0; i < data.players.length; i++) { //
-                const enemy = data.players[i]; //
-                this.spoofBoneIDs(enemy.hitboxes); //
-                this.injectYOffset(enemy, selfVel, pingMs); //
+            for (let i = 0; i < data.players.length; i++) {
+                const enemy = data.players[i];
+                const dist = enemy.distance || 15.0; // Lấy khoảng cách để truyền vào hàm
+
+                // Áp dụng thao túng thể tích động
+                this.spoofBoneIDsAdaptive(enemy.hitboxes, dist); 
+                this.injectAdaptiveOffset(enemy, selfVel, pingMs); 
             }
 
-            // ÉP CỨNG CAMERA: Khóa cứng độ dính, bắt chết mục tiêu
             if (data.players.length > 0 && data.camera_state) {
                 data.camera_state.stickiness = 1.0; 
                 data.camera_state.interpolation = "ZERO";
@@ -139,18 +157,18 @@ class MagnetismHijacker {
 // ==========================================
 // 3. SHADOWROCKET INTERCEPTOR
 // ==========================================
-const hijacker = new MagnetismHijacker(); //
+const EngineV47 = new MagnetismHijackerV47();
 
-function processGamePayload(bodyString) { //
+function processGamePayload(bodyString) {
     try {
-        const payload = JSON.parse(bodyString); //
-        const mutatedPayload = hijacker.processPacketData(payload); //
-        return JSON.stringify(mutatedPayload); //
-    } catch (error) { //
-        return bodyString;  //
+        const payload = JSON.parse(bodyString);
+        const mutatedPayload = EngineV47.processPacketData(payload);
+        return JSON.stringify(mutatedPayload);
+    } catch (error) {
+        return bodyString;  
     }
 }
 
-if (typeof $response !== "undefined" && $response.body) { //
-    $done({ body: processGamePayload($response.body) }); //
+if (typeof $response !== "undefined" && $response.body) {
+    $done({ body: processGamePayload($response.body) });
 }
