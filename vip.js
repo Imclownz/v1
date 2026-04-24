@@ -1,65 +1,69 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v51.0 (ULTIMATE FUSION)
- * Architecture: Deep Recursive Schema-Agnostic + Vertical Slingshot Assist
- * Optimization: Absolute Logic Interception for iOS Standalone Environment
+ * QUANTUM REACH v51.0 (MAXIMUM OVERDRIVE)
+ * Architecture: Deep Recursive Schema-Agnostic + Polynomial Slingshot
+ * Status: Absolute Interception. Zero-Latency Logic.
  * ==============================================================================
  */
 
 class QuantumMath {
-    /**
-     * Giới hạn giá trị trong khoảng an toàn.
-     */
     static clamp(v, min, max) {
         return Math.max(min, Math.min(max, v));
     }
 
     /**
-     * Thuật toán Adaptive Y-Clamping: Điều chỉnh điểm khóa dựa trên cự ly.
-     * Càng xa điểm khóa càng hạ thấp về phía cằm để bù trừ trọng lực và nảy vi mô.
+     * TỐI ĐA HÓA LOGIC 1: Đa thức Bù trừ Y (Polynomial Interpolation)
+     * Thay vì chia cự ly thành các bậc cứng nhắc, sử dụng đường cong Bezier bậc 2 
+     * để tính toán tỷ lệ khóa tâm mềm mại và chính xác tuyệt đối ở mọi khoảng cách lẻ (ví dụ 33.5m).
      */
-    static getAdaptiveY(dist) {
-        if (dist <= 10.0) return 0.68; // Khóa trán tầm gần
-        if (dist <= 45.0) return 0.68 - (0.33 * ((dist - 10.0) / 35.0)); 
-        return 0.35; // Khóa cằm/cổ tầm xa
+    static getPolynomialY(dist) {
+        if (dist <= 5.0) return 0.75;
+        if (dist >= 80.0) return 0.15;
+        
+        const t = (dist - 5.0) / 75.0;
+        return 0.75 * (1 - t) * (1 - t) + 0.45 * 2 * (1 - t) * t + 0.15 * t * t;
     }
 
     /**
-     * Thuật toán Intercept Prediction: Dự đoán vị trí tương lai của mục tiêu.
-     * Tính toán dựa trên vận tốc tương đối và độ trễ mạng (Ping).
+     * TỐI ĐA HÓA LOGIC 2: Bù trừ Độ trễ Hệ thống (Net & Frame Latency)
+     * Cộng thêm hằng số 0.015s (BASE_DELAY) để bù trừ thời gian CPU xử lý khung hình,
+     * kết hợp với Ping và Vận tốc đạn 9999.0 để ra tọa độ hội tụ tương lai.
      */
     static predict(pos, vT, vS, dist, ping) {
-        const bulletSpeed = 9999.0; // Ép xung tốc độ đạn
-        const time = (dist / bulletSpeed) + (ping / 1000.0) + 0.015;
+        const BULLET_SPEED = 99999.0;
+        const BASE_DELAY = 0.015; 
+        const timeDelta = (dist / BULLET_SPEED) + (ping / 1000.0) + BASE_DELAY;
+
         return {
-            x: pos.x + ((vT.x - vS.x) * time),
-            y: pos.y + ((vT.y - vS.y) * time),
-            z: pos.z + ((vT.z - vS.z) * time)
+            x: pos.x + ((vT.x - vS.x) * timeDelta),
+            y: pos.y + ((vT.y - vS.y) * timeDelta),
+            z: pos.z + ((vT.z - vS.z) * timeDelta)
         };
     }
 }
 
-class QuantumEngine v51 {
+class QuantumEngine {
     constructor() {
-        this.voidWeight = -99999.0; // Triệt tiêu từ tính vùng thân
-        this.singularityWeight = 99999.0; // Cực đại hóa từ tính vùng đầu
-        
-        // Danh sách các biến vũ khí cần triệt tiêu hoàn toàn
+        this.singularityWeight = 99999.0;
+        this.voidWeight = -99999.0;
+
+        // TỐI ĐA HÓA LOGIC 3: Mở rộng Tập hợp Triệt tiêu Vũ khí
+        // Đưa thêm các biến phục hồi (recovery) và lắc lư (sway) vào danh sách quét.
         this.nullifySet = new Set([
             'recoil', 'spread', 'camera_shake', 'progressive_spread', 
             'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
-            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty'
+            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty',
+            'recoil_recovery_rate', 'spread_recovery_rate', 'weapon_sway'
         ]);
 
-        // Danh sách xương vùng thân để gán nhãn bỏ qua
-        this.bodyBones = new Set(['root', 'spine', 'pelvis', 'chest', 'hips', 'arm', 'leg']);
+        // Mở rộng các xương phụ thuộc vùng thân (vai) để loại bỏ hoàn toàn khả năng kẹt tâm.
+        this.ignoreBones = new Set([
+            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
+            'left_arm', 'right_arm', 'left_leg', 'right_leg', 'left_shoulder', 'right_shoulder'
+        ]);
     }
 
-    /**
-     * Thuật toán Duyệt đệ quy (Recursive Traversal):
-     * Tự động tìm kiếm và thực thi logic trên mọi phiên bản OB mà không cần cập nhật đường dẫn.
-     */
-    applyRecursive(node, context = { vS: {x:0, y:0, z:0}, ping: 20, dist: 15.0 }) {
+    applyRecursive(node, context = { vS: {x:0, y:0, z:0}, ping: 15, dist: 15.0 }) {
         if (!node || typeof node !== 'object') return node;
 
         if (Array.isArray(node)) {
@@ -69,63 +73,72 @@ class QuantumEngine v51 {
             return node;
         }
 
-        // Cập nhật ngữ cảnh chiến đấu theo thời gian thực
-        if (node.distance) context.dist = node.distance;
-        if (node.ping) context.ping = node.ping;
-        if (node.player_velocity) context.vS = node.player_velocity;
+        // Đồng bộ hóa Context
+        if (node.distance !== undefined) context.dist = node.distance;
+        if (node.ping !== undefined) context.ping = node.ping;
+        if (node.player_velocity !== undefined) context.vS = node.player_velocity;
 
-        // 1. Logic Laser Weapon: Triệt tiêu độ nảy và nở tâm
-        for (const key in node) {
-            if (this.nullifySet.has(key)) node[key] = 0.0;
+        // BƯỚC 1: Cưỡng chế Vô hiệu hóa Vật lý Vũ khí (Absolute Zero Normalization)
+        for (const key of this.nullifySet) {
+            if (node[key] !== undefined) node[key] = 0.0;
         }
-        if (node.aim_assist_range) node.aim_assist_range = 9999.0;
-        if (node.bullet_speed) node.bullet_speed = 9999.0;
+        if (node.aim_assist_range !== undefined) node.aim_assist_range = 99999.0;
+        if (node.bullet_speed !== undefined) node.bullet_speed = 99999.0;
 
-        // 2. Logic Vertical Slingshot & Magnetic Singularity
+        // BƯỚC 2: Thao túng Xương và Gia tốc Vuốt (Magnetic Singularity & Slingshot)
         for (const key in node) {
             const bone = node[key];
-            if (bone && typeof bone === 'object' && 'snap_weight' in bone) {
-                // Triệt tiêu ma sát để vuốt tâm mượt hơn
+            if (bone && typeof bone === 'object' && bone.snap_weight !== undefined) {
+                // Tối đa hóa: Gỡ bỏ hoàn toàn lực cản ma sát trên TẤT CẢ các xương.
                 bone.friction = 0.0;
 
                 if (key === 'head') {
                     bone.snap_weight = this.singularityWeight;
                     bone.priority = "MAXIMUM";
-                    bone.m_Radius *= (context.dist < 15 ? 15.0 : 8.0); // Phình to hitbox đầu
-                    bone.vertical_magnetism_multiplier = 18.0; // Gia tốc vuốt dọc cực đại
-                } else if (this.bodyBones.has(key) || key.includes('spine')) {
+                    // Phình to Hitbox linh hoạt theo cự ly
+                    bone.m_Radius *= (context.dist < 15.0 ? 15.0 : (context.dist > 50.0 ? 5.0 : 10.0));
+                    // Ép xung lực hút khi vuốt dọc
+                    bone.vertical_magnetism_multiplier = 25.0; 
+                    bone.horizontal_magnetism_multiplier = 10.0;
+                } else if (key === 'neck') {
+                    bone.snap_weight = this.singularityWeight * 0.5;
+                    bone.priority = "HIGH";
+                    bone.m_Radius *= 2.0;
+                } else if (this.ignoreBones.has(key)) {
                     bone.snap_weight = this.voidWeight;
                     bone.priority = "IGNORE";
-                    bone.m_Radius = 0.0001; // Thu nhỏ hitbox thân để tránh dính đạn
+                    bone.m_Radius = 0.0001; // Ép Hitbox thân về kích thước vi mô
+                    bone.vertical_magnetism_multiplier = 0.0;
                 }
             }
         }
 
-        // 3. Logic Intercept Hijacking: Thao túng trọng tâm mục tiêu
+        // BƯỚC 3: Thao túng Trọng tâm & Nội suy Tọa độ (Vector Intercept Prediction)
         if (node.center_of_mass && node.head_pos && node.chest_pos) {
             const vT = node.velocity || {x:0, y:0, z:0};
             const pHead = QuantumMath.predict(node.head_pos, vT, context.vS, context.dist, context.ping);
-            const offset = QuantumMath.getAdaptiveY(context.dist);
+            const offsetY = QuantumMath.getPolynomialY(context.dist);
 
             node.center_of_mass.x = pHead.x;
             node.center_of_mass.z = pHead.z;
-            node.center_of_mass.y = node.chest_pos.y + offset; // Bù trừ Y linh hoạt
+            node.center_of_mass.y = node.chest_pos.y + offsetY;
 
-            // Giới hạn an toàn để tránh bị hệ thống quét hành vi bất thường
-            const limit = node.head_pos.y + 0.15;
-            node.center_of_mass.y = QuantumMath.clamp(node.center_of_mass.y, node.chest_pos.y, limit);
+            // Strict Ceil Clamp: Chống văng tâm vọt qua đỉnh đầu ở cự ly quá gần
+            const maxSafeY = node.head_pos.y + 0.10;
+            node.center_of_mass.y = QuantumMath.clamp(node.center_of_mass.y, node.chest_pos.y, maxSafeY);
         }
 
-        // 4. Logic Camera Stickiness: Khóa cứng góc nhìn
+        // BƯỚC 4: Chiếm quyền Camera (Camera Override)
         if (node.camera_state) {
             node.camera_state.stickiness = 1.0;
             node.camera_state.lock_bone = "bone_Head";
             node.camera_state.interpolation = "ZERO";
+            node.camera_state.aim_acceleration = 0.0;
         }
 
-        // Tiếp tục duyệt sâu vào các nhánh khác của JSON
+        // Tiếp tục vòng lặp Đệ quy
         for (const key in node) {
-            if (typeof node[key] === 'object' && key !== 'center_of_mass') {
+            if (typeof node[key] === 'object' && key !== 'center_of_mass' && key !== 'velocity') {
                 this.applyRecursive(node[key], context);
             }
         }
@@ -134,13 +147,13 @@ class QuantumEngine v51 {
     }
 }
 
-/**
- * ENTRY POINT: Xử lý luồng dữ liệu qua Shadowrocket Proxy.
- */
+// ==============================================================================
+// KHỞI CHẠY HỆ THỐNG
+// ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
     try {
         let root = JSON.parse($response.body);
-        const Quantum = new QuantumEngine v51();
+        const Quantum = new QuantumEngine();
         root = Quantum.applyRecursive(root);
         $done({ body: JSON.stringify(root) });
     } catch (e) {
