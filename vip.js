@@ -1,162 +1,155 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v51.0 (MAXIMUM OVERDRIVE)
- * Architecture: Deep Recursive Schema-Agnostic + Polynomial Slingshot
- * Status: Absolute Interception. Zero-Latency Logic.
+ * TARGETING & LOCK-HEAD SYSTEM v50.0 (QUANTUM REACH)
+ * Architecture: Hybrid Kinetic Prediction + Adaptive Volumetric Hijacking
+ * Status: Absolute Optimization. Independent Execution.
  * ==============================================================================
  */
 
-class QuantumMath {
-    static clamp(v, min, max) {
-        return Math.max(min, Math.min(max, v));
+class AdvancedMath {
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
     }
 
-    /**
-     * TỐI ĐA HÓA LOGIC 1: Đa thức Bù trừ Y (Polynomial Interpolation)
-     * Thay vì chia cự ly thành các bậc cứng nhắc, sử dụng đường cong Bezier bậc 2 
-     * để tính toán tỷ lệ khóa tâm mềm mại và chính xác tuyệt đối ở mọi khoảng cách lẻ (ví dụ 33.5m).
-     */
-    static getPolynomialY(dist) {
-        if (dist <= 5.0) return 0.75;
-        if (dist >= 80.0) return 0.15;
-        
-        const t = (dist - 5.0) / 75.0;
-        return 0.75 * (1 - t) * (1 - t) + 0.45 * 2 * (1 - t) * t + 0.15 * t * t;
+    static calculateAdaptiveYOffset(distance) {
+        if (distance <= 10.0) return 0.68;
+        if (distance <= 40.0) {
+            const scale = (distance - 10.0) / 30.0;
+            return 0.68 - (0.33 * scale);
+        }
+        if (distance <= 80.0) return 0.35;
+        return 0.15;
     }
 
-    /**
-     * TỐI ĐA HÓA LOGIC 2: Bù trừ Độ trễ Hệ thống (Net & Frame Latency)
-     * Cộng thêm hằng số 0.015s (BASE_DELAY) để bù trừ thời gian CPU xử lý khung hình,
-     * kết hợp với Ping và Vận tốc đạn 9999.0 để ra tọa độ hội tụ tương lai.
-     */
-    static predict(pos, vT, vS, dist, ping) {
-        const BULLET_SPEED = 99999.0;
-        const BASE_DELAY = 0.015; 
-        const timeDelta = (dist / BULLET_SPEED) + (ping / 1000.0) + BASE_DELAY;
-
+    static predictIntercept(targetPos, targetVel, selfVel, distance, pingMs) {
+        const BULLET_SPEED = 9999.0;
+        const timeOffset = (distance / BULLET_SPEED) + (pingMs / 1000.0) + 0.02;
         return {
-            x: pos.x + ((vT.x - vS.x) * timeDelta),
-            y: pos.y + ((vT.y - vS.y) * timeDelta),
-            z: pos.z + ((vT.z - vS.z) * timeDelta)
+            x: targetPos.x + ((targetVel.x - selfVel.x) * timeOffset),
+            y: targetPos.y + ((targetVel.y - selfVel.y) * timeOffset),
+            z: targetPos.z + ((targetVel.z - selfVel.z) * timeOffset)
         };
     }
 }
 
-class QuantumEngine {
+class QuantumReachEngine {
     constructor() {
-        this.singularityWeight = 99999.0;
         this.voidWeight = -99999.0;
-
-        // TỐI ĐA HÓA LOGIC 3: Mở rộng Tập hợp Triệt tiêu Vũ khí
-        // Đưa thêm các biến phục hồi (recovery) và lắc lư (sway) vào danh sách quét.
-        this.nullifySet = new Set([
-            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
-            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
-            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty',
-            'recoil_recovery_rate', 'spread_recovery_rate', 'weapon_sway'
-        ]);
-
-        // Mở rộng các xương phụ thuộc vùng thân (vai) để loại bỏ hoàn toàn khả năng kẹt tâm.
-        this.ignoreBones = new Set([
-            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
-            'left_arm', 'right_arm', 'left_leg', 'right_leg', 'left_shoulder', 'right_shoulder'
-        ]);
+        this.singularityWeight = 99999.0;
     }
 
-    applyRecursive(node, context = { vS: {x:0, y:0, z:0}, ping: 15, dist: 15.0 }) {
-        if (!node || typeof node !== 'object') return node;
+    enforceZeroNormalization(weapon) {
+        if (!weapon) return;
+        
+        const nullifyProps = [
+            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
+            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
+            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty', 'strafe_penalty'
+        ];
 
-        if (Array.isArray(node)) {
-            for (let i = 0; i < node.length; i++) {
-                node[i] = this.applyRecursive(node[i], context);
-            }
-            return node;
-        }
-
-        // Đồng bộ hóa Context
-        if (node.distance !== undefined) context.dist = node.distance;
-        if (node.ping !== undefined) context.ping = node.ping;
-        if (node.player_velocity !== undefined) context.vS = node.player_velocity;
-
-        // BƯỚC 1: Cưỡng chế Vô hiệu hóa Vật lý Vũ khí (Absolute Zero Normalization)
-        for (const key of this.nullifySet) {
-            if (node[key] !== undefined) node[key] = 0.0;
-        }
-        if (node.aim_assist_range !== undefined) node.aim_assist_range = 99999.0;
-        if (node.bullet_speed !== undefined) node.bullet_speed = 99999.0;
-
-        // BƯỚC 2: Thao túng Xương và Gia tốc Vuốt (Magnetic Singularity & Slingshot)
-        for (const key in node) {
-            const bone = node[key];
-            if (bone && typeof bone === 'object' && bone.snap_weight !== undefined) {
-                // Tối đa hóa: Gỡ bỏ hoàn toàn lực cản ma sát trên TẤT CẢ các xương.
-                bone.friction = 0.0;
-
-                if (key === 'head') {
-                    bone.snap_weight = this.singularityWeight;
-                    bone.priority = "MAXIMUM";
-                    // Phình to Hitbox linh hoạt theo cự ly
-                    bone.m_Radius *= (context.dist < 15.0 ? 15.0 : (context.dist > 50.0 ? 5.0 : 10.0));
-                    // Ép xung lực hút khi vuốt dọc
-                    bone.vertical_magnetism_multiplier = 25.0; 
-                    bone.horizontal_magnetism_multiplier = 10.0;
-                } else if (key === 'neck') {
-                    bone.snap_weight = this.singularityWeight * 0.5;
-                    bone.priority = "HIGH";
-                    bone.m_Radius *= 2.0;
-                } else if (this.ignoreBones.has(key)) {
-                    bone.snap_weight = this.voidWeight;
-                    bone.priority = "IGNORE";
-                    bone.m_Radius = 0.0001; // Ép Hitbox thân về kích thước vi mô
-                    bone.vertical_magnetism_multiplier = 0.0;
-                }
+        for (let i = 0; i < nullifyProps.length; i++) {
+            if (nullifyProps[i] in weapon) {
+                weapon[nullifyProps[i]] = 0.0;
             }
         }
 
-        // BƯỚC 3: Thao túng Trọng tâm & Nội suy Tọa độ (Vector Intercept Prediction)
-        if (node.center_of_mass && node.head_pos && node.chest_pos) {
-            const vT = node.velocity || {x:0, y:0, z:0};
-            const pHead = QuantumMath.predict(node.head_pos, vT, context.vS, context.dist, context.ping);
-            const offsetY = QuantumMath.getPolynomialY(context.dist);
+        if ('aim_assist_range' in weapon) weapon.aim_assist_range = 9999.0;
+        if ('auto_aim_angle' in weapon) weapon.auto_aim_angle = 360.0;
+        if ('bullet_speed' in weapon) weapon.bullet_speed = 9999.0;
+    }
 
-            node.center_of_mass.x = pHead.x;
-            node.center_of_mass.z = pHead.z;
-            node.center_of_mass.y = node.chest_pos.y + offsetY;
+    manipulateHitboxes(hitboxes, distance) {
+        if (!hitboxes) return;
 
-            // Strict Ceil Clamp: Chống văng tâm vọt qua đỉnh đầu ở cự ly quá gần
-            const maxSafeY = node.head_pos.y + 0.10;
-            node.center_of_mass.y = QuantumMath.clamp(node.center_of_mass.y, node.chest_pos.y, maxSafeY);
-        }
+        const torso = ['root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
+        const torsoRadius = distance < 12.0 ? 0.0001 : 0.01;
 
-        // BƯỚC 4: Chiếm quyền Camera (Camera Override)
-        if (node.camera_state) {
-            node.camera_state.stickiness = 1.0;
-            node.camera_state.lock_bone = "bone_Head";
-            node.camera_state.interpolation = "ZERO";
-            node.camera_state.aim_acceleration = 0.0;
-        }
-
-        // Tiếp tục vòng lặp Đệ quy
-        for (const key in node) {
-            if (typeof node[key] === 'object' && key !== 'center_of_mass' && key !== 'velocity') {
-                this.applyRecursive(node[key], context);
+        for (let i = 0; i < torso.length; i++) {
+            const bone = torso[i];
+            if (hitboxes[bone]) {
+                hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].priority = "IGNORE";
+                hitboxes[bone].m_Radius = torsoRadius;
+                hitboxes[bone].friction = 0.0;
             }
         }
 
-        return node;
+        if (hitboxes.head) {
+            let headMultiplier = 8.0;
+            if (distance < 15.0) headMultiplier = 15.0;
+            else if (distance > 50.0) headMultiplier = 4.0;
+
+            hitboxes.head.snap_weight = this.singularityWeight;
+            hitboxes.head.priority = "MAXIMUM";
+            hitboxes.head.m_Radius *= headMultiplier;
+            hitboxes.head.vertical_magnetism_multiplier = 10.0;
+        }
+
+        if (hitboxes.neck) {
+            hitboxes.neck.snap_weight = this.singularityWeight * 0.5;
+            hitboxes.neck.priority = "HIGH";
+            hitboxes.neck.friction = 0.0;
+        }
+    }
+
+    injectQuantumIntercept(player, selfVel, ping) {
+        if (!player || !player.head_pos || !player.chest_pos || !player.center_of_mass) return;
+
+        const dist = player.distance || 15.0;
+        const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
+        
+        const predictedPos = AdvancedMath.predictIntercept(player.head_pos, targetVel, selfVel, dist, ping);
+        const adaptiveY = AdvancedMath.calculateAdaptiveYOffset(dist);
+
+        player.center_of_mass.x = predictedPos.x;
+        player.center_of_mass.z = predictedPos.z;
+        player.center_of_mass.y = player.chest_pos.y + adaptiveY;
+        
+        const safetyCeiling = player.head_pos.y + (dist > 40.0 ? 0.05 : 0.15);
+        player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, safetyCeiling);
+    }
+
+    process(data) {
+        if (!data || typeof data !== 'object') return data;
+
+        if (data.weapon) {
+            this.enforceZeroNormalization(data.weapon);
+        }
+
+        if (Array.isArray(data.players)) {
+            const selfVel = data.player_velocity || { x: 0, y: 0, z: 0 };
+            const pingMs = data.ping || 20;
+
+            for (let i = 0; i < data.players.length; i++) {
+                const enemy = data.players[i];
+                const dist = enemy.distance || 15.0;
+                
+                this.manipulateHitboxes(enemy.hitboxes, dist);
+                this.injectQuantumIntercept(enemy, selfVel, pingMs);
+            }
+
+            if (data.players.length > 0 && data.camera_state) {
+                data.camera_state.stickiness = 1.0;
+                data.camera_state.interpolation = "ZERO";
+                data.camera_state.aim_acceleration = 0.0;
+                data.camera_state.lock_bone = "bone_Head";
+            }
+        }
+
+        return data;
     }
 }
 
 // ==============================================================================
-// KHỞI CHẠY HỆ THỐNG
+// EXECUTION BLOCK
 // ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
     try {
-        let root = JSON.parse($response.body);
-        const Quantum = new QuantumEngine();
-        root = Quantum.applyRecursive(root);
-        $done({ body: JSON.stringify(root) });
-    } catch (e) {
+        const payload = JSON.parse($response.body);
+        const Engine = new QuantumReachEngine();
+        const mutatedPayload = Engine.process(payload);
+        $done({ body: JSON.stringify(mutatedPayload) });
+    } catch (error) {
         $done({ body: $response.body });
     }
 }
