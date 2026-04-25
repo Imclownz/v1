@@ -1,106 +1,102 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v61: THE STABILIZER (PRECISION OVERDRIVE)
- * Architecture: Relative Vector Sync + Dynamic Damping + Anti-Overshoot Dome
- * Optimization: Long-Range Stability, Crosshair Drift Correction
+ * QUANTUM REACH v62: THE TAP-EXECUTIONER
+ * Architecture: Zero-Frame Snap, Hip-Fire Precision, 360-Degree Auto-Aim
+ * Optimization: One-Tap Headshot, No-Drag Requirement, Zero Bloom/Spread
  * ==============================================================================
  */
 
 class QuantumPhysics {
-    /**
-     * THUẬT TOÁN ĐỒNG BỘ VECTOR TƯƠNG ĐỐI (RELATIVE VECTOR SYNC)
-     * Tính toán vận tốc hiệu dụng: $\vec{V}_{eff} = \vec{V}_{target} - \vec{V}_{self}$
-     * Triệt tiêu hoàn toàn sự lệch tâm khi bạn vừa chạy vừa bắn.
-     */
-    static predictStabilized(targetPos, targetVel, selfVel, distance, ping) {
-        const BULLET_SPEED = 99999.0;
-        // Tính toán vận tốc tương đối để bù trừ sai lệch vị trí trong không gian 3D
-        const relVel = {
-            x: targetVel.x - selfVel.x,
-            y: targetVel.y - selfVel.y,
-            z: targetVel.z - selfVel.z
-        };
-        
-        const timeOffset = (distance / BULLET_SPEED) + (ping / 1000.0) + 0.005;
-        
-        return {
-            x: targetPos.x + (relVel.x * timeOffset),
-            y: targetPos.y + (relVel.y * timeOffset),
-            z: targetPos.z + (relVel.z * timeOffset)
-        };
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
     }
 
-    static clamp(v, min, max) {
-        return Math.max(min, Math.min(max, v));
+    // Dự đoán tức thời - bỏ qua độ trễ đạn bay
+    static predictInstant(targetPos, targetVel, selfVel, distance) {
+        const BULLET_SPEED = 99999.0;
+        const timeDelta = (distance / BULLET_SPEED) + 0.001; 
+        
+        return {
+            x: targetPos.x + ((targetVel.x - selfVel.x) * timeDelta),
+            y: targetPos.y + ((targetVel.y - selfVel.y) * timeDelta),
+            z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
+        };
     }
 }
 
-class QuantumStabilizerEngine {
+class QuantumTapEngine {
     constructor() {
-        this.baseWeight = 999999.0;
+        this.godWeight = 999999.0;
         this.voidWeight = -999999.0;
-        this.ghostBones = ['root', 'spine', 'chest', 'pelvis', 'hips', 'arm', 'leg', 'shoulder', 'thigh', 'foot'];
+        
+        this.ghostBones = [
+            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
+            'left_arm', 'right_arm', 'left_leg', 'right_leg', 
+            'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
+            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
+        ];
     }
 
-    // 1. PHANH TỪ TÍNH THEO CỰ LY (DYNAMIC DAMPING)
-    // Càng xa, đầu kẻ địch càng "stick" hơn để chống văng tâm do vuốt quá tay.
-    calculateDamping(distance) {
-        const dampingFactor = QuantumPhysics.clamp(distance / 20.0, 1.0, 50.0);
-        return this.baseWeight * dampingFactor;
+    enforceHipFirePrecision(weapon) {
+        if (!weapon) return;
+        
+        // TRIỆT TIÊU TẬN GỐC ĐỘ TẢN ĐẠN KHI BẮN THẲNG (HIP-FIRE)
+        const nullifyProps = [
+            'recoil', 'spread', 'bloom', 'camera_shake', 'progressive_spread', 
+            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
+            'vertical_recoil', 'movement_penalty', 'jump_penalty', 'strafe_penalty'
+        ];
+
+        for (let prop of nullifyProps) {
+            if (prop in weapon) weapon[prop] = 0.0;
+        }
+
+        weapon.aim_assist_range = 999.0; 
+        weapon.auto_aim_angle = 360.0; // Bắt mục tiêu mọi hướng khi chạm nút bắn
+        weapon.bullet_speed = 99999.0;
     }
 
-    // 2. VÒM BẢO VỆ ĐỈNH ĐẦU (ANTI-OVERSHOOT DOME)
-    applyDomePhysics(hitboxes, distance) {
-        if (!hitboxes || !hitboxes.head) return;
+    warpHitboxes(hitboxes) {
+        if (!hitboxes) return;
 
-        const stickiness = this.calculateDamping(distance);
-        
-        // Cấu hình xương đầu thành một "Hố đen ma sát"
-        hitboxes.head.snap_weight = this.baseWeight;
-        hitboxes.head.priority = "MAXIMUM";
-        hitboxes.head.friction = stickiness; // Phanh quán tính cực mạnh
-        hitboxes.head.vertical_magnetism_multiplier = stickiness;
-        
-        // Mở rộng Hitbox Headshot theo cự ly (Maximized for Long Range)
-        let auraSize = distance > 50.0 ? 60.0 : 30.0;
-        hitboxes.head.m_Radius *= auraSize;
-
-        // Triệt tiêu các vùng xương khác để làm mượt đường trượt lên đầu
-        for (const bone of this.ghostBones) {
+        // Ép toàn bộ thân dưới thành bóng ma (không bắt tâm)
+        for (let bone of this.ghostBones) {
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].priority = "IGNORE";
                 hitboxes[bone].m_Radius = 0.00001;
-                hitboxes[bone].friction = 0.0;
             }
+        }
+
+        // Tạo lực hút tĩnh tại Đầu (không cần ma sát chặn lực Drag)
+        if (hitboxes.head) {
+            hitboxes.head.snap_weight = this.godWeight; 
+            hitboxes.head.priority = "MAXIMUM";
+            hitboxes.head.m_Radius *= 15.0; // Vừa đủ để bao trọn vùng đầu
+            hitboxes.head.horizontal_magnetism_multiplier = this.godWeight; // Ưu tiên khóa ngang mạnh để bắt mục tiêu đang chạy
+        }
+
+        if (hitboxes.neck) {
+            hitboxes.neck.snap_weight = this.godWeight * 0.5;
+            hitboxes.neck.priority = "HIGH";
         }
     }
 
-    // 3. NEO GIỮ TRỌNG TÂM 4D (STABILIZED HIJACKING)
-    stabilizeTarget(player, selfVel, ping) {
+    hijackCoordinate(player, selfVel) {
         if (!player || !player.head_pos || !player.center_of_mass) return;
 
-        const dist = player.distance || 20.0;
+        const dist = player.distance || 15.0;
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
         
-        // Dự đoán tọa độ với Vector tương đối
-        const stabilizedPos = QuantumPhysics.predictStabilized(player.head_pos, targetVel, selfVel, dist, ping);
+        const interceptPos = QuantumPhysics.predictInstant(player.head_pos, targetVel, selfVel, dist);
 
-        player.center_of_mass.x = stabilizedPos.x;
-        player.center_of_mass.z = stabilizedPos.z;
-
-        /**
-         * MÁI VÒM TRẦN TUYỆT ĐỐI (ABSOLUTE CEILING)
-         * Đạn luôn bị ép vào vùng trán, không bao giờ vượt quá đỉnh đầu.
-         * $Y_{target} = Y_{head} - 0.025$
-         */
-        const headTop = player.head_pos.y;
-        const targetY = headTop - 0.025;
-        
-        // Nếu dự đoán vượt quá trần, ép nó quay lại mục tiêu Headshot
-        player.center_of_mass.y = QuantumPhysics.clamp(stabilizedPos.y, headTop - 0.15, targetY);
+        // Ghim tuyệt đối trọng tâm đạn vào giữa não đối thủ
+        player.center_of_mass.x = interceptPos.x;
+        player.center_of_mass.z = interceptPos.z;
+        player.center_of_mass.y = player.head_pos.y - 0.05; // Ổn định tại điểm hoàn hảo nhất của hitbox đầu
     }
 
-    processRecursive(node, context = { vS: {x:0, y:0, z:0}, p: 20 }) {
+    processRecursive(node, context = { selfVel: {x:0, y:0, z:0} }) {
         if (typeof node !== 'object' || node === null) return node;
 
         if (Array.isArray(node)) {
@@ -110,35 +106,26 @@ class QuantumStabilizerEngine {
             return node;
         }
 
-        if (node.player_velocity) context.vS = node.player_velocity;
-        if (node.ping) context.p = node.ping;
+        if ('player_velocity' in node) context.selfVel = node.player_velocity;
+        if ('weapon' in node) this.enforceHipFirePrecision(node.weapon);
 
-        if (node.weapon) {
-            node.weapon.recoil = 0.0;
-            node.weapon.spread = 0.0;
-            node.weapon.bullet_speed = 99999.0;
-            node.weapon.aim_assist_range = 600.0;
-            node.weapon.auto_aim_angle = 360.0;
-        }
-
-        if (node.players && Array.isArray(node.players)) {
-            for (let player of node.players) {
-                this.applyDomePhysics(player.hitboxes, player.distance);
-                this.stabilizeTarget(player, context.vS, context.p);
+        if ('players' in node && Array.isArray(node.players)) {
+            for (let enemy of node.players) {
+                this.warpHitboxes(enemy.hitboxes);
+                this.hijackCoordinate(enemy, context.selfVel);
             }
         }
 
-        if (node.camera_state) {
-            node.camera_state.stickiness = this.baseWeight;
-            node.camera_state.interpolation = "ZERO";
+        // SNAP-CAMERA: Giật tâm tức thời khi chạm
+        if ('camera_state' in node) {
+            node.camera_state.stickiness = this.godWeight; 
+            node.camera_state.interpolation = "ZERO"; // Không trượt mềm, Dịch chuyển tức thời
             node.camera_state.aim_acceleration = 0.0;
-            // CẮT CỤT TÍN HIỆU VƯỢT TRẦN: Khóa cứng vận tốc góc chiều dọc
-            node.camera_state.max_pitch_velocity = 0.0; 
             node.camera_state.lock_bone = "bone_Head";
         }
 
         for (const key of Object.keys(node)) {
-            if (typeof node[key] === 'object' && !['center_of_mass', 'velocity', 'head_pos'].includes(key)) {
+            if (typeof node[key] === 'object' && !['center_of_mass', 'head_pos', 'chest_pos', 'velocity'].includes(key)) {
                 node[key] = this.processRecursive(node[key], context);
             }
         }
@@ -153,10 +140,10 @@ class QuantumStabilizerEngine {
 if (typeof $response !== "undefined" && $response.body) {
     try {
         const payload = JSON.parse($response.body);
-        const Engine = new QuantumStabilizerEngine();
-        const output = Engine.processRecursive(payload);
-        $done({ body: JSON.stringify(output) });
-    } catch (e) {
-        $done({ body: $response.body });
+        const Engine = new QuantumTapEngine();
+        const mutatedPayload = Engine.processRecursive(payload);
+        $done({ body: JSON.stringify(mutatedPayload) });
+    } catch (error) {
+        $done({ body: $response.body }); 
     }
 }
