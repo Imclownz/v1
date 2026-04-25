@@ -1,8 +1,8 @@
 /**
  * ==============================================================================
- * TARGETING & LOCK-HEAD SYSTEM v50.2 (APEX PREDATOR)
- * Architecture: Vacuum Tunneling (Zero Friction) + Center of Mass Hijacking
- * Status: Maximum Overdrive. Absolute Bypass of Torso/Limbs.
+ * TARGETING & LOCK-HEAD SYSTEM v50.3 (ABSOLUTE CEILING)
+ * Architecture: Anti-Overshoot Clamping + Infinite Vertical Magnetism
+ * Status: Maximum Overdrive. Hard-lock Head. Zero Y-Axis Escape.
  * ==============================================================================
  */
 
@@ -12,7 +12,7 @@ class AdvancedMath {
     }
 
     static predictIntercept(targetPos, targetVel, selfVel, distance, pingMs) {
-        const BULLET_SPEED = 99999.0; // Đẩy tốc độ đạn lên mức tối đa
+        const BULLET_SPEED = 99999.0; 
         const timeOffset = (distance / BULLET_SPEED) + (pingMs / 1000.0) + 0.01;
         return {
             x: targetPos.x + ((targetVel.x - selfVel.x) * timeOffset),
@@ -24,11 +24,9 @@ class AdvancedMath {
 
 class QuantumReachEngine {
     constructor() {
-        // Đẩy thông số lên ngưỡng tối đa an toàn của Unity (999,999.0)
         this.voidWeight = -999999.0; 
         this.singularityWeight = 999999.0;
         
-        // Mở rộng danh sách xương cần triệt tiêu (bao gồm cả tay và chân)
         this.limbAndTorsoBones = [
             'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
             'left_arm', 'right_arm', 'left_leg', 'right_leg', 
@@ -50,43 +48,46 @@ class QuantumReachEngine {
             if (nullifyProps[i] in weapon) weapon[nullifyProps[i]] = 0.0;
         }
 
-        if ('aim_assist_range' in weapon) weapon.aim_assist_range = 999999.0;
-        if ('auto_aim_angle' in weapon) weapon.auto_aim_angle = 360.0;
-        if ('bullet_speed' in weapon) weapon.bullet_speed = 999999.0;
+        weapon.aim_assist_range = 999999.0;
+        weapon.auto_aim_angle = 360.0;
+        weapon.bullet_speed = 999999.0;
     }
 
     manipulateHitboxes(hitboxes, distance) {
         if (!hitboxes) return;
 
-        // PHƯƠNG ÁN 3: Triệt tiêu hoàn toàn ma sát và từ tính vùng thân/chi
+        // Triệt tiêu hoàn toàn vùng dưới để chống kẹt tâm
         for (let i = 0; i < this.limbAndTorsoBones.length; i++) {
             const bone = this.limbAndTorsoBones[i];
             if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidWeight; // Đẩy lùi Crosshair
+                hitboxes[bone].snap_weight = this.voidWeight;
                 hitboxes[bone].priority = "IGNORE";
-                hitboxes[bone].m_Radius = 0.00001; // Biến hitbox thành điểm vi mô
-                hitboxes[bone].friction = 0.0; // Triệt tiêu ma sát (Không bị khựng tâm)
+                hitboxes[bone].m_Radius = 0.00001; 
+                hitboxes[bone].friction = 0.0; 
                 hitboxes[bone].vertical_magnetism_multiplier = 0.0; 
                 hitboxes[bone].horizontal_magnetism_multiplier = 0.0;
             }
         }
 
-        // Ép xung vùng Đầu (Bong bóng Hitbox)
+        // BONG BÓNG TỪ TÍNH CHỐNG VƯỢT ĐẦU
         if (hitboxes.head) {
-            let headMultiplier = distance < 20.0 ? 18.0 : (distance > 50.0 ? 5.0 : 10.0);
+            // Khi địch ở xa (>50m), phóng to hitbox gấp 45 lần để bù trừ cho việc vuốt trượt pixel
+            let headMultiplier = distance < 20.0 ? 20.0 : (distance > 50.0 ? 45.0 : 25.0);
 
-            hitboxes.head.snap_weight = this.singularityWeight; // Lực hút hố đen
+            hitboxes.head.snap_weight = this.singularityWeight; 
             hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius *= headMultiplier; // Phóng to vùng nhận diện Headshot
-            hitboxes.head.vertical_magnetism_multiplier = 35.0; // Tăng tốc độ hút dọc (Drag)
-            hitboxes.head.friction = 0.0; // Trượt thẳng vào giữa tâm đầu
+            hitboxes.head.m_Radius *= headMultiplier; 
+            
+            // Khóa chết trục dọc: Ép từ tính chiều dọc lên cực đại để bắt dính mọi lực vuốt quá tay
+            hitboxes.head.vertical_magnetism_multiplier = 999999.0; 
+            hitboxes.head.friction = 999999.0; // Tạo "bức tường" ma sát ngay tại đỉnh đầu để chặn Crosshair lại
         }
 
         if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = this.singularityWeight * 0.6;
+            hitboxes.neck.snap_weight = this.singularityWeight * 0.8;
             hitboxes.neck.priority = "HIGH";
-            hitboxes.neck.friction = 0.0;
-            hitboxes.neck.vertical_magnetism_multiplier = 15.0;
+            hitboxes.neck.friction = 999999.0; // Chặn tâm rớt xuống
+            hitboxes.neck.vertical_magnetism_multiplier = 999999.0;
         }
     }
 
@@ -98,17 +99,15 @@ class QuantumReachEngine {
         
         const predictedPos = AdvancedMath.predictIntercept(player.head_pos, targetVel, selfVel, dist, ping);
 
-        // PHƯƠNG ÁN 4: Dịch chuyển Trọng tâm tuyệt đối (Center of Mass Hijacking)
-        // Loại bỏ hoàn toàn sự phụ thuộc vào chest_pos. Cắm thẳng Trọng tâm vào Đầu.
         player.center_of_mass.x = predictedPos.x;
         player.center_of_mass.z = predictedPos.z;
         
-        // Neo Trọng tâm ngay dưới đỉnh đầu một chút để đảm bảo Aim Assist luôn dính Headshot
-        // Bất chấp khoảng cách, đạn luôn hướng về tọa độ này.
-        player.center_of_mass.y = player.head_pos.y - 0.05; 
+        // TRẦN GIỚI HẠN TUYỆT ĐỐI (ABSOLUTE Y-CLAMPING)
+        // Neo trọng tâm vĩnh viễn vào giữa khuôn mặt (thấp hơn đỉnh đầu một chút)
+        const absoluteCeiling = player.head_pos.y - 0.02; 
         
-        // Giới hạn trần an toàn
-        player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.head_pos.y - 0.2, player.head_pos.y + 0.1);
+        // Bất kể bạn vuốt mạnh đến đâu, tọa độ đích của đạn không bao giờ được phép lớn hơn Absolute Ceiling
+        player.center_of_mass.y = AdvancedMath.clamp(predictedPos.y, player.chest_pos.y + 0.2, absoluteCeiling);
     }
 
     process(data) {
@@ -130,11 +129,12 @@ class QuantumReachEngine {
                 this.injectQuantumIntercept(enemy, selfVel, pingMs);
             }
 
+            // PHONG TỎA GIA TỐC CAMERA (CAMERA LOCKDOWN)
             if (data.players.length > 0 && data.camera_state) {
-                // Khóa cứng màn hình Camera vào xương Đầu
-                data.camera_state.stickiness = 1.0;
+                data.camera_state.stickiness = 999999.0; // Dán chặt vào mục tiêu
                 data.camera_state.interpolation = "ZERO";
                 data.camera_state.aim_acceleration = 0.0;
+                data.camera_state.max_pitch_velocity = 0.0; // Cắt hoàn toàn quán tính vuốt lên (Pitch) khi đã lock
                 data.camera_state.lock_bone = "bone_Head";
             }
         }
