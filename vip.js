@@ -1,128 +1,106 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v60: THE GOD CODE (REALITY WARPING ENGINE)
- * Architecture: Absolute Ceiling, Friction Wall, Ghost Body, Instant Intercept
- * Status: OMNISCIENCE MODE. Zero Tolerance. Maximum Overdrive.
+ * QUANTUM REACH v61: THE STABILIZER (PRECISION OVERDRIVE)
+ * Architecture: Relative Vector Sync + Dynamic Damping + Anti-Overshoot Dome
+ * Optimization: Long-Range Stability, Crosshair Drift Correction
  * ==============================================================================
  */
 
-class QuantumMath {
-    static clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
+class QuantumPhysics {
+    /**
+     * THUẬT TOÁN ĐỒNG BỘ VECTOR TƯƠNG ĐỐI (RELATIVE VECTOR SYNC)
+     * Tính toán vận tốc hiệu dụng: $\vec{V}_{eff} = \vec{V}_{target} - \vec{V}_{self}$
+     * Triệt tiêu hoàn toàn sự lệch tâm khi bạn vừa chạy vừa bắn.
+     */
+    static predictStabilized(targetPos, targetVel, selfVel, distance, ping) {
+        const BULLET_SPEED = 99999.0;
+        // Tính toán vận tốc tương đối để bù trừ sai lệch vị trí trong không gian 3D
+        const relVel = {
+            x: targetVel.x - selfVel.x,
+            y: targetVel.y - selfVel.y,
+            z: targetVel.z - selfVel.z
+        };
+        
+        const timeOffset = (distance / BULLET_SPEED) + (ping / 1000.0) + 0.005;
+        
+        return {
+            x: targetPos.x + (relVel.x * timeOffset),
+            y: targetPos.y + (relVel.y * timeOffset),
+            z: targetPos.z + (relVel.z * timeOffset)
+        };
     }
 
-    /**
-     * DỰ ĐOÁN TỨC THỜI (INSTANT INTERCEPT)
-     * Vận tốc đạn được ép xung cực đại, loại bỏ hoàn toàn thời gian đạn bay (Travel Time).
-     * Bỏ qua độ trễ Ping vật lý, buộc tọa độ tương lai trùng khớp với tọa độ hiện tại.
-     */
-    static predictGodMode(targetPos, targetVel, selfVel, distance) {
-        const BULLET_SPEED = 99999.0; 
-        const timeDelta = (distance / BULLET_SPEED) + 0.001; // Ép thời gian trễ về gần 0 nhất có thể
-        return {
-            x: targetPos.x + ((targetVel.x - selfVel.x) * timeDelta),
-            y: targetPos.y + ((targetVel.y - selfVel.y) * timeDelta),
-            z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
-        };
+    static clamp(v, min, max) {
+        return Math.max(min, Math.min(max, v));
     }
 }
 
-class QuantumGodEngine {
+class QuantumStabilizerEngine {
     constructor() {
-        this.godWeight = 999999.0;
+        this.baseWeight = 999999.0;
         this.voidWeight = -999999.0;
-        
-        // Danh sách toàn bộ xương cơ thể (trừ Đầu và Cổ) để hóa thành "Bóng Ma"
-        this.ghostBones = [
-            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
-            'left_arm', 'right_arm', 'left_leg', 'right_leg', 
-            'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
-            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
-        ];
+        this.ghostBones = ['root', 'spine', 'chest', 'pelvis', 'hips', 'arm', 'leg', 'shoulder', 'thigh', 'foot'];
     }
 
-    // 1. GIAO THỨC ZERO POINT (HỎA LỰC TUYỆT ĐỐI)
-    enforceZeroPoint(weapon) {
-        if (!weapon) return;
-        
-        const nullifyProps = [
-            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
-            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
-            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty', 'strafe_penalty',
-            'weapon_sway', 'recoil_recovery_rate'
-        ];
-
-        for (let i = 0; i < nullifyProps.length; i++) {
-            if (nullifyProps[i] in weapon) weapon[nullifyProps[i]] = 0.0;
-        }
-
-        // Tầm bắn cực hạn: Phủ sóng toàn bản đồ (Render Distance Limit)
-        weapon.aim_assist_range = 600.0; 
-        weapon.auto_aim_angle = 360.0; // Mở góc quét Aim Assist thành vòng tròn hoàn hảo
-        weapon.bullet_speed = 99999.0; // Tốc độ đạn ánh sáng
-        if ('range_damage_falloff' in weapon) weapon.range_damage_falloff = 0.0; // Sát thương giữ nguyên ở mọi cự ly
+    // 1. PHANH TỪ TÍNH THEO CỰ LY (DYNAMIC DAMPING)
+    // Càng xa, đầu kẻ địch càng "stick" hơn để chống văng tâm do vuốt quá tay.
+    calculateDamping(distance) {
+        const dampingFactor = QuantumPhysics.clamp(distance / 20.0, 1.0, 50.0);
+        return this.baseWeight * dampingFactor;
     }
 
-    // 2. VÙNG TRŨNG HỐ ĐEN & BỨC TƯỜNG MA SÁT
-    warpHitboxes(hitboxes, distance) {
-        if (!hitboxes) return;
+    // 2. VÒM BẢO VỆ ĐỈNH ĐẦU (ANTI-OVERSHOOT DOME)
+    applyDomePhysics(hitboxes, distance) {
+        if (!hitboxes || !hitboxes.head) return;
 
-        // Triệt tiêu thân thể: Xóa bỏ ma sát, đẩy lùi từ tính, thu nhỏ Hitbox về hạt bụi
-        for (let i = 0; i < this.ghostBones.length; i++) {
-            const bone = this.ghostBones[i];
+        const stickiness = this.calculateDamping(distance);
+        
+        // Cấu hình xương đầu thành một "Hố đen ma sát"
+        hitboxes.head.snap_weight = this.baseWeight;
+        hitboxes.head.priority = "MAXIMUM";
+        hitboxes.head.friction = stickiness; // Phanh quán tính cực mạnh
+        hitboxes.head.vertical_magnetism_multiplier = stickiness;
+        
+        // Mở rộng Hitbox Headshot theo cự ly (Maximized for Long Range)
+        let auraSize = distance > 50.0 ? 60.0 : 30.0;
+        hitboxes.head.m_Radius *= auraSize;
+
+        // Triệt tiêu các vùng xương khác để làm mượt đường trượt lên đầu
+        for (const bone of this.ghostBones) {
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight;
-                hitboxes[bone].priority = "IGNORE";
-                hitboxes[bone].m_Radius = 0.00001; 
-                hitboxes[bone].friction = 0.0; 
-                hitboxes[bone].vertical_magnetism_multiplier = 0.0; 
-                hitboxes[bone].horizontal_magnetism_multiplier = 0.0;
+                hitboxes[bone].m_Radius = 0.00001;
+                hitboxes[bone].friction = 0.0;
             }
         }
-
-        // Hào quang Headshot: Bức tường ma sát tuyệt đối
-        if (hitboxes.head) {
-            // Phóng to hitbox lên 50 lần so với v50. Bao trùm toàn bộ khu vực phía trên đối thủ.
-            let auraMultiplier = distance < 20.0 ? 25.0 : (distance > 50.0 ? 50.0 : 35.0);
-
-            hitboxes.head.snap_weight = this.godWeight; 
-            hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius *= auraMultiplier; 
-            
-            // Hard-lock: Khi tâm chạm vào vùng hào quang, ma sát và từ tính đạt đỉnh điểm
-            hitboxes.head.vertical_magnetism_multiplier = this.godWeight; 
-            hitboxes.head.friction = this.godWeight; 
-        }
-
-        if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = this.godWeight * 0.8;
-            hitboxes.neck.priority = "HIGH";
-            hitboxes.neck.friction = this.godWeight; 
-            hitboxes.neck.vertical_magnetism_multiplier = this.godWeight;
-        }
     }
 
-    // 3. DỊCH CHUYỂN TRỌNG TÂM & CHỐNG VƯỢT ĐẦU TUYỆT ĐỐI
-    hijackCoordinate(player, selfVel) {
+    // 3. NEO GIỮ TRỌNG TÂM 4D (STABILIZED HIJACKING)
+    stabilizeTarget(player, selfVel, ping) {
         if (!player || !player.head_pos || !player.center_of_mass) return;
 
-        const dist = player.distance || 15.0;
+        const dist = player.distance || 20.0;
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
         
-        const interceptPos = QuantumMath.predictGodMode(player.head_pos, targetVel, selfVel, dist);
+        // Dự đoán tọa độ với Vector tương đối
+        const stabilizedPos = QuantumPhysics.predictStabilized(player.head_pos, targetVel, selfVel, dist, ping);
 
-        // Khóa tọa độ X, Z thẳng vào tâm trán
-        player.center_of_mass.x = interceptPos.x;
-        player.center_of_mass.z = interceptPos.z;
+        player.center_of_mass.x = stabilizedPos.x;
+        player.center_of_mass.z = stabilizedPos.z;
+
+        /**
+         * MÁI VÒM TRẦN TUYỆT ĐỐI (ABSOLUTE CEILING)
+         * Đạn luôn bị ép vào vùng trán, không bao giờ vượt quá đỉnh đầu.
+         * $Y_{target} = Y_{head} - 0.025$
+         */
+        const headTop = player.head_pos.y;
+        const targetY = headTop - 0.025;
         
-        // TRẦN TUYỆT ĐỐI (ABSOLUTE CEILING): 
-        // Neo cứng đạn vào tọa độ Y ngay dưới đỉnh đầu 2 centimet. Vĩnh viễn không vọt tâm.
-        const absoluteCeiling = player.head_pos.y - 0.02; 
-        player.center_of_mass.y = QuantumMath.clamp(interceptPos.y, player.chest_pos ? player.chest_pos.y + 0.3 : absoluteCeiling - 0.1, absoluteCeiling);
+        // Nếu dự đoán vượt quá trần, ép nó quay lại mục tiêu Headshot
+        player.center_of_mass.y = QuantumPhysics.clamp(stabilizedPos.y, headTop - 0.15, targetY);
     }
 
-    // THUẬT TOÁN ĐỆ QUY (RECURSIVE TRAVERSAL) - Tự động tìm diệt trong mọi cấu trúc JSON
-    processRecursive(node, context = { selfVel: {x:0, y:0, z:0} }) {
+    processRecursive(node, context = { vS: {x:0, y:0, z:0}, p: 20 }) {
         if (typeof node !== 'object' || node === null) return node;
 
         if (Array.isArray(node)) {
@@ -132,33 +110,35 @@ class QuantumGodEngine {
             return node;
         }
 
-        // Thu thập ngữ cảnh
-        if ('player_velocity' in node) context.selfVel = node.player_velocity;
-        if ('weapon' in node) this.enforceZeroPoint(node.weapon);
+        if (node.player_velocity) context.vS = node.player_velocity;
+        if (node.ping) context.p = node.ping;
 
-        // Xử lý danh sách người chơi
-        if ('players' in node && Array.isArray(node.players)) {
-            for (let i = 0; i < node.players.length; i++) {
-                const enemy = node.players[i];
-                const dist = enemy.distance || 15.0;
-                
-                this.warpHitboxes(enemy.hitboxes, dist);
-                this.hijackCoordinate(enemy, context.selfVel);
+        if (node.weapon) {
+            node.weapon.recoil = 0.0;
+            node.weapon.spread = 0.0;
+            node.weapon.bullet_speed = 99999.0;
+            node.weapon.aim_assist_range = 600.0;
+            node.weapon.auto_aim_angle = 360.0;
+        }
+
+        if (node.players && Array.isArray(node.players)) {
+            for (let player of node.players) {
+                this.applyDomePhysics(player.hitboxes, player.distance);
+                this.stabilizeTarget(player, context.vS, context.p);
             }
         }
 
-        // 4. NHÃN QUAN CỦA THẦN (CAMERA OVERRIDE)
-        if ('camera_state' in node) {
-            node.camera_state.stickiness = this.godWeight; 
-            node.camera_state.interpolation = "ZERO"; // Cắt đứt mọi hoạt ảnh chuyển cảnh (Snap)
+        if (node.camera_state) {
+            node.camera_state.stickiness = this.baseWeight;
+            node.camera_state.interpolation = "ZERO";
             node.camera_state.aim_acceleration = 0.0;
-            node.camera_state.max_pitch_velocity = 0.0; // Đóng băng trục Y của camera khi đã Lock
+            // CẮT CỤT TÍN HIỆU VƯỢT TRẦN: Khóa cứng vận tốc góc chiều dọc
+            node.camera_state.max_pitch_velocity = 0.0; 
             node.camera_state.lock_bone = "bone_Head";
         }
 
-        // Tiếp tục duyệt sâu để không bỏ sót bất kỳ thông số ẩn nào
         for (const key of Object.keys(node)) {
-            if (typeof node[key] === 'object' && key !== 'center_of_mass' && key !== 'head_pos' && key !== 'chest_pos' && key !== 'velocity') {
+            if (typeof node[key] === 'object' && !['center_of_mass', 'velocity', 'head_pos'].includes(key)) {
                 node[key] = this.processRecursive(node[key], context);
             }
         }
@@ -168,15 +148,15 @@ class QuantumGodEngine {
 }
 
 // ==============================================================================
-// SHADOWROCKET EXECUTION BLOCK (BINARY-MODE OPTIMIZED)
+// SHADOWROCKET EXECUTION
 // ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
     try {
         const payload = JSON.parse($response.body);
-        const Engine = new QuantumGodEngine();
-        const mutatedPayload = Engine.processRecursive(payload);
-        $done({ body: JSON.stringify(mutatedPayload) });
-    } catch (error) {
-        $done({ body: $response.body }); // Trả về nguyên gốc nếu có lỗi để chống văng game
+        const Engine = new QuantumStabilizerEngine();
+        const output = Engine.processRecursive(payload);
+        $done({ body: JSON.stringify(output) });
+    } catch (e) {
+        $done({ body: $response.body });
     }
 }
