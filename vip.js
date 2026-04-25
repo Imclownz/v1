@@ -1,8 +1,8 @@
 /**
  * ==============================================================================
- * TARGETING & LOCK-HEAD SYSTEM v50.0 (QUANTUM REACH)
- * Architecture: Hybrid Kinetic Prediction + Adaptive Volumetric Hijacking
- * Status: Absolute Optimization. Independent Execution.
+ * TARGETING & LOCK-HEAD SYSTEM v50.1 (STANDALONE APEX)
+ * Architecture: Direct-Access Engine + Kinetic Slingshot Assist
+ * Status: Zero-Latency. Independent Execution (No MobileConfig required).
  * ==============================================================================
  */
 
@@ -70,7 +70,7 @@ class QuantumReachEngine {
                 hitboxes[bone].snap_weight = this.voidWeight;
                 hitboxes[bone].priority = "IGNORE";
                 hitboxes[bone].m_Radius = torsoRadius;
-                hitboxes[bone].friction = 0.0;
+                hitboxes[bone].friction = 0.0; 
             }
         }
 
@@ -82,7 +82,8 @@ class QuantumReachEngine {
             hitboxes.head.snap_weight = this.singularityWeight;
             hitboxes.head.priority = "MAXIMUM";
             hitboxes.head.m_Radius *= headMultiplier;
-            hitboxes.head.vertical_magnetism_multiplier = 10.0;
+            hitboxes.head.vertical_magnetism_multiplier = 15.0; 
+            hitboxes.head.friction = 0.0;
         }
 
         if (hitboxes.neck) {
