@@ -1,110 +1,165 @@
 /**
  * ==============================================================================
- * QUANTUM SINGULARITY v66.6 (THE UNLEASHED)
- * Target: Absolute Server Domination
- * Logic: Data-Level Reality Warping & Instant Convergence
- * WARNING: NO NATURAL BEHAVIOR. PURE BRUTE FORCE.
+ * QUANTUM REACH v60: THE GOD CODE (REALITY WARPING ENGINE)
+ * Architecture: Absolute Ceiling, Friction Wall, Ghost Body, Instant Intercept
+ * Status: OMNISCIENCE MODE. Zero Tolerance. Maximum Overdrive.
  * ==============================================================================
  */
 
-class SingularityMath {
-    // Ép xung tốc độ xử lý: Sử dụng toán học nhị phân và hằng số cực đại
-    static INTERCEPT_CONSTANT = 999999.0;
-    
-    static calculateHeadshotVector(head, velocity, ping) {
-        // Tốc độ đạn gần như tức thời, triệt tiêu mọi sai số di chuyển
-        const bulletSpeed = 999999.0; 
-        const t = (ping / 1000.0) + 0.0001; 
+class QuantumMath {
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /**
+     * DỰ ĐOÁN TỨC THỜI (INSTANT INTERCEPT)
+     * Vận tốc đạn được ép xung cực đại, loại bỏ hoàn toàn thời gian đạn bay (Travel Time).
+     * Bỏ qua độ trễ Ping vật lý, buộc tọa độ tương lai trùng khớp với tọa độ hiện tại.
+     */
+    static predictGodMode(targetPos, targetVel, selfVel, distance) {
+        const BULLET_SPEED = 99999.0; 
+        const timeDelta = (distance / BULLET_SPEED) + 0.001; // Ép thời gian trễ về gần 0 nhất có thể
         return {
-            x: head.x + (velocity.x * t),
-            y: head.y + (velocity.y * t),
-            z: head.z + (velocity.z * t)
+            x: targetPos.x + ((targetVel.x - selfVel.x) * timeDelta),
+            y: targetPos.y + ((targetVel.y - selfVel.y) * timeDelta),
+            z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
         };
     }
 }
 
-class SingularityEngine {
+class QuantumGodEngine {
     constructor() {
-        // Ngưỡng năng lượng cực đại: 999,999.0 (Giới hạn thực của Unity Float32)
-        this.MAX_FORCE = 999999.0;
-        this.NEGATIVE_VOID = -999999.0;
-
-        this.totalErasureKeys = [
-            'recoil', 'spread', 'camera_shake', 'progressive_spread', 'recoil_accumulation',
-            'recoil_multiplier', 'horizontal_recoil', 'vertical_recoil', 'bloom',
-            'movement_penalty', 'jump_penalty', 'strafe_penalty', 'weapon_sway',
-            'shake_amplitude', 'recoil_recovery_rate', 'max_spread'
+        this.godWeight = 999999.0;
+        this.voidWeight = -999999.0;
+        
+        // Danh sách toàn bộ xương cơ thể (trừ Đầu và Cổ) để hóa thành "Bóng Ma"
+        this.ghostBones = [
+            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
+            'left_arm', 'right_arm', 'left_leg', 'right_leg', 
+            'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
+            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
         ];
-
-        this.ignoredSectors = ['root', 'pelvis', 'spine', 'chest', 'arm', 'leg', 'shoulder', 'thigh', 'calf', 'foot', 'hand'];
     }
 
-    warpReality(node, context = { vS: {x:0, y:0, z:0}, ping: 1 }) {
-        if (!node || typeof node !== 'object') return node;
+    // 1. GIAO THỨC ZERO POINT (HỎA LỰC TUYỆT ĐỐI)
+    enforceZeroPoint(weapon) {
+        if (!weapon) return;
+        
+        const nullifyProps = [
+            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
+            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
+            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty', 'strafe_penalty',
+            'weapon_sway', 'recoil_recovery_rate'
+        ];
 
-        if (Array.isArray(node)) {
-            for (let i = 0; i < node.length; i++) node[i] = this.warpReality(node[i], context);
-            return node;
+        for (let i = 0; i < nullifyProps.length; i++) {
+            if (nullifyProps[i] in weapon) weapon[nullifyProps[i]] = 0.0;
         }
 
-        // Cập nhật ngữ cảnh siêu tốc
-        if (node.ping) context.ping = 1; // Ép Ping về 1ms giả lập trong tính toán
-        if (node.player_velocity) context.vS = node.player_velocity;
+        // Tầm bắn cực hạn: Phủ sóng toàn bản đồ (Render Distance Limit)
+        weapon.aim_assist_range = 600.0; 
+        weapon.auto_aim_angle = 360.0; // Mở góc quét Aim Assist thành vòng tròn hoàn hảo
+        weapon.bullet_speed = 99999.0; // Tốc độ đạn ánh sáng
+        if ('range_damage_falloff' in weapon) weapon.range_damage_falloff = 0.0; // Sát thương giữ nguyên ở mọi cự ly
+    }
 
-        // 1. VÔ HIỆU HÓA VẬT LÝ VŨ KHÍ (WEAPON ERASURE)
-        for (const key of this.totalErasureKeys) {
-            if (node[key] !== undefined) node[key] = 0.0;
-        }
-        if (node.bullet_speed) node.bullet_speed = this.MAX_FORCE;
-        if (node.aim_assist_range) node.aim_assist_range = this.MAX_FORCE;
+    // 2. VÙNG TRŨNG HỐ ĐEN & BỨC TƯỜNG MA SÁT
+    warpHitboxes(hitboxes, distance) {
+        if (!hitboxes) return;
 
-        // 2. THAO TÚNG HITBOX: TẠO HỐ ĐEN TỪ TÍNH (HITBOX BLACK HOLE)
-        for (const key in node) {
-            const part = node[key];
-            if (part && typeof part === 'object' && part.snap_weight !== undefined) {
-                part.friction = 0.0;
-                
-                // Đẩy lùi Crosshair khỏi mọi vùng không phải đầu
-                if (this.ignoredSectors.some(s => key.includes(s))) {
-                    part.snap_weight = this.NEGATIVE_VOID;
-                    part.m_Radius = 0.0;
-                    part.priority = "NULL";
-                } 
-                // Cực đại hóa vùng Đầu
-                else if (key === 'head') {
-                    part.snap_weight = this.MAX_FORCE;
-                    part.priority = "CRITICAL";
-                    part.m_Radius = 150.0; // Phóng đại Hitbox đầu lên mức không tưởng
-                    part.vertical_magnetism_multiplier = this.MAX_FORCE;
-                    part.horizontal_magnetism_multiplier = this.MAX_FORCE;
-                }
+        // Triệt tiêu thân thể: Xóa bỏ ma sát, đẩy lùi từ tính, thu nhỏ Hitbox về hạt bụi
+        for (let i = 0; i < this.ghostBones.length; i++) {
+            const bone = this.ghostBones[i];
+            if (hitboxes[bone]) {
+                hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].priority = "IGNORE";
+                hitboxes[bone].m_Radius = 0.00001; 
+                hitboxes[bone].friction = 0.0; 
+                hitboxes[bone].vertical_magnetism_multiplier = 0.0; 
+                hitboxes[bone].horizontal_magnetism_multiplier = 0.0;
             }
         }
 
-        // 3. CHIẾM QUYỀN TRỌNG TÂM (CENTER OF MASS HIJACK)
-        if (node.center_of_mass && node.head_pos) {
-            const vT = node.velocity || {x:0, y:0, z:0};
-            const target = SingularityMath.calculateHeadshotVector(node.head_pos, vT, context.ping);
+        // Hào quang Headshot: Bức tường ma sát tuyệt đối
+        if (hitboxes.head) {
+            // Phóng to hitbox lên 50 lần so với v50. Bao trùm toàn bộ khu vực phía trên đối thủ.
+            let auraMultiplier = distance < 20.0 ? 25.0 : (distance > 50.0 ? 50.0 : 35.0);
+
+            hitboxes.head.snap_weight = this.godWeight; 
+            hitboxes.head.priority = "MAXIMUM";
+            hitboxes.head.m_Radius *= auraMultiplier; 
             
-            // Khóa chết tọa độ Trọng tâm vào Đầu mục tiêu, bỏ qua mọi logic khác
-            node.center_of_mass.x = target.x;
-            node.center_of_mass.y = target.y;
-            node.center_of_mass.z = target.z;
+            // Hard-lock: Khi tâm chạm vào vùng hào quang, ma sát và từ tính đạt đỉnh điểm
+            hitboxes.head.vertical_magnetism_multiplier = this.godWeight; 
+            hitboxes.head.friction = this.godWeight; 
         }
 
-        // 4. KHÓA CỨNG CAMERA (HARD-STUCK CAMERA)
-        if (node.camera_state) {
-            node.camera_state.stickiness = 1.0;
-            node.camera_state.interpolation = "INSTANT";
-            node.camera_state.aim_acceleration = this.MAX_FORCE;
-            node.camera_state.max_pitch_velocity = this.MAX_FORCE;
+        if (hitboxes.neck) {
+            hitboxes.neck.snap_weight = this.godWeight * 0.8;
+            hitboxes.neck.priority = "HIGH";
+            hitboxes.neck.friction = this.godWeight; 
+            hitboxes.neck.vertical_magnetism_multiplier = this.godWeight;
+        }
+    }
+
+    // 3. DỊCH CHUYỂN TRỌNG TÂM & CHỐNG VƯỢT ĐẦU TUYỆT ĐỐI
+    hijackCoordinate(player, selfVel) {
+        if (!player || !player.head_pos || !player.center_of_mass) return;
+
+        const dist = player.distance || 15.0;
+        const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
+        
+        const interceptPos = QuantumMath.predictGodMode(player.head_pos, targetVel, selfVel, dist);
+
+        // Khóa tọa độ X, Z thẳng vào tâm trán
+        player.center_of_mass.x = interceptPos.x;
+        player.center_of_mass.z = interceptPos.z;
+        
+        // TRẦN TUYỆT ĐỐI (ABSOLUTE CEILING): 
+        // Neo cứng đạn vào tọa độ Y ngay dưới đỉnh đầu 2 centimet. Vĩnh viễn không vọt tâm.
+        const absoluteCeiling = player.head_pos.y - 0.02; 
+        player.center_of_mass.y = QuantumMath.clamp(interceptPos.y, player.chest_pos ? player.chest_pos.y + 0.3 : absoluteCeiling - 0.1, absoluteCeiling);
+    }
+
+    // THUẬT TOÁN ĐỆ QUY (RECURSIVE TRAVERSAL) - Tự động tìm diệt trong mọi cấu trúc JSON
+    processRecursive(node, context = { selfVel: {x:0, y:0, z:0} }) {
+        if (typeof node !== 'object' || node === null) return node;
+
+        if (Array.isArray(node)) {
+            for (let i = 0; i < node.length; i++) {
+                node[i] = this.processRecursive(node[i], context);
+            }
+            return node;
+        }
+
+        // Thu thập ngữ cảnh
+        if ('player_velocity' in node) context.selfVel = node.player_velocity;
+        if ('weapon' in node) this.enforceZeroPoint(node.weapon);
+
+        // Xử lý danh sách người chơi
+        if ('players' in node && Array.isArray(node.players)) {
+            for (let i = 0; i < node.players.length; i++) {
+                const enemy = node.players[i];
+                const dist = enemy.distance || 15.0;
+                
+                this.warpHitboxes(enemy.hitboxes, dist);
+                this.hijackCoordinate(enemy, context.selfVel);
+            }
+        }
+
+        // 4. NHÃN QUAN CỦA THẦN (CAMERA OVERRIDE)
+        if ('camera_state' in node) {
+            node.camera_state.stickiness = this.godWeight; 
+            node.camera_state.interpolation = "ZERO"; // Cắt đứt mọi hoạt ảnh chuyển cảnh (Snap)
+            node.camera_state.aim_acceleration = 0.0;
+            node.camera_state.max_pitch_velocity = 0.0; // Đóng băng trục Y của camera khi đã Lock
             node.camera_state.lock_bone = "bone_Head";
         }
 
-        // Duyệt sâu toàn diện
-        for (const key in node) {
-            if (typeof node[key] === 'object' && key !== 'center_of_mass') {
-                this.warpReality(node[key], context);
+        // Tiếp tục duyệt sâu để không bỏ sót bất kỳ thông số ẩn nào
+        for (const key of Object.keys(node)) {
+            if (typeof node[key] === 'object' && key !== 'center_of_mass' && key !== 'head_pos' && key !== 'chest_pos' && key !== 'velocity') {
+                node[key] = this.processRecursive(node[key], context);
             }
         }
 
@@ -112,14 +167,16 @@ class SingularityEngine {
     }
 }
 
-// KHỞI CHẠY ĐIỂM KỲ DỊ
+// ==============================================================================
+// SHADOWROCKET EXECUTION BLOCK (BINARY-MODE OPTIMIZED)
+// ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
     try {
-        let root = JSON.parse($response.body);
-        const Singularity = new SingularityEngine();
-        root = Singularity.warpReality(root);
-        $done({ body: JSON.stringify(root) });
-    } catch (e) {
-        $done({ body: $response.body });
+        const payload = JSON.parse($response.body);
+        const Engine = new QuantumGodEngine();
+        const mutatedPayload = Engine.processRecursive(payload);
+        $done({ body: JSON.stringify(mutatedPayload) });
+    } catch (error) {
+        $done({ body: $response.body }); // Trả về nguyên gốc nếu có lỗi để chống văng game
     }
 }
