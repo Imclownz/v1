@@ -1,198 +1,130 @@
 /**
- * ==============================================================================
- * QUANTUM REACH v60.1: ABSOLUTE Y-FREEZE (THE GOD CODE EVOLVED)
- * Architecture: Slide & Freeze, Zero-Pitch Override, Tri-Anchor Hijacking
- * Status: OMNISCIENCE MODE. Infinite Drag Tolerance. Zero Overshoot.
- * ==============================================================================
+ * ENTERPRISE-GRADE: TARGETING & LOCK-HEAD SYSTEM - NETWORK INJECTOR
+ * Deployment: Shadowrocket / Proxy Packet Interception
+ * Core Logic: Bone ID Spoofing & Dynamic Y-Offset Magnetism
  */
 
-class QuantumMath {
+// ==========================================
+// 1. UTILS: TOÁN HỌC KHÔNG GIAN
+// ==========================================
+class AdvancedMath {
     static clamp(value, min, max) {
         return Math.max(min, Math.min(max, value));
     }
 
     /**
-     * DỰ ĐOÁN TỨC THỜI (INSTANT INTERCEPT)
+     * Tính toán Delta Y (Khoảng cách bù trừ từ Ngực lên Đầu) dựa trên cự ly.
+     * Càng gần kẻ địch, mô hình càng lớn -> Delta Y phải lớn hơn.
      */
-    static predictGodMode(targetPos, targetVel, selfVel, distance) {
-        const BULLET_SPEED = 99999.0; 
-        const timeDelta = (distance / BULLET_SPEED) + 0.001; 
-        return {
-            x: targetPos.x + ((targetVel.x - selfVel.x) * timeDelta),
-            y: targetPos.y + ((targetVel.y - selfVel.y) * timeDelta),
-            z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
-        };
+    static calculateDynamicYOffset(distance) {
+        const BASE_OFFSET = 0.65; // Đơn vị đo lường engine (m)
+        const MAX_DISTANCE = 100.0;
+        
+        if (distance <= 0) return BASE_OFFSET;
+        if (distance >= MAX_DISTANCE) return BASE_OFFSET * 0.3; // Xa thì bù trừ ít lại
+        
+        // Tuyến tính suy giảm theo khoảng cách
+        const scaleFactor = 1 - (distance / MAX_DISTANCE);
+        return BASE_OFFSET * (0.3 + (0.7 * scaleFactor));
     }
 }
 
-class QuantumGodEngine {
+// ==========================================
+// 2. CORE MUTATOR: BỘ THAO TÚNG DỮ LIỆU
+// ==========================================
+class MagnetismHijacker {
     constructor() {
-        this.godWeight = 999999.0;
-        this.voidWeight = -999999.0;
-        
-        // Danh sách xương bị hóa "Bóng ma" (Chỉ giữ lại Đầu và Cổ)
-        this.ghostBones = [
-            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
-            'left_arm', 'right_arm', 'left_leg', 'right_leg', 
-            'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
-            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
-        ];
+        this.voidWeight = -99999.0;
+        this.maxWeight = 99999.0;
+        this.targetBone = "bone_Head";
     }
 
-    // 1. GIAO THỨC ZERO POINT (HỎA LỰC TUYỆT ĐỐI)
-    enforceZeroPoint(weapon) {
-        if (!weapon) return;
-        
-        const nullifyProps = [
-            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
-            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
-            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty', 'strafe_penalty',
-            'weapon_sway', 'recoil_recovery_rate'
-        ];
-
-        for (let i = 0; i < nullifyProps.length; i++) {
-            if (nullifyProps[i] in weapon) weapon[nullifyProps[i]] = 0.0;
-        }
-
-        weapon.aim_assist_range = 600.0; 
-        weapon.auto_aim_angle = 360.0; 
-        weapon.bullet_speed = 99999.0; 
-        if ('range_damage_falloff' in weapon) weapon.range_damage_falloff = 0.0; 
-    }
-
-    // 2. VÙNG TRƯỢT TỐC ĐỘ CAO & BỨC TƯỜNG MA SÁT ĐỈNH ĐẦU
-    warpHitboxes(hitboxes, distance) {
+    /**
+     * Sửa đổi trực tiếp mảng Hitbox trong gói tin để đánh lừa thuật toán Raycast của game.
+     * Game sẽ tưởng vùng Đầu có trọng lượng từ tính lớn nhất.
+     */
+    spoofBoneIDs(hitboxes) {
         if (!hitboxes) return;
 
-        // Bôi trơn vùng thân: Vuốt xuyên qua không gặp cản trở
-        for (let i = 0; i < this.ghostBones.length; i++) {
-            const bone = this.ghostBones[i];
+        // 1. Phá bỏ lực hút thân (Anti-Chest Lock)
+        const torsoBones = ['spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips'];
+        torsoBones.forEach(bone => {
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight;
                 hitboxes[bone].priority = "IGNORE";
-                hitboxes[bone].m_Radius = 0.00001; 
-                hitboxes[bone].friction = 0.0; 
-                hitboxes[bone].vertical_magnetism_multiplier = 0.0; 
-                hitboxes[bone].horizontal_magnetism_multiplier = 0.0;
+                hitboxes[bone].m_Radius = 0.01; // Thu nhỏ hitbox thân về gần mức 0
             }
-        }
+        });
 
-        // Bức tường ma sát tuyệt đối tại Đầu
+        // 2. Khuếch đại lực hút Đầu
         if (hitboxes.head) {
-            let auraMultiplier = distance < 20.0 ? 25.0 : (distance > 50.0 ? 50.0 : 35.0);
-
-            hitboxes.head.snap_weight = this.godWeight; 
+            hitboxes.head.snap_weight = this.maxWeight;
             hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius *= auraMultiplier; 
+            // Tăng bán kính nhận diện để Raycast dễ chạm hơn, nhưng không làm to mô hình
+            hitboxes.head.m_Radius *= 4.5; 
+        }
+    }
+
+    /**
+     * Ghi đè tọa độ của Center of Mass (Trọng tâm) để hút tâm lên trán.
+     */
+    injectYOffset(player) {
+        if (!player || !player.head_pos || !player.chest_pos) return;
+
+        const distance = player.distance || 10.0; // Mặc định 10m nếu không có dữ liệu
+        const deltaY = AdvancedMath.calculateDynamicYOffset(distance);
+
+        // Ghi đè trọng tâm (Center of Mass) mà game dùng để tính Aim Assist
+        // Thay vì hút vào chest_pos, ép nó hút vào chest_pos + deltaY (vùng đầu/trán)
+        if (player.center_of_mass) {
+            player.center_of_mass.y = player.chest_pos.y + deltaY;
             
-            // Lực khóa cứng tại điểm tiếp xúc
-            hitboxes.head.vertical_magnetism_multiplier = this.godWeight; 
-            hitboxes.head.horizontal_magnetism_multiplier = this.godWeight;
-            hitboxes.head.friction = this.godWeight; 
-        }
-
-        if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = this.godWeight * 0.8;
-            hitboxes.neck.priority = "HIGH";
-            hitboxes.neck.friction = this.godWeight; 
+            // Đảm bảo không vẩy vượt quá đỉnh đầu (Y-Axis Clamping)
+            const absoluteHeadTop = player.head_pos.y + 0.15; // +0.15 là đỉnh mô hình
+            player.center_of_mass.y = AdvancedMath.clamp(player.center_of_mass.y, player.chest_pos.y, absoluteHeadTop);
         }
     }
 
-    // 3. DỊCH CHUYỂN TRỌNG TÂM AN TOÀN
-    hijackCoordinate(player, selfVel) {
-        if (!player || !player.head_pos || !player.center_of_mass) return;
+    processPacketData(data) {
+        if (!data || !Array.isArray(data.players)) return data;
 
-        const dist = player.distance || 15.0;
-        const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
-        
-        const interceptPos = QuantumMath.predictGodMode(player.head_pos, targetVel, selfVel, dist);
-
-        player.center_of_mass.x = interceptPos.x;
-        player.center_of_mass.z = interceptPos.z;
-        
-        // Neo tĩnh tọa độ Y cách đỉnh đầu một chút để không lọt qua mép trên hitbox
-        const safeY = player.head_pos.y - 0.05; 
-        player.center_of_mass.y = safeY;
-    }
-
-    // 4. CƠ CHẾ ĐÓNG BĂNG TRỤC Y (Y-AXIS FREEZE)
-    freezeYAxisCamera(cameraState) {
-        if (!cameraState) return;
-        
-        // Khóa mục tiêu triệt để
-        cameraState.stickiness = this.godWeight; 
-        cameraState.lock_bone = "bone_Head";
-        cameraState.interpolation = "ZERO"; 
-        
-        // TRIỆT TIÊU MỌI GIA TỐC VÀ ĐỘ NHẠY DỌC (Cắt đứt tín hiệu vuốt lên)
-        const verticalLocks = [
-            'max_pitch_velocity', 
-            'pitch_speed', 
-            'vertical_sensitivity_multiplier', 
-            'aim_acceleration_y',
-            'pitch_acceleration'
-        ];
-
-        for (let prop of verticalLocks) {
-            if (prop in cameraState) {
-                cameraState[prop] = 0.0;
-            }
-        }
-        
-        // Đảm bảo trục ngang (Yaw) vẫn có thể hoạt động một phần để tracking địch chạy ngang
-        if ('max_yaw_velocity' in cameraState && cameraState.max_yaw_velocity === 0) {
-             cameraState.max_yaw_velocity = 1.0; 
-        }
-    }
-
-    // THUẬT TOÁN ĐỆ QUY (RECURSIVE TRAVERSAL)
-    processRecursive(node, context = { selfVel: {x:0, y:0, z:0} }) {
-        if (typeof node !== 'object' || node === null) return node;
-
-        if (Array.isArray(node)) {
-            for (let i = 0; i < node.length; i++) {
-                node[i] = this.processRecursive(node[i], context);
-            }
-            return node;
+        // Quét qua toàn bộ danh sách kẻ địch trong vùng Render
+        for (let i = 0; i < data.players.length; i++) {
+            const enemy = data.players[i];
+            
+            // 1. Đánh lừa ID xương để game tự dồn lực vào đầu
+            this.spoofBoneIDs(enemy.hitboxes);
+            
+            // 2. Tiêm tọa độ bù trừ ảo để khóa chặt vào vị trí trán
+            this.injectYOffset(enemy);
         }
 
-        if ('player_velocity' in node) context.selfVel = node.player_velocity;
-        if ('weapon' in node) this.enforceZeroPoint(node.weapon);
-
-        if ('players' in node && Array.isArray(node.players)) {
-            for (let i = 0; i < node.players.length; i++) {
-                const enemy = node.players[i];
-                const dist = enemy.distance || 15.0;
-                
-                this.warpHitboxes(enemy.hitboxes, dist);
-                this.hijackCoordinate(enemy, context.selfVel);
-            }
-        }
-
-        if ('camera_state' in node) {
-            this.freezeYAxisCamera(node.camera_state);
-        }
-
-        for (const key of Object.keys(node)) {
-            if (typeof node[key] === 'object' && key !== 'center_of_mass' && key !== 'head_pos' && key !== 'chest_pos' && key !== 'velocity') {
-                node[key] = this.processRecursive(node[key], context);
-            }
-        }
-
-        return node;
+        return data;
     }
 }
 
-// ==============================================================================
-// SHADOWROCKET EXECUTION BLOCK 
-// ==============================================================================
-if (typeof $response !== "undefined" && $response.body) {
+// ==========================================
+// 3. SHADOWROCKET INTERCEPTOR (ENTRY POINT)
+// ==========================================
+const hijacker = new MagnetismHijacker();
+
+function processGamePayload(bodyString) {
     try {
-        const payload = JSON.parse($response.body);
-        const Engine = new QuantumGodEngine();
-        const mutatedPayload = Engine.processRecursive(payload);
-        $done({ body: JSON.stringify(mutatedPayload) });
+        // Parse gói tin JSON từ Server gửi về Client
+        const payload = JSON.parse(bodyString);
+        
+        // Thực thi Hijack logic
+        const mutatedPayload = hijacker.processPacketData(payload);
+        
+        // Đóng gói lại và gửi cho Client
+        return JSON.stringify(mutatedPayload);
     } catch (error) {
-        $done({ body: $response.body }); 
+        // Fallback: Trả về gói tin gốc nếu lỗi để tránh Crash game
+        return bodyString; 
     }
+}
+
+// Giao thức thực thi của Shadowrocket ($done)
+if (typeof $response !== "undefined" && $response.body) {
+    $done({ body: processGamePayload($response.body) });
 }
