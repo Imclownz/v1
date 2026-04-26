@@ -1,132 +1,92 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v60.5: THE GOD CODE (Y-AXIS FREEZE EDITION)
- * Architecture: Absolute Coordinate Hijacking + Y-Axis Mechanical Lock
- * Optimization: Unrestricted X-Axis Tracking, Zero Vertical Overshoot
+ * QUANTUM REACH v63: THE EQUILIBRIUM (PID CONTROLLER)
+ * Architecture: Dynamic Hit-Confirmation Damping + Absolute Void Body
+ * Optimization: Soft-Lock after Headshot, Anti-Drop Mechanism
  * ==============================================================================
  */
 
-class QuantumMath {
-    static clamp(value, min, max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    // Dự đoán tức thời (God Mode) - Bỏ qua độ trễ đạn bay
-    static predictInstant(targetPos, targetVel, selfVel, distance) {
-        const BULLET_SPEED = 99999.0; 
-        const timeDelta = (distance / BULLET_SPEED) + 0.001; 
-        return {
-            x: targetPos.x + ((targetVel.x - selfVel.x) * timeDelta),
-            y: targetPos.y + ((targetVel.y - selfVel.y) * timeDelta),
-            z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
-        };
-    }
-}
-
-class QuantumFreezeEngine {
+class QuantumEquilibrium {
     constructor() {
-        this.godWeight = 999999.0;
-        this.voidWeight = -999999.0;
+        this.maxPull = 999999.0;     // Lực hút quét mục tiêu ban đầu
+        this.voidPush = -999999.0;   // Lực đẩy cơ thể để chống rớt tâm
+        this.anchorPull = 35.0;      // Mức "Cân bằng động" sau khi đã có Headshot (Vừa đủ giữ)
         
-        // Hóa bóng ma toàn bộ phần thân dưới để tâm súng không bị cản lực
-        this.ghostBones = [
+        this.bodyBones = [
             'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
-            'left_arm', 'right_arm', 'left_leg', 'right_leg', 
-            'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
-            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
+            'left_arm', 'right_arm', 'left_leg', 'right_leg', 'shoulder', 'thigh', 'calf'
         ];
     }
 
-    // 1. HỎA LỰC ZERO-POINT: Xóa bỏ mọi yếu tố cản trở đường đạn
-    enforceZeroPoint(weapon) {
-        if (!weapon) return;
-        
-        const nullifyProps = [
-            'recoil', 'spread', 'camera_shake', 'progressive_spread', 
-            'recoil_accumulation', 'recoil_multiplier', 'horizontal_recoil', 
-            'vertical_recoil', 'bloom', 'movement_penalty', 'jump_penalty', 'strafe_penalty',
-            'weapon_sway', 'recoil_recovery_rate'
-        ];
+    // Hàm nhận diện trạng thái trúng đạn (Hit Detection Logic)
+    isTargetTakingHeadshots(player, camera) {
+        // Kiểm tra các cờ dữ liệu (flags) thường xuất hiện trong gói tin mạng khi có giao tranh
+        const isFiring = camera && camera.is_firing === true;
+        const hasRecentDamage = player.recent_damage && player.recent_damage > 0;
+        const isHitFlag = player.is_hit === true;
+        const hitHeadFlag = player.last_hit_bone === "bone_Head";
 
-        for (let i = 0; i < nullifyProps.length; i++) {
-            if (nullifyProps[i] in weapon) weapon[nullifyProps[i]] = 0.0;
-        }
-
-        weapon.aim_assist_range = 600.0; 
-        weapon.auto_aim_angle = 360.0; 
-        weapon.bullet_speed = 99999.0; 
-        if ('range_damage_falloff' in weapon) weapon.range_damage_falloff = 0.0; 
+        // Trả về True nếu súng đang nhả đạn và mục tiêu đang nhận sát thương
+        return (isFiring || hasRecentDamage || isHitFlag || hitHeadFlag);
     }
 
-    // 2. HITBOX MANIPULATION: Phễu từ tính và Bóng ma
-    warpHitboxes(hitboxes, distance) {
+    applyDynamicMagnetism(hitboxes, distance, isHittingHead) {
         if (!hitboxes) return;
 
-        // Triệt tiêu ma sát và từ tính vùng thân
-        for (let i = 0; i < this.ghostBones.length; i++) {
-            const bone = this.ghostBones[i];
+        // BƯỚC 1: Lực đẩy vĩnh cửu tại vùng Thân (Chống rớt tâm)
+        // Bất kể đạn trúng hay trượt, thân người luôn là "Bóng ma từ tính"
+        for (let bone of this.bodyBones) {
             if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].snap_weight = this.voidPush; // Đẩy Crosshair lên
                 hitboxes[bone].priority = "IGNORE";
                 hitboxes[bone].m_Radius = 0.00001; 
-                hitboxes[bone].friction = 0.0; 
+                hitboxes[bone].vertical_magnetism_multiplier = 0.0; 
+                hitboxes[bone].friction = 0.0;
             }
         }
 
-        // Tạo lực hút tĩnh cực đại tại Đầu
+        // BƯỚC 2: Cân bằng động tại vùng Đầu (PID Damping)
         if (hitboxes.head) {
-            let auraMultiplier = distance < 20.0 ? 25.0 : (distance > 50.0 ? 50.0 : 35.0);
-
-            hitboxes.head.snap_weight = this.godWeight; 
             hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius *= auraMultiplier; 
-            hitboxes.head.horizontal_magnetism_multiplier = this.godWeight; // Cho phép trượt ngang thoải mái
-            // Lưu ý: Không dùng vertical_magnetism khổng lồ ở đây nữa, vì ta sẽ khóa nó ở Camera State
+            hitboxes.head.m_Radius = distance > 40.0 ? hitboxes.head.m_Radius * 40.0 : hitboxes.head.m_Radius * 20.0;
+
+            if (isHittingHead) {
+                // TRẠNG THÁI 2: ĐÃ TRÚNG HEADSHOT -> GIẢM ÁP SUẤT
+                // Tâm súng nhẹ lại, không phản kháng lực tay quá mạnh, nhưng không rớt xuống ngực được do ngực đẩy lên
+                hitboxes.head.snap_weight = this.anchorPull * 10; 
+                hitboxes.head.vertical_magnetism_multiplier = this.anchorPull; 
+                hitboxes.head.friction = this.anchorPull * 2; 
+            } else {
+                // TRẠNG THÁI 1: TÌM KIẾM MỤC TIÊU -> HÚT CỰC ĐẠI
+                // Ép tâm súng bay thẳng lên đầu trong chớp mắt
+                hitboxes.head.snap_weight = this.maxPull; 
+                hitboxes.head.vertical_magnetism_multiplier = this.maxPull; 
+                hitboxes.head.friction = 500.0; // Phanh tạm thời
+            }
         }
 
         if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = this.godWeight * 0.8;
-            hitboxes.neck.priority = "HIGH";
+            hitboxes.neck.snap_weight = isHittingHead ? this.anchorPull : this.maxPull * 0.5;
         }
     }
 
-    // 3. HIJACK TRỌNG TÂM: Neo cứng đạn vào giữa sọ
     hijackCoordinate(player, selfVel) {
         if (!player || !player.head_pos || !player.center_of_mass) return;
 
+        const BULLET_SPEED = 99999.0; 
         const dist = player.distance || 15.0;
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
-        
-        const interceptPos = QuantumMath.predictInstant(player.head_pos, targetVel, selfVel, dist);
+        const timeDelta = (dist / BULLET_SPEED) + 0.001; 
 
-        player.center_of_mass.x = interceptPos.x;
-        player.center_of_mass.z = interceptPos.z;
+        // Khóa X, Z
+        player.center_of_mass.x = player.head_pos.x + ((targetVel.x - selfVel.x) * timeDelta);
+        player.center_of_mass.z = player.head_pos.z + ((targetVel.z - selfVel.z) * timeDelta);
         
-        // TRẦN TUYỆT ĐỐI TẠI TẦNG DỮ LIỆU
-        const absoluteCeiling = player.head_pos.y - 0.02; 
-        player.center_of_mass.y = QuantumMath.clamp(interceptPos.y, player.chest_pos ? player.chest_pos.y + 0.3 : absoluteCeiling - 0.1, absoluteCeiling);
+        // Neo Y ngay giữa trán
+        player.center_of_mass.y = player.head_pos.y - 0.03; 
     }
 
-    // 4. CHỐT CHẶN CƠ HỌC: ĐÓNG BĂNG TRỤC Y
-    applyYAxisFreeze(cameraState) {
-        if (!cameraState) return;
-        
-        cameraState.stickiness = this.godWeight; 
-        cameraState.lock_bone = "bone_Head";
-        cameraState.interpolation = "ZERO";
-
-        // TẮT HOÀN TOÀN TÍN HIỆU VUỐT DỌC CỦA NGƯỜI CHƠI
-        cameraState.vertical_sensitivity_multiplier = 0.0; 
-        
-        // TRIỆT TIÊU GIA TỐC VÀ QUÁN TÍNH TRỤC Y
-        cameraState.max_pitch_velocity = 0.0; 
-        cameraState.pitch_damping = this.godWeight; 
-        
-        // Giữ nguyên trục X (Yaw) để người chơi vẫn có thể lia tâm ngang theo kẻ địch đang chạy
-        cameraState.horizontal_sensitivity_multiplier = 1.0; 
-    }
-
-    processRecursive(node, context = { selfVel: {x:0, y:0, z:0} }) {
+    processRecursive(node, context = { selfVel: {x:0, y:0, z:0}, camera: null }) {
         if (typeof node !== 'object' || node === null) return node;
 
         if (Array.isArray(node)) {
@@ -137,21 +97,21 @@ class QuantumFreezeEngine {
         }
 
         if ('player_velocity' in node) context.selfVel = node.player_velocity;
-        if ('weapon' in node) this.enforceZeroPoint(node.weapon);
+        if ('camera_state' in node) context.camera = node.camera_state;
 
-        if ('players' in node && Array.isArray(node.players)) {
-            for (let i = 0; i < node.players.length; i++) {
-                const enemy = node.players[i];
-                const dist = enemy.distance || 15.0;
-                
-                this.warpHitboxes(enemy.hitboxes, dist);
-                this.hijackCoordinate(enemy, context.selfVel);
-            }
+        if ('weapon' in node) {
+            node.weapon.recoil = 0.0;
+            node.weapon.spread = 0.0;
+            node.weapon.bullet_speed = 99999.0;
         }
 
-        // Kích hoạt chốt chặn Camera ở mọi node tìm thấy
-        if ('camera_state' in node) {
-            this.applyYAxisFreeze(node.camera_state);
+        if ('players' in node && Array.isArray(node.players)) {
+            for (let enemy of node.players) {
+                // Kích hoạt logic Cân bằng động dựa trên nhận diện sát thương
+                const isDampingActive = this.isTargetTakingHeadshots(enemy, context.camera);
+                this.applyDynamicMagnetism(enemy.hitboxes, enemy.distance || 15.0, isDampingActive);
+                this.hijackCoordinate(enemy, context.selfVel);
+            }
         }
 
         for (const key of Object.keys(node)) {
@@ -170,7 +130,7 @@ class QuantumFreezeEngine {
 if (typeof $response !== "undefined" && $response.body) {
     try {
         const payload = JSON.parse($response.body);
-        const Engine = new QuantumFreezeEngine();
+        const Engine = new QuantumEquilibrium();
         const mutatedPayload = Engine.processRecursive(payload);
         $done({ body: JSON.stringify(mutatedPayload) });
     } catch (error) {
