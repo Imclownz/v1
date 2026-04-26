@@ -1,92 +1,136 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v63: THE EQUILIBRIUM (PID CONTROLLER)
- * Architecture: Dynamic Hit-Confirmation Damping + Absolute Void Body
- * Optimization: Soft-Lock after Headshot, Anti-Drop Mechanism
+ * QUANTUM REACH v63: THE EQUILIBRIUM (DYNAMIC MAGNETISM)
+ * Architecture: Two-Phase Bipartite Trigger + Ghost Body + Absolute Ceiling
+ * Optimization: Adaptive Vertical Drag, Anti-Body Gravity, Smooth Tracking
  * ==============================================================================
  */
 
-class QuantumEquilibrium {
+class QuantumMath {
+    static clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    static predictInstant(targetPos, targetVel, selfVel, distance) {
+        const BULLET_SPEED = 99999.0;
+        const timeDelta = (distance / BULLET_SPEED) + 0.001; 
+        return {
+            x: targetPos.x + ((targetVel.x - selfVel.x) * timeDelta),
+            y: targetPos.y + ((targetVel.y - selfVel.y) * timeDelta),
+            z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
+        };
+    }
+}
+
+class EquilibriumEngine {
     constructor() {
-        this.maxPull = 999999.0;     // Lực hút quét mục tiêu ban đầu
-        this.voidPush = -999999.0;   // Lực đẩy cơ thể để chống rớt tâm
-        this.anchorPull = 35.0;      // Mức "Cân bằng động" sau khi đã có Headshot (Vừa đủ giữ)
+        this.godWeight = 999999.0;
+        this.voidWeight = -999999.0;
         
-        this.bodyBones = [
+        // Trọng lượng cân bằng (Equilibrium Weight) - Đủ để giữ tâm ở đầu, không đủ để làm khựng Camera
+        this.balanceWeight = 150.0; 
+        
+        this.ghostBones = [
             'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
-            'left_arm', 'right_arm', 'left_leg', 'right_leg', 'shoulder', 'thigh', 'calf'
+            'left_arm', 'right_arm', 'left_leg', 'right_leg', 
+            'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
+            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
         ];
     }
 
-    // Hàm nhận diện trạng thái trúng đạn (Hit Detection Logic)
-    isTargetTakingHeadshots(player, camera) {
-        // Kiểm tra các cờ dữ liệu (flags) thường xuất hiện trong gói tin mạng khi có giao tranh
-        const isFiring = camera && camera.is_firing === true;
-        const hasRecentDamage = player.recent_damage && player.recent_damage > 0;
-        const isHitFlag = player.is_hit === true;
-        const hitHeadFlag = player.last_hit_bone === "bone_Head";
-
-        // Trả về True nếu súng đang nhả đạn và mục tiêu đang nhận sát thương
-        return (isFiring || hasRecentDamage || isHitFlag || hitHeadFlag);
+    // Kiểm tra trạng thái xả đạn (Pha 1 hay Pha 2)
+    checkCombatState(weapon, camera) {
+        let isActiveCombat = false;
+        // Nếu súng đang có độ giật tích lũy, đang xả đạn, hoặc camera đang ở trạng thái ngắm bắn/khóa mục tiêu
+        if (weapon && (weapon.recoil_accumulation > 0.01 || weapon.shots_fired > 0 || weapon.is_firing)) {
+            isActiveCombat = true;
+        }
+        if (camera && (camera.is_firing || camera.is_aiming)) {
+            isActiveCombat = true;
+        }
+        return isActiveCombat;
     }
 
-    applyDynamicMagnetism(hitboxes, distance, isHittingHead) {
+    enforceZeroPoint(weapon) {
+        if (!weapon) return;
+        
+        const nullifyProps = [
+            'recoil', 'spread', 'bloom', 'camera_shake', 'progressive_spread', 
+            'recoil_multiplier', 'horizontal_recoil', 'vertical_recoil', 
+            'movement_penalty', 'jump_penalty', 'weapon_sway'
+        ];
+
+        for (let prop of nullifyProps) {
+            if (prop in weapon) weapon[prop] = 0.0;
+        }
+
+        weapon.aim_assist_range = 600.0; 
+        weapon.auto_aim_angle = 360.0; 
+        weapon.bullet_speed = 99999.0; 
+    }
+
+    // THUẬT TOÁN TỪ TÍNH ĐỘNG (DYNAMIC MAGNETISM)
+    warpHitboxes(hitboxes, distance, isCombatActive) {
         if (!hitboxes) return;
 
-        // BƯỚC 1: Lực đẩy vĩnh cửu tại vùng Thân (Chống rớt tâm)
-        // Bất kể đạn trúng hay trượt, thân người luôn là "Bóng ma từ tính"
-        for (let bone of this.bodyBones) {
+        // 1. LỰC ĐẨY THÂN THỂ (ANTI-BODY GRAVITY)
+        // Luôn giữ ở mức Âm Vô Cực để đảm bảo dù lực hút ở đầu có giảm, tâm súng tuyệt đối KHÔNG BAO GIỜ rớt xuống ngực.
+        for (let bone of this.ghostBones) {
             if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidPush; // Đẩy Crosshair lên
+                hitboxes[bone].snap_weight = this.voidWeight;
                 hitboxes[bone].priority = "IGNORE";
                 hitboxes[bone].m_Radius = 0.00001; 
-                hitboxes[bone].vertical_magnetism_multiplier = 0.0; 
-                hitboxes[bone].friction = 0.0;
+                hitboxes[bone].friction = 0.0; 
+                hitboxes[bone].vertical_magnetism_multiplier = this.voidWeight; // Đẩy ngược tâm súng lên trên
             }
         }
 
-        // BƯỚC 2: Cân bằng động tại vùng Đầu (PID Damping)
+        // 2. KÍCH HOẠT 2 PHA TẠI VÙNG ĐẦU
         if (hitboxes.head) {
             hitboxes.head.priority = "MAXIMUM";
-            hitboxes.head.m_Radius = distance > 40.0 ? hitboxes.head.m_Radius * 40.0 : hitboxes.head.m_Radius * 20.0;
-
-            if (isHittingHead) {
-                // TRẠNG THÁI 2: ĐÃ TRÚNG HEADSHOT -> GIẢM ÁP SUẤT
-                // Tâm súng nhẹ lại, không phản kháng lực tay quá mạnh, nhưng không rớt xuống ngực được do ngực đẩy lên
-                hitboxes.head.snap_weight = this.anchorPull * 10; 
-                hitboxes.head.vertical_magnetism_multiplier = this.anchorPull; 
-                hitboxes.head.friction = this.anchorPull * 2; 
+            hitboxes.head.m_Radius = distance > 50.0 ? 25.0 : 15.0; 
+            
+            if (!isCombatActive) {
+                // PHA 1: BẮT MỤC TIÊU (ACQUISITION)
+                // Khi chưa bắn trúng, kéo tâm lên đầu với lực Thần Thánh.
+                hitboxes.head.snap_weight = this.godWeight; 
+                hitboxes.head.vertical_magnetism_multiplier = this.godWeight;
+                hitboxes.head.friction = this.godWeight;
             } else {
-                // TRẠNG THÁI 1: TÌM KIẾM MỤC TIÊU -> HÚT CỰC ĐẠI
-                // Ép tâm súng bay thẳng lên đầu trong chớp mắt
-                hitboxes.head.snap_weight = this.maxPull; 
-                hitboxes.head.vertical_magnetism_multiplier = this.maxPull; 
-                hitboxes.head.friction = 500.0; // Phanh tạm thời
+                // PHA 2: DUY TRÌ CÂN BẰNG (EQUILIBRIUM HOLD) - Ý tưởng của bạn
+                // Khi viên đạn đầu tiên đã nổ/tâm đã dính, hạ lực dọc xuống mức Cân bằng.
+                // Lực này đủ mạnh để chống lại lực rơi tự nhiên, nhưng đủ mềm để không gây văng tâm khi tay bạn vẫn đang vuốt.
+                hitboxes.head.snap_weight = this.balanceWeight; 
+                hitboxes.head.vertical_magnetism_multiplier = 50.0; // Giảm lực đẩy dọc
+                hitboxes.head.friction = 100.0; // Mở khóa ma sát để camera trượt mượt mà
             }
+
+            // Từ tính ngang luôn ở mức tối đa để tracking kẻ địch di chuyển ngang
+            hitboxes.head.horizontal_magnetism_multiplier = this.godWeight; 
         }
 
         if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = isHittingHead ? this.anchorPull : this.maxPull * 0.5;
+            hitboxes.neck.snap_weight = isCombatActive ? this.balanceWeight * 0.5 : this.godWeight * 0.8;
+            hitboxes.neck.priority = "HIGH";
         }
     }
 
     hijackCoordinate(player, selfVel) {
         if (!player || !player.head_pos || !player.center_of_mass) return;
 
-        const BULLET_SPEED = 99999.0; 
         const dist = player.distance || 15.0;
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
-        const timeDelta = (dist / BULLET_SPEED) + 0.001; 
+        const interceptPos = QuantumMath.predictInstant(player.head_pos, targetVel, selfVel, dist);
 
-        // Khóa X, Z
-        player.center_of_mass.x = player.head_pos.x + ((targetVel.x - selfVel.x) * timeDelta);
-        player.center_of_mass.z = player.head_pos.z + ((targetVel.z - selfVel.z) * timeDelta);
+        player.center_of_mass.x = interceptPos.x;
+        player.center_of_mass.z = interceptPos.z;
         
-        // Neo Y ngay giữa trán
-        player.center_of_mass.y = player.head_pos.y - 0.03; 
+        // TRẦN TUYỆT ĐỐI CỦA V60: Vẫn giữ nguyên để làm chốt chặn cuối cùng.
+        const absoluteCeiling = player.head_pos.y - 0.02; 
+        player.center_of_mass.y = QuantumMath.clamp(interceptPos.y, absoluteCeiling - 0.15, absoluteCeiling);
     }
 
-    processRecursive(node, context = { selfVel: {x:0, y:0, z:0}, camera: null }) {
+    processRecursive(node, context = { selfVel: {x:0, y:0, z:0}, isCombat: false }) {
         if (typeof node !== 'object' || node === null) return node;
 
         if (Array.isArray(node)) {
@@ -96,21 +140,28 @@ class QuantumEquilibrium {
             return node;
         }
 
+        // Đọc trạng thái chiến đấu
         if ('player_velocity' in node) context.selfVel = node.player_velocity;
-        if ('camera_state' in node) context.camera = node.camera_state;
+        context.isCombat = context.isCombat || this.checkCombatState(node.weapon, node.camera_state);
 
-        if ('weapon' in node) {
-            node.weapon.recoil = 0.0;
-            node.weapon.spread = 0.0;
-            node.weapon.bullet_speed = 99999.0;
-        }
+        if ('weapon' in node) this.enforceZeroPoint(node.weapon);
 
         if ('players' in node && Array.isArray(node.players)) {
             for (let enemy of node.players) {
-                // Kích hoạt logic Cân bằng động dựa trên nhận diện sát thương
-                const isDampingActive = this.isTargetTakingHeadshots(enemy, context.camera);
-                this.applyDynamicMagnetism(enemy.hitboxes, enemy.distance || 15.0, isDampingActive);
+                this.warpHitboxes(enemy.hitboxes, enemy.distance || 15.0, context.isCombat);
                 this.hijackCoordinate(enemy, context.selfVel);
+            }
+        }
+
+        if ('camera_state' in node) {
+            node.camera_state.interpolation = "ZERO";
+            
+            if (context.isCombat) {
+                // Pha 2: Mở lại một chút độ nhạy dọc để tay bạn có thể điều chỉnh vi mô, không bị khóa cứng đơ
+                node.camera_state.vertical_sensitivity_multiplier = 0.5;
+            } else {
+                // Pha 1: Khóa chặt Y để chống văng khi vừa chạm đầu
+                node.camera_state.vertical_sensitivity_multiplier = 0.0;
             }
         }
 
@@ -125,12 +176,12 @@ class QuantumEquilibrium {
 }
 
 // ==============================================================================
-// SHADOWROCKET EXECUTION
+// EXECUTION BLOCK
 // ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
     try {
         const payload = JSON.parse($response.body);
-        const Engine = new QuantumEquilibrium();
+        const Engine = new EquilibriumEngine();
         const mutatedPayload = Engine.processRecursive(payload);
         $done({ body: JSON.stringify(mutatedPayload) });
     } catch (error) {
