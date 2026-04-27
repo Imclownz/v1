@@ -1,26 +1,25 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v68: OMNI-ANCHOR MAXIMUM DESTRUCTION EDITION
- * Architecture: Hybrid Persistent State + Aggressive Multi-Frame + Deep Short-Circuit
- * Optimization: Absolute Jump-Tracking, Zero Overshoot, Maximum Head Magnetism,
- *               CPU-Optimized with Aggressive Early Exit
+ * QUANTUM REACH v69: THE PARABOLIC OMNI-STATE
+ * Architecture: True Frame Sync + Parabolic Jump Prediction + Payload Pre-Filter
+ * Optimization: Zero-Lag JSON Parsing, Gravity-Aware Hijacking, Flawless Ceiling
  * ==============================================================================
  */
 
-// Hybrid Global State (v68: thêm version + cleanup)
+// 1. HYBRID GLOBAL STATE (An toàn & Độc lập)
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-if (!_global.__QuantumState || _global.__QuantumState.version !== 68) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 69) {
     _global.__QuantumState = {
-        version: 68,
+        version: 69,
         frameCounter: 0,
         previousVelY: {},
         lastFireRate: 0.12,
-        playerLastSeen: {}   // Timestamp để cleanup
+        playerLastSeen: {}
     };
 }
 
-const MAX_TRACKED_PLAYERS = 25;     // Giới hạn để tránh memory bloat
-const CLEANUP_INTERVAL = 120;       // Frames
+const MAX_TRACKED_PLAYERS = 25;
+const CLEANUP_INTERVAL = 120;
 
 class QuantumMath {
     static clamp(value, min, max) {
@@ -28,27 +27,35 @@ class QuantumMath {
     }
 
     static getDynamicFrames(distance) {
-        return Math.max(2, Math.min(6, Math.round(distance / 12.0))); // Tăng nhẹ bias cho tầm xa
+        return Math.max(2, Math.min(6, Math.round(distance / 12.0))); 
     }
 
-    static predictMultiFrame(targetPos, targetVel, selfVel, distance) {
+    // KHẮC PHỤC: Dự đoán Parabol bù trừ trọng lực cho trục Y
+    static predictParabolic(targetPos, targetVel, selfVel, distance) {
         const frames = this.getDynamicFrames(distance);
         const BULLET_SPEED = 99999.0;
+        const GRAVITY = -9.81; // Gia tốc trọng trường tiêu chuẩn của Engine
+        
         let pos = { ...targetPos };
-        const dt = (distance / BULLET_SPEED) + 0.0008; // Giảm dt nhẹ để hút mạnh hơn
+        let currentVy = targetVel.y;
+        const dt = (distance / BULLET_SPEED) + 0.001; 
         
         for (let i = 0; i < frames; i++) {
+            // Trục X, Z (Chuyển động tuyến tính)
             pos.x += (targetVel.x - selfVel.x) * dt;
-            pos.y += (targetVel.y - selfVel.y) * dt;
             pos.z += (targetVel.z - selfVel.z) * dt;
+            
+            // Trục Y (Chuyển động rơi tự do)
+            pos.y += (currentVy - selfVel.y) * dt + 0.5 * GRAVITY * (dt * dt);
+            currentVy += GRAVITY * dt; // Cập nhật vận tốc rơi theo khung hình
         }
         return pos;
     }
 }
 
-class OmniAnchorEngine {
+class ParabolicAnchorEngine {
     constructor() {
-        this.godWeight = 9999999.0;      // Tăng thêm
+        this.godWeight = 9999999.0;      
         this.voidWeight = -9999999.0;
         this.balanceWeight = 220.0;
 
@@ -58,7 +65,6 @@ class OmniAnchorEngine {
             'particles', 'minimap', 'leaderboard'
         ]);
 
-        // Ghost bones mở rộng tối đa
         this.ghostBones = [
             'root', 'spine', 'spine1', 'spine2', 'spine3', 'spine4', 'chest', 
             'pelvis', 'hips', 'waist',
@@ -68,8 +74,6 @@ class OmniAnchorEngine {
             'left_calf', 'right_calf', 'left_foot', 'right_foot',
             'left_shoulder', 'right_shoulder', 'neck', 'clavicle'
         ];
-
-        this.cleanupFrame = 0;
     }
 
     getCombatPhase(weapon, camera) {
@@ -120,7 +124,6 @@ class OmniAnchorEngine {
     warpHitboxes(hitboxes, distance, phase, isAirborne, velTrend) {
         if (!hitboxes) return;
 
-        // Ghost bones cực mạnh
         for (let bone of this.ghostBones) {
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight * 1.2;
@@ -149,6 +152,8 @@ class OmniAnchorEngine {
             } else if (phase === 2) {
                 const fireRate = _global.__QuantumState.lastFireRate || 0.12;
                 const releaseCycle = Math.max(4, Math.round(1.0 / fireRate));
+                
+                // Đồng bộ đúng với biến đếm toàn cục
                 const isReleasing = (_global.__QuantumState.frameCounter % releaseCycle) < Math.ceil(releaseCycle * 0.45);
 
                 const snapFactor = isReleasing ? 0.48 : 1.0;
@@ -176,18 +181,19 @@ class OmniAnchorEngine {
         const velTrend = this.calculateAirborneTrend(targetVel, previousVelY);
         const isAirborne = Math.abs(targetVel.y) > 1.2 || velTrend.isRising || velTrend.isFalling || velTrend.magnitude > 3.0;
 
-        const interceptPos = QuantumMath.predictMultiFrame(player.head_pos, targetVel, selfVel, dist);
+        // Kích hoạt dự đoán Parabol
+        const interceptPos = QuantumMath.predictParabolic(player.head_pos, targetVel, selfVel, dist);
 
         player.center_of_mass.x = interceptPos.x;
         player.center_of_mass.z = interceptPos.z;
 
-        const absoluteCeiling = player.head_pos.y - 0.008; // Siết cực chặt
+        // KHẮC PHỤC: Nới lỏng trần nội suy để tâm súng không bị khựng
+        const absoluteCeiling = player.head_pos.y - 0.015; 
 
         let targetY = isAirborne 
             ? absoluteCeiling 
-            : QuantumMath.clamp(interceptPos.y, absoluteCeiling - 0.22, absoluteCeiling);
+            : QuantumMath.clamp(interceptPos.y, absoluteCeiling - 0.20, absoluteCeiling);
 
-        // Anti-overshoot cực mạnh
         if (isAirborne && velTrend.magnitude > 6.0) {
             const overshootClamp = velTrend.acceleration > 0 ? 0.04 : -0.06;
             targetY = QuantumMath.clamp(targetY + overshootClamp, absoluteCeiling - 0.12, absoluteCeiling + 0.05);
@@ -199,8 +205,7 @@ class OmniAnchorEngine {
     }
 
     cleanupOldPlayers() {
-        this.cleanupFrame++;
-        if (this.cleanupFrame % CLEANUP_INTERVAL !== 0) return;
+        if (_global.__QuantumState.frameCounter % CLEANUP_INTERVAL !== 0) return;
 
         const now = _global.__QuantumState.frameCounter;
         const keys = Object.keys(_global.__QuantumState.previousVelY);
@@ -226,17 +231,10 @@ class OmniAnchorEngine {
 
         if ('player_velocity' in node) context.selfVel = node.player_velocity;
 
-        _global.__QuantumState.frameCounter++;
-
         const currentPhase = this.getCombatPhase(node.weapon, node.camera_state);
         if (currentPhase > context.phase) context.phase = currentPhase;
 
         if ('weapon' in node) this.enforceZeroPoint(node.weapon);
-
-        // Aggressive early exit khi không firing
-        if (context.phase === 0 && !node.players?.length) {
-            return node; // Short-circuit mạnh
-        }
 
         if ('players' in node && Array.isArray(node.players)) {
             for (let enemy of node.players) {
@@ -249,7 +247,6 @@ class OmniAnchorEngine {
                 const { isAirborne, velTrend, prevY } = this.hijackCoordinate(enemy, context.selfVel, lastY);
 
                 _global.__QuantumState.previousVelY[playerId] = prevY;
-
                 this.warpHitboxes(enemy.hitboxes, enemy.distance || 20.0, context.phase, isAirborne, velTrend);
             }
             this.cleanupOldPlayers();
@@ -265,7 +262,6 @@ class OmniAnchorEngine {
             }
         }
 
-        // Deep short-circuit
         for (const key of Object.keys(node)) {
             if (this.IGNORE_KEYS.has(key)) continue;
 
@@ -279,15 +275,24 @@ class OmniAnchorEngine {
 }
 
 // ==============================================================================
-// EXECUTION BLOCK - SHADOWROCKET
+// EXECUTION BLOCK WITH PRE-FILTER (TỐI ƯU HÓA CPU TUYỆT ĐỐI)
 // ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
-    try {
-        const payload = JSON.parse($response.body);
-        const Engine = new OmniAnchorEngine();
-        const mutatedPayload = Engine.processRecursive(payload);
-        $done({ body: JSON.stringify(mutatedPayload) });
-    } catch (error) {
+    // KHẮC PHỤC: Chỉ phân tích JSON nếu gói tin thực sự chứa dữ liệu chiến đấu
+    if ($response.body.includes('"players"') || $response.body.includes('"camera_state"')) {
+        try {
+            // KHẮC PHỤC: Bộ đếm Frame chỉ tăng 1 lần duy nhất cho mỗi gói tin
+            _global.__QuantumState.frameCounter++;
+            
+            const payload = JSON.parse($response.body);
+            const Engine = new ParabolicAnchorEngine();
+            const mutatedPayload = Engine.processRecursive(payload);
+            $done({ body: JSON.stringify(mutatedPayload) });
+        } catch (error) {
+            $done({ body: $response.body });
+        }
+    } else {
+        // Trả về ngay lập tức với các gói tin rác (ping, chat, ui...)
         $done({ body: $response.body });
     }
 }
