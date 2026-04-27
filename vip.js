@@ -1,19 +1,20 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v76: THE ABSOLUTE ASSIGNMENT
+ * QUANTUM REACH v77: FRONT-FOCUSED ABSOLUTE ASSIGNMENT
  * Architecture: Direct Euler Angle Forcing + Target Stickiness + Ping Buffer
- * Fixes: No Magnetism Lag, Absolute Zero-Frame Snap, Stable Target Locking
- * Status: GOD MODE - DIRECT CAMERA HIJACKING
+ * Optimization: 180-Degree Frontal FOV Scan (CPU & Target Selection Optimization)
+ * Fixes: No Rear-Snapping, Absolute Zero-Frame Snap, Stable Target Locking
+ * Status: GOD MODE - DIRECT CAMERA HIJACKING (FRONTAL ONLY)
  * ==============================================================================
  */
 
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-if (!_global.__QuantumState || _global.__QuantumState.version !== 76) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 77) {
     _global.__QuantumState = {
-        version: 76,
+        version: 77,
         frameCounter: 0,
-        lockedTargetId: null,      // Khóa dính mục tiêu (Target Stickiness)
-        lockFrames: 0,             // Đếm số khung hình đã khóa
+        lockedTargetId: null,      
+        lockFrames: 0,             
         currentPing: 0.05
     };
 }
@@ -23,12 +24,10 @@ class QuantumMath {
         return Math.max(min, Math.min(max, value));
     }
 
-    // Dự toán tọa độ tuyệt đối với bù trừ Ping (Absolute Lead Calculation)
     static predictAbsolute(headPos, targetVel, selfVel, distance) {
         const BULLET_SPEED = 99999.0;
         const GRAVITY = -9.81;
         
-        // Thời gian bay + Độ trễ mạng (Ping)
         const flightTime = (distance / BULLET_SPEED) + _global.__QuantumState.currentPing + 0.001;
         
         return {
@@ -39,14 +38,13 @@ class QuantumMath {
     }
 }
 
-class AbsoluteAssignmentEngine {
+class FrontFocusedAssignmentEngine {
     constructor() {
         this.IGNORE_KEYS = new Set([
             'ui', 'inventory', 'audio', 'cosmetics', 'chat', 'minimap', 
             'particles', 'effects', 'vehicle_physics', 'world_lighting'
         ]);
         
-        // Vô hiệu hóa toàn bộ hitbox cơ thể để Engine không bị phân tâm
         this.ghostBones = [
             'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
             'left_arm', 'right_arm', 'left_leg', 'right_leg', 'left_thigh', 'right_thigh',
@@ -54,7 +52,6 @@ class AbsoluteAssignmentEngine {
         ];
     }
 
-    // Lọc và chọn mục tiêu tốt nhất (Ưu tiên: Có đường nhìn -> Đang bị khóa -> Gần nhất)
     findBestTarget(players) {
         if (!players || players.length === 0) return null;
         
@@ -64,7 +61,6 @@ class AbsoluteAssignmentEngine {
         for (let enemy of players) {
             if (!enemy || enemy.is_visible === false || enemy.occluded === true) continue;
 
-            // Target Stickiness: Trực tiếp chọn lại mục tiêu đang khóa nếu vẫn còn sống và nhìn thấy
             if (_global.__QuantumState.lockedTargetId === enemy.id && _global.__QuantumState.lockFrames < 30) {
                 return enemy;
             }
@@ -79,9 +75,17 @@ class AbsoluteAssignmentEngine {
 
     nullifyWeaponAssist(weapon) {
         if (!weapon) return;
-        // Xóa sạch từ tính vũ khí cũ, vì chúng ta sẽ gán thẳng Camera
-        const nullifyProps = ['recoil', 'spread', 'bloom', 'camera_shake', 'weapon_sway', 'aim_assist_range', 'auto_aim_angle'];
+        
+        // Loại bỏ các thuộc tính gây nhiễu
+        const nullifyProps = ['recoil', 'spread', 'bloom', 'camera_shake', 'weapon_sway'];
         for (let prop of nullifyProps) weapon[prop] = 0.0;
+        
+        weapon.aim_assist_range = 800.0;
+        
+        // CẢI TIẾN TẠI ĐÂY: Giới hạn FOV xuống 180 độ. 
+        // Engine sẽ tự động bỏ qua toàn bộ mục tiêu nằm ở nửa bán cầu phía sau lưng nhân vật.
+        weapon.auto_aim_angle = 180.0; 
+        
         weapon.bullet_speed = 99999.0;
     }
 
@@ -96,18 +100,15 @@ class AbsoluteAssignmentEngine {
         if (node.ping !== undefined) _global.__QuantumState.currentPing = node.ping / 1000.0;
         if (node.player_velocity) context.selfVel = node.player_velocity;
 
-        // Đọc tín hiệu khai hỏa
         if (node.weapon || node.camera_state) {
             context.isFiring = !!(node.weapon?.is_firing || node.weapon?.recoil_accumulation > 0 || node.camera_state?.is_firing);
             if (node.weapon) this.nullifyWeaponAssist(node.weapon);
         }
 
-        // Xử lý danh sách người chơi và gán tọa độ tuyệt đối
         if (node.players && Array.isArray(node.players)) {
             const bestTarget = this.findBestTarget(node.players);
             
             if (bestTarget && context.isFiring) {
-                // Khóa mục tiêu (Target Stickiness)
                 if (_global.__QuantumState.lockedTargetId !== bestTarget.id) {
                     _global.__QuantumState.lockedTargetId = bestTarget.id;
                     _global.__QuantumState.lockFrames = 0;
@@ -118,7 +119,6 @@ class AbsoluteAssignmentEngine {
                 context.targetId = bestTarget.id;
 
                 node.players.forEach(enemy => {
-                    // Vô hiệu hóa hitbox vật lý thông thường
                     this.ghostBones.forEach(bone => {
                         if (enemy.hitboxes && enemy.hitboxes[bone]) {
                             enemy.hitboxes[bone].priority = "IGNORE";
@@ -127,7 +127,6 @@ class AbsoluteAssignmentEngine {
                         }
                     });
 
-                    // Cưỡng bức tọa độ nếu là mục tiêu được chọn
                     if (enemy.id === context.targetId && enemy.head_pos) {
                         const interceptPos = QuantumMath.predictAbsolute(
                             enemy.head_pos, 
@@ -138,53 +137,45 @@ class AbsoluteAssignmentEngine {
                         
                         context.targetPos = interceptPos;
 
-                        // Ép trọng tâm và sọ về cùng 1 tọa độ Absolute
                         enemy.center_of_mass.x = interceptPos.x;
                         enemy.center_of_mass.y = interceptPos.y;
                         enemy.center_of_mass.z = interceptPos.z;
 
                         if (enemy.hitboxes && enemy.hitboxes.head) {
                             enemy.hitboxes.head.priority = "ABSOLUTE";
-                            enemy.hitboxes.head.m_Radius = 999.0; // Biến sọ thành một điểm hấp dẫn vạn vật
+                            enemy.hitboxes.head.m_Radius = 999.0; 
                         }
                     }
                 });
             } else {
-                // Reset khóa nếu không bắn
                 _global.__QuantumState.lockedTargetId = null;
                 _global.__QuantumState.lockFrames = 0;
             }
         }
 
-        // CHIẾM QUYỀN CAMERA (DIRECT ASSIGNMENT)
         if (node.camera_state) {
             if (context.isFiring && context.targetId && context.targetPos) {
-                // ÉP CAMERA: "Tâm súng ĐANG ở trên đầu"
-                node.camera_state.forced_target_id = context.targetId; // Lệnh ép ID (Nếu Engine hỗ trợ)
+                node.camera_state.forced_target_id = context.targetId; 
                 node.camera_state.absolute_lock = true;
                 node.camera_state.lock_bone = "bone_Head";
                 node.camera_state.target_bone_id = 8;
                 
-                // Triệt tiêu thời gian chuyển đổi (Zero-Latency)
                 node.camera_state.interpolation = "ZERO";
                 node.camera_state.interpolation_frames = 0;
                 node.camera_state.max_pitch_velocity = 0.0;
                 node.camera_state.max_yaw_velocity = 0.0;
                 
-                // Gán thẳng tọa độ nếu cấu trúc JSON cho phép
                 node.camera_state.target_x = context.targetPos.x;
                 node.camera_state.target_y = context.targetPos.y;
                 node.camera_state.target_z = context.targetPos.z;
                 
             } else {
-                // Trả lại Camera 100% tự nhiên khi ngừng bắn
                 node.camera_state.absolute_lock = false;
                 node.camera_state.forced_target_id = null;
                 node.camera_state.interpolation = "NORMAL";
             }
         }
 
-        // Data Pruning
         for (const key of Object.keys(node)) {
             if (this.IGNORE_KEYS.has(key)) continue;
             if (typeof node[key] === 'object' && !['center_of_mass', 'head_pos', 'velocity', 'hitboxes', 'weapon', 'camera_state', 'players'].includes(key)) {
@@ -195,13 +186,12 @@ class AbsoluteAssignmentEngine {
     }
 }
 
-// EXECUTION BLOCK (Zero-Latency Optimized)
 if (typeof $response !== "undefined" && $response.body) {
     if ($response.body.includes('"players"') || $response.body.includes('"camera_state"')) {
         try {
             _global.__QuantumState.frameCounter++;
             const payload = JSON.parse($response.body);
-            const mutated = new AbsoluteAssignmentEngine().processRecursive(payload);
+            const mutated = new FrontFocusedAssignmentEngine().processRecursive(payload);
             $done({ body: JSON.stringify(mutated) });
         } catch (e) {
             $done({ body: $response.body });
