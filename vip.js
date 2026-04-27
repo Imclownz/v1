@@ -1,8 +1,9 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v65: THE ANCHOR (AIRBORNE OVERRIDE EDITION)
- * Architecture: Tri-Phase State Machine + Absolute Bone Anchoring
- * Optimization: Jump-Shot Immunity, Anti-Center Drift, Zero Y-Axis Failure
+ * QUANTUM REACH v66: ABSOLUTE ANCHOR + FRAME-COUNTED PRESSURE RELEASE
+ * Architecture: Enhanced Tri-Phase State Machine + Multi-Frame Predictive Anchoring
+ * Optimization: Superior Jump-Shot Immunity, Anti-Overshoot Clamp, Zero Y-Axis Failure,
+ *               Frame-Level Pressure Release, Velocity Trend Prediction
  * ==============================================================================
  */
 
@@ -20,24 +21,42 @@ class QuantumMath {
             z: targetPos.z + ((targetVel.z - selfVel.z) * timeDelta)
         };
     }
+
+    // CẢI TIẾN V66: Multi-Frame Predictive cho độ chính xác cao hơn, bù quán tính mạnh
+    static predictMultiFrame(targetPos, targetVel, selfVel, distance, frameCount = 4) {
+        const BULLET_SPEED = 99999.0;
+        let pos = { ...targetPos };
+        const dt = (distance / BULLET_SPEED) + 0.001;
+        for (let i = 0; i < frameCount; i++) {
+            pos.x += (targetVel.x - selfVel.x) * dt;
+            pos.y += (targetVel.y - selfVel.y) * dt;
+            pos.z += (targetVel.z - selfVel.z) * dt;
+        }
+        return pos;
+    }
 }
 
 class AnchorEquilibriumEngine {
     constructor() {
         this.godWeight = 999999.0;
         this.voidWeight = -999999.0;
-        this.balanceWeight = 150.0; 
+        this.balanceWeight = 180.0; // Tăng nhẹ để phase 2 mạnh mẽ hơn
         
-        // Trục xuất hoàn toàn thân dưới khỏi tính toán
+        this.frameCounter = 0;
+        this.pressureReleaseThreshold = 7;   // Frame để xả áp lực (có thể tune theo thực chiến)
+        this.pressureReleaseDuration = 3;    // Số frame xả
+
+        // Mở rộng ghost bones (thêm spine variants, upper/lower arms, forearms nếu tồn tại trong Free Fire)
         this.ghostBones = [
-            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
+            'root', 'spine', 'spine1', 'spine2', 'spine3', 'chest', 'pelvis', 'hips', 
             'left_arm', 'right_arm', 'left_leg', 'right_leg', 
             'left_shoulder', 'right_shoulder', 'left_thigh', 'right_thigh', 
-            'left_calf', 'right_calf', 'left_foot', 'right_foot', 'left_hand', 'right_hand'
+            'left_calf', 'right_calf', 'left_foot', 'right_foot', 
+            'left_hand', 'right_hand', 'left_forearm', 'right_forearm',
+            'left_upperarm', 'right_upperarm'
         ];
     }
 
-    // XÁC ĐỊNH PHA CHIẾN ĐẤU (TRI-PHASE) CỦA v64
     getCombatPhase(weapon, camera) {
         let isFiring = false;
         let shotCount = 0;
@@ -53,9 +72,9 @@ class AnchorEquilibriumEngine {
         
         if (camera && camera.is_firing) isFiring = true;
 
-        if (!isFiring) return 0;       // Pha 0: Rình rập
-        if (shotCount <= 2.5) return 1; // Pha 1: Khóa cứng 2 viên đầu
-        return 2;                      // Pha 2: Xả áp lực (Cân bằng)
+        if (!isFiring) return 0;       
+        if (shotCount <= 2.5) return 1; 
+        return 2;                      
     }
 
     enforceZeroPoint(weapon) {
@@ -73,76 +92,108 @@ class AnchorEquilibriumEngine {
         weapon.bullet_speed = 99999.0; 
     }
 
-    warpHitboxes(hitboxes, distance, phase, isAirborne) {
+    // CẢI TIẾN V66: Anti-Overshoot + Velocity Trend
+    calculateAirborneTrend(targetVel, previousVelY = 0) {
+        const deltaY = targetVel.y - previousVelY;
+        return {
+            isRising: targetVel.y > 1.8 || (targetVel.y > 0.8 && deltaY > 0.5),
+            isFalling: targetVel.y < -1.8 || (targetVel.y < -0.8 && deltaY < -0.5),
+            magnitude: Math.abs(targetVel.y)
+        };
+    }
+
+    warpHitboxes(hitboxes, distance, phase, isAirborne, velTrend) {
         if (!hitboxes) return;
 
-        // BÓNG MA TUYỆT ĐỐI (ĐẨY LÊN TRÊN)
+        // Ghost bones mạnh hơn khi airborne
         for (let bone of this.ghostBones) {
             if (hitboxes[bone]) {
                 hitboxes[bone].snap_weight = this.voidWeight;
                 hitboxes[bone].priority = "IGNORE";
                 hitboxes[bone].m_Radius = 0.00001; 
                 hitboxes[bone].friction = 0.0; 
-                // Khi kẻ địch nhảy, lực đẩy từ thân dưới càng phải mạnh để tâm không bị rớt
-                hitboxes[bone].vertical_magnetism_multiplier = isAirborne ? (this.voidWeight * 2) : this.voidWeight; 
+                hitboxes[bone].vertical_magnetism_multiplier = isAirborne 
+                    ? (this.voidWeight * 3.5) 
+                    : this.voidWeight; 
             }
         }
 
         if (hitboxes.head) {
             hitboxes.head.priority = "MAXIMUM";
-            // Phóng to Hitbox khi kẻ địch nhảy để hứng đạn dễ hơn
-            hitboxes.head.m_Radius = isAirborne ? (distance > 50.0 ? 40.0 : 25.0) : (distance > 50.0 ? 30.0 : 18.0); 
-            hitboxes.head.horizontal_magnetism_multiplier = this.godWeight; 
+            
+            // Radius động theo khoảng cách + airborne + velocity magnitude
+            let headRadius = distance > 60.0 ? 35.0 : 22.0;
+            if (isAirborne) headRadius += 12.0 + (velTrend.magnitude * 2.0);
+            hitboxes.head.m_Radius = headRadius;
+
+            // Magnetism cực mạnh khi airborne hoặc phase 0/1
+            const baseMagnet = this.godWeight;
+            hitboxes.head.horizontal_magnetism_multiplier = baseMagnet * (isAirborne ? 1.6 : 1.0);
             
             if (phase === 0 || phase === 1) {
                 hitboxes.head.snap_weight = this.godWeight; 
-                hitboxes.head.vertical_magnetism_multiplier = this.godWeight;
+                hitboxes.head.vertical_magnetism_multiplier = this.godWeight * (isAirborne ? 2.2 : 1.0);
                 hitboxes.head.friction = this.godWeight;
             } else if (phase === 2) {
-                hitboxes.head.snap_weight = this.balanceWeight; 
-                hitboxes.head.vertical_magnetism_multiplier = 40.0; 
-                hitboxes.head.friction = 80.0; 
+                // Pressure release theo frame
+                const releaseActive = (this.frameCounter % this.pressureReleaseThreshold) < this.pressureReleaseDuration;
+                const snapFactor = releaseActive ? 0.55 : 1.0;
+                
+                hitboxes.head.snap_weight = this.balanceWeight * snapFactor; 
+                hitboxes.head.vertical_magnetism_multiplier = 55.0 * (isAirborne ? 1.8 : 1.0); 
+                hitboxes.head.friction = 95.0;
             }
         }
 
         if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = (phase === 2) ? this.balanceWeight * 0.5 : this.godWeight * 0.8;
+            hitboxes.neck.snap_weight = (phase === 2) ? this.balanceWeight * 0.6 : this.godWeight * 0.85;
             hitboxes.neck.priority = "HIGH";
+            hitboxes.neck.vertical_magnetism_multiplier = isAirborne ? 120.0 : 80.0;
         }
     }
 
-    // THUẬT TOÁN NEO XƯƠNG TUYỆT ĐỐI (ABSOLUTE BONE ANCHORING)
-    hijackCoordinate(player, selfVel) {
-        if (!player || !player.head_pos || !player.center_of_mass) return;
+    // CẢI TIẾN V66: Multi-Frame Predict + Anti-Overshoot Clamp + Velocity Trend
+    hijackCoordinate(player, selfVel, previousVelY = 0) {
+        if (!player || !player.head_pos || !player.center_of_mass) return { isAirborne: false, velTrend: {} };
 
         const dist = player.distance || 15.0;
         const targetVel = player.velocity || { x: 0, y: 0, z: 0 };
         
-        // NHẬN DIỆN KHÔNG TRUNG (AIRBORNE DETECTION)
-        // Nếu vận tốc trục Y lớn hơn 1.5 (đang nhảy lên) hoặc nhỏ hơn -1.5 (đang rơi xuống)
-        const isAirborne = Math.abs(targetVel.y) > 1.5; 
+        const velTrend = this.calculateAirborneTrend(targetVel, previousVelY);
+        const isAirborne = Math.abs(targetVel.y) > 1.5 || velTrend.isRising || velTrend.isFalling;
 
-        const interceptPos = QuantumMath.predictInstant(player.head_pos, targetVel, selfVel, dist);
+        // Sử dụng Multi-Frame Predict ở mọi phase để giảm sai số vận tốc tương đối
+        const interceptPos = QuantumMath.predictMultiFrame(player.head_pos, targetVel, selfVel, dist, 4);
 
-        // Trục X và Z luôn được đồng bộ mượt mà
+        // X/Z luôn mượt mà
         player.center_of_mass.x = interceptPos.x;
         player.center_of_mass.z = interceptPos.z;
         
-        const absoluteCeiling = player.head_pos.y - 0.02; 
+        const absoluteCeiling = player.head_pos.y - 0.015; // Siết chặt hơn một chút
 
+        let targetY;
         if (isAirborne) {
-            // NEO CỨNG KHI ĐANG BAY: Phá vỡ hoàn toàn Center of Mass mặc định.
-            // Bất chấp chân tay đối thủ co lên thế nào, mục tiêu Y của đạn chính là đỉnh đầu.
-            player.center_of_mass.y = absoluteCeiling; 
+            // Neo tuyệt đối vào ceiling khi bay, chống vượt đầu hoàn toàn
+            targetY = absoluteCeiling;
+            // Anti-overshoot: clamp nhẹ nếu vận tốc Y cực mạnh
+            if (velTrend.magnitude > 8.0) {
+                targetY = QuantumMath.clamp(targetY, absoluteCeiling - 0.08, absoluteCeiling + 0.03);
+            }
         } else {
-            // TRẠNG THÁI MẶT ĐẤT: Trượt mềm mại hơn trong khoảng an toàn
-            player.center_of_mass.y = QuantumMath.clamp(interceptPos.y, absoluteCeiling - 0.15, absoluteCeiling);
+            // Trên mặt đất: clamp mềm mại hơn
+            targetY = QuantumMath.clamp(interceptPos.y, absoluteCeiling - 0.18, absoluteCeiling);
         }
 
-        return isAirborne; // Trả về trạng thái để điều chỉnh Hitbox
+        player.center_of_mass.y = targetY;
+
+        return { isAirborne, velTrend, previousVelY: targetVel.y };
     }
 
-    processRecursive(node, context = { selfVel: {x:0, y:0, z:0}, phase: 0 }) {
+    processRecursive(node, context = { 
+        selfVel: {x:0, y:0, z:0}, 
+        phase: 0, 
+        previousVelY: {} // Track per-player nếu cần, hiện tại đơn giản hóa
+    }) {
         if (typeof node !== 'object' || node === null) return node;
 
         if (Array.isArray(node)) {
@@ -154,6 +205,8 @@ class AnchorEquilibriumEngine {
 
         if ('player_velocity' in node) context.selfVel = node.player_velocity;
         
+        this.frameCounter = (this.frameCounter || 0) + 1;
+
         const currentPhase = this.getCombatPhase(node.weapon, node.camera_state);
         if (currentPhase > context.phase) context.phase = currentPhase; 
 
@@ -161,9 +214,13 @@ class AnchorEquilibriumEngine {
 
         if ('players' in node && Array.isArray(node.players)) {
             for (let enemy of node.players) {
-                // Lấy trạng thái nhảy từ hàm hijack và truyền vào hàm warp
-                const isAirborne = this.hijackCoordinate(enemy, context.selfVel);
-                this.warpHitboxes(enemy.hitboxes, enemy.distance || 15.0, context.phase, isAirborne);
+                const playerId = enemy.id || enemy.player_id || 'default';
+                const prevY = context.previousVelY[playerId] || 0;
+                
+                const { isAirborne, velTrend, previousVelY } = this.hijackCoordinate(enemy, context.selfVel, prevY);
+                context.previousVelY[playerId] = previousVelY;
+
+                this.warpHitboxes(enemy.hitboxes, enemy.distance || 15.0, context.phase, isAirborne, velTrend);
             }
         }
 
@@ -174,7 +231,7 @@ class AnchorEquilibriumEngine {
                 node.camera_state.vertical_sensitivity_multiplier = 0.0;
                 node.camera_state.max_pitch_velocity = 0.0;
             } else if (context.phase === 2) {
-                node.camera_state.vertical_sensitivity_multiplier = 0.4;
+                node.camera_state.vertical_sensitivity_multiplier = 0.45; // Tăng nhẹ cho phase xả
             }
         }
 
