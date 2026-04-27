@@ -1,16 +1,17 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v69: THE PARABOLIC OMNI-STATE
- * Architecture: True Frame Sync + Parabolic Jump Prediction + Payload Pre-Filter
- * Optimization: Zero-Lag JSON Parsing, Gravity-Aware Hijacking, Flawless Ceiling
+ * QUANTUM REACH v69.1: SILENT NAVIGATOR (FINAL BUILD)
+ * Architecture: True Frame Sync + Parabolic Prediction + Hybrid State Machine
+ * Optimization: Zero-Lag Movement (Phase 0), Aggressive Airborne Hijacking, 
+ * Deep Short-Circuit JSON Parsing, Anti-Stutter Camera
  * ==============================================================================
  */
 
 // 1. HYBRID GLOBAL STATE (An toàn & Độc lập)
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-if (!_global.__QuantumState || _global.__QuantumState.version !== 69) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 69.1) {
     _global.__QuantumState = {
-        version: 69,
+        version: 69.1,
         frameCounter: 0,
         previousVelY: {},
         lastFireRate: 0.12,
@@ -30,39 +31,37 @@ class QuantumMath {
         return Math.max(2, Math.min(6, Math.round(distance / 12.0))); 
     }
 
-    // KHẮC PHỤC: Dự đoán Parabol bù trừ trọng lực cho trục Y
+    // Dự đoán Parabol bù trừ trọng lực cho trục Y
     static predictParabolic(targetPos, targetVel, selfVel, distance) {
         const frames = this.getDynamicFrames(distance);
         const BULLET_SPEED = 99999.0;
-        const GRAVITY = -9.81; // Gia tốc trọng trường tiêu chuẩn của Engine
+        const GRAVITY = -9.81; // Gia tốc trọng trường Unity
         
         let pos = { ...targetPos };
         let currentVy = targetVel.y;
         const dt = (distance / BULLET_SPEED) + 0.001; 
         
         for (let i = 0; i < frames; i++) {
-            // Trục X, Z (Chuyển động tuyến tính)
             pos.x += (targetVel.x - selfVel.x) * dt;
             pos.z += (targetVel.z - selfVel.z) * dt;
-            
-            // Trục Y (Chuyển động rơi tự do)
             pos.y += (currentVy - selfVel.y) * dt + 0.5 * GRAVITY * (dt * dt);
-            currentVy += GRAVITY * dt; // Cập nhật vận tốc rơi theo khung hình
+            currentVy += GRAVITY * dt;
         }
         return pos;
     }
 }
 
-class ParabolicAnchorEngine {
+class QuantumFinalEngine {
     constructor() {
         this.godWeight = 9999999.0;      
         this.voidWeight = -9999999.0;
         this.balanceWeight = 220.0;
 
+        // Bộ lọc rác chống tràn RAM
         this.IGNORE_KEYS = new Set([
             'ui', 'inventory', 'audio', 'cosmetics', 'friends_list', 
             'graphics_settings', 'match_stats', 'chat', 'effects', 
-            'particles', 'minimap', 'leaderboard'
+            'particles', 'minimap', 'leaderboard', 'vehicle_physics'
         ]);
 
         this.ghostBones = [
@@ -105,8 +104,10 @@ class ParabolicAnchorEngine {
         for (let prop of nullifyProps) {
             if (prop in weapon) weapon[prop] = 0.0;
         }
-        weapon.aim_assist_range = 800.0;
-        weapon.auto_aim_angle = 360.0;
+        weapon.aim_assist_range = 600.0;
+        
+        // Chống khựng camera khi chạy bo, chỉ quét phía trước
+        weapon.auto_aim_angle = 150.0; 
         weapon.bullet_speed = 99999.0;
     }
 
@@ -141,30 +142,39 @@ class ParabolicAnchorEngine {
 
             let headRadius = distance > 55 ? 38.0 : (distance > 25 ? 26.0 : 19.0);
             if (isAirborne) headRadius += 18.0 + (velTrend.magnitude * 3.5);
-
             hitboxes.head.m_Radius = headRadius;
-            hitboxes.head.horizontal_magnetism_multiplier = this.godWeight * (isAirborne ? 2.1 : 1.3);
 
-            if (phase === 0 || phase === 1) {
+            // PHÂN NHÁNH LOGIC CHỐNG KHỰNG
+            if (phase === 0) {
+                // Di chuyển tự do, chỉ hút nhẹ không gây sượng tay
+                hitboxes.head.snap_weight = this.balanceWeight;
+                hitboxes.head.horizontal_magnetism_multiplier = 100.0;
+                hitboxes.head.vertical_magnetism_multiplier = 80.0;
+                hitboxes.head.friction = 20.0; 
+            } 
+            else if (phase === 1) {
+                // Nổ súng: Khóa cứng tức thì
                 hitboxes.head.snap_weight = this.godWeight * 1.15;
+                hitboxes.head.horizontal_magnetism_multiplier = this.godWeight * (isAirborne ? 2.1 : 1.3);
                 hitboxes.head.vertical_magnetism_multiplier = this.godWeight * (isAirborne ? 3.0 : 1.4);
                 hitboxes.head.friction = this.godWeight * 1.1;
-            } else if (phase === 2) {
+            } 
+            else if (phase === 2) {
+                // Xả áp: Giảm rung lắc khi sấy dài
                 const fireRate = _global.__QuantumState.lastFireRate || 0.12;
                 const releaseCycle = Math.max(4, Math.round(1.0 / fireRate));
-                
-                // Đồng bộ đúng với biến đếm toàn cục
                 const isReleasing = (_global.__QuantumState.frameCounter % releaseCycle) < Math.ceil(releaseCycle * 0.45);
 
                 const snapFactor = isReleasing ? 0.48 : 1.0;
                 hitboxes.head.snap_weight = this.balanceWeight * snapFactor;
+                hitboxes.head.horizontal_magnetism_multiplier = 150.0;
                 hitboxes.head.vertical_magnetism_multiplier = 68.0 * (isAirborne ? 2.3 : 1.0);
                 hitboxes.head.friction = 110.0;
             }
         }
 
         if (hitboxes.neck) {
-            hitboxes.neck.snap_weight = (phase === 2) ? this.balanceWeight * 0.65 : this.godWeight * 0.9;
+            hitboxes.neck.snap_weight = (phase === 2) ? this.balanceWeight * 0.65 : (phase === 1 ? this.godWeight * 0.9 : 50.0);
             hitboxes.neck.priority = "HIGH";
             hitboxes.neck.vertical_magnetism_multiplier = isAirborne ? 160.0 : 95.0;
         }
@@ -181,13 +191,11 @@ class ParabolicAnchorEngine {
         const velTrend = this.calculateAirborneTrend(targetVel, previousVelY);
         const isAirborne = Math.abs(targetVel.y) > 1.2 || velTrend.isRising || velTrend.isFalling || velTrend.magnitude > 3.0;
 
-        // Kích hoạt dự đoán Parabol
         const interceptPos = QuantumMath.predictParabolic(player.head_pos, targetVel, selfVel, dist);
 
         player.center_of_mass.x = interceptPos.x;
         player.center_of_mass.z = interceptPos.z;
 
-        // KHẮC PHỤC: Nới lỏng trần nội suy để tâm súng không bị khựng
         const absoluteCeiling = player.head_pos.y - 0.015; 
 
         let targetY = isAirborne 
@@ -252,13 +260,21 @@ class ParabolicAnchorEngine {
             this.cleanupOldPlayers();
         }
 
+        // ĐIỀU KHIỂN CAMERA THÔNG MINH
         if ('camera_state' in node) {
-            node.camera_state.interpolation = "ZERO";
-            if (context.phase === 1) {
+            if (context.phase === 0) {
+                // Không can thiệp để di chuyển 100% mượt mà, tự nhiên
+            } 
+            else if (context.phase === 1) {
+                node.camera_state.interpolation = "ZERO";
                 node.camera_state.vertical_sensitivity_multiplier = 0.0;
                 node.camera_state.max_pitch_velocity = 0.0;
-            } else if (context.phase === 2) {
+                node.camera_state.lock_bone = "bone_Head";
+            } 
+            else if (context.phase === 2) {
+                node.camera_state.interpolation = "ZERO";
                 node.camera_state.vertical_sensitivity_multiplier = 0.52;
+                node.camera_state.lock_bone = "bone_Head";
             }
         }
 
@@ -275,24 +291,24 @@ class ParabolicAnchorEngine {
 }
 
 // ==============================================================================
-// EXECUTION BLOCK WITH PRE-FILTER (TỐI ƯU HÓA CPU TUYỆT ĐỐI)
+// EXECUTION BLOCK (CPU OPTIMIZED)
 // ==============================================================================
 if (typeof $response !== "undefined" && $response.body) {
-    // KHẮC PHỤC: Chỉ phân tích JSON nếu gói tin thực sự chứa dữ liệu chiến đấu
+    // Chỉ xử lý các gói tin có chứa dữ liệu chiến đấu
     if ($response.body.includes('"players"') || $response.body.includes('"camera_state"')) {
         try {
-            // KHẮC PHỤC: Bộ đếm Frame chỉ tăng 1 lần duy nhất cho mỗi gói tin
+            // Đảm bảo đếm frame đúng 1 lần cho mỗi gói tin
             _global.__QuantumState.frameCounter++;
             
             const payload = JSON.parse($response.body);
-            const Engine = new ParabolicAnchorEngine();
+            const Engine = new QuantumFinalEngine();
             const mutatedPayload = Engine.processRecursive(payload);
+            
             $done({ body: JSON.stringify(mutatedPayload) });
         } catch (error) {
-            $done({ body: $response.body });
+            $done({ body: $response.body }); // An toàn chống văng
         }
     } else {
-        // Trả về ngay lập tức với các gói tin rác (ping, chat, ui...)
-        $done({ body: $response.body });
+        $done({ body: $response.body }); // Bỏ qua gói tin rác
     }
 }
