@@ -1,18 +1,20 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v75: THE OMNI-SNAP (LINE-OF-SIGHT EDITION)
- * Architecture: Zero-Latency Teleport + Strict Line-of-Sight Check + Dynamic FOV
- * Fixes: No Wall-Aiming, Zero Desync, Absolute Bone ID 8 Locking
- * Status: Hardcore Aimlock - 100% Headshot on Visible Targets
+ * QUANTUM REACH v76: THE ABSOLUTE OVERLAY (LOS EDITION)
+ * Architecture: Coordinate Assignment, Target Stickiness, Ping-Compensated Lead
+ * Fixes: Zero "Pulling" delay. The Crosshair IS the Head. Anti-Target-Switching.
+ * Status: Omni-Snap Absolute Precision (Clear LOS Only)
  * ==============================================================================
  */
 
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-if (!_global.__QuantumState || _global.__QuantumState.version !== 75) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 76) {
     _global.__QuantumState = {
-        version: 75,
+        version: 76,
         frameCounter: 0,
-        lastFireRate: 0.15
+        currentPing: 0.05, // Mặc định 50ms
+        lockedTargetId: null, // ID mục tiêu đang bị khóa
+        lockedFrames: 0 // Đếm số khung hình đã khóa
     };
 }
 
@@ -21,95 +23,82 @@ class QuantumMath {
         return Math.max(min, Math.min(max, value));
     }
 
-    // Tự động thu hẹp góc quét khi ở xa để khóa chính xác mục tiêu đơn lẻ
-    static getDynamicFOV(distance) {
-        // Tầm gần (< 10m): Mở rộng 180 độ
-        // Tầm xa (> 60m): Thu hẹp còn 15 độ (Laser Focus)
-        if (distance <= 10.0) return 180.0;
-        if (distance >= 60.0) return 15.0;
-        return this.clamp(180.0 - (distance * 2.5), 15.0, 180.0);
+    // TÍNH TOÁN VỊ TRÍ ĐẦU Ở TƯƠNG LAI (Bao gồm Ping + Tốc độ đạn + Vận tốc địch)
+    static calculateAbsoluteHeadPos(headPos, targetVel, selfVel, distance) {
+        const BULLET_SPEED = 99999.0;
+        const GRAVITY = -9.81;
+        const PING_DELAY = _global.__QuantumState.currentPing;
+        
+        // Tổng thời gian từ lúc bấm bắn đến khi đạn chạm mục tiêu
+        const totalDelay = (distance / BULLET_SPEED) + PING_DELAY + 0.016; // 0.016 = 1 frame delay (60fps)
+
+        return {
+            x: headPos.x + (targetVel.x - selfVel.x) * totalDelay,
+            y: headPos.y + (targetVel.y - selfVel.y) * totalDelay + 0.5 * GRAVITY * (totalDelay * totalDelay),
+            z: headPos.z + (targetVel.z - selfVel.z) * totalDelay
+        };
     }
 }
 
-class OmniSnapEngine {
+class AbsoluteOverlayEngine {
     constructor() {
-        this.absoluteWeight = 99999999.0; // Quyền năng Teleport tuyệt đối
-        this.voidWeight = -99999999.0;
-        
-        // Data Pruning: Danh sách ngắt sớm để tối ưu tốc độ Snap
+        this.godWeight = 99999999.0; 
         this.IGNORE_KEYS = new Set([
             'ui', 'inventory', 'audio', 'cosmetics', 'chat', 'minimap', 
             'particles', 'effects', 'vehicle_physics', 'world_lighting'
         ]);
 
         this.ghostBones = [
-            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 
+            'root', 'spine', 'spine1', 'spine2', 'chest', 'pelvis', 'hips', 'neck',
             'left_arm', 'right_arm', 'left_leg', 'right_leg', 'left_thigh', 'right_thigh',
             'left_calf', 'right_calf', 'left_foot', 'right_foot'
         ];
     }
 
-    getCombatPhase(weapon, camera) {
-        let isFiring = false;
-        if (weapon && (weapon.is_firing || weapon.recoil_accumulation > 0)) isFiring = true;
-        if (camera && camera.is_firing) isFiring = true;
-        return isFiring ? 1 : 0; // Trở lại hệ nhị phân bạo lực: 0 (Không bắn) và 1 (Bắn/Teleport)
-    }
-
-    enforceZeroPoint(weapon, closestDistance) {
+    enforceZeroPoint(weapon) {
         if (!weapon) return;
         ['recoil', 'spread', 'bloom', 'camera_shake', 'weapon_sway'].forEach(p => weapon[p] = 0.0);
-        
         weapon.aim_assist_range = 800.0;      
         weapon.bullet_speed = 99999.0;
-        
-        // DYNAMIC FOV: Tự động điều chỉnh góc Aim Assist theo mục tiêu gần nhất
-        weapon.auto_aim_angle = QuantumMath.getDynamicFOV(closestDistance); 
+        weapon.auto_aim_angle = 120.0; // Thu hẹp góc quét để tránh nhận diện nhầm
     }
 
-    warpHitboxes(hitboxes, distance, isFiring, isVisible) {
+    // GÁN CHỈ SỐ HITBOX THAY VÌ HÚT
+    assignHitboxOverlay(hitboxes, isFiring, isLockedTarget) {
         if (!hitboxes) return;
 
-        // BÓNG MA (GHOST BONES): Xóa bỏ toàn bộ từ tính trên cơ thể
+        // Tẩy xóa sự tồn tại của cơ thể
         this.ghostBones.forEach(bone => {
             if (hitboxes[bone]) {
-                hitboxes[bone].snap_weight = this.voidWeight;
+                hitboxes[bone].priority = "IGNORE";
+                hitboxes[bone].snap_weight = -99999.0;
                 hitboxes[bone].m_Radius = 0.000001;
                 hitboxes[bone].friction = 0.0;
-                hitboxes[bone].vertical_magnetism_multiplier = this.voidWeight;
             }
         });
 
-        // BẮT MỤC TIÊU (HEADLOCK)
         if (hitboxes.head) {
-            hitboxes.head.priority = "MAXIMUM";
-            
-            // Nếu địch nấp sau tường (!isVisible), tắt Aimlock để tránh giật tâm vào tường
-            if (!isVisible) {
-                hitboxes.head.snap_weight = 10.0; // Trả về mức bình thường
-                hitboxes.head.m_Radius = 5.0;
-                hitboxes.head.friction = 10.0;
-                return;
-            }
-
-            // Nếu địch lộ diện: Kích hoạt chế độ Hút cực đại
-            hitboxes.head.m_Radius = distance > 50 ? 55.0 : 35.0; // Mở rộng vùng hút đón đầu
-
-            if (isFiring) {
-                // Snap tức thời: Từ tính, ma sát và trọng số ép lên đỉnh điểm
-                hitboxes.head.snap_weight = this.absoluteWeight;
-                hitboxes.head.horizontal_magnetism_multiplier = this.absoluteWeight;
-                hitboxes.head.vertical_magnetism_multiplier = this.absoluteWeight;
-                hitboxes.head.friction = this.absoluteWeight;
+            if (isFiring && isLockedTarget) {
+                // TRẠNG THÁI GÁN TUYỆT ĐỐI (OVERLAY)
+                hitboxes.head.priority = "MAXIMUM";
+                hitboxes.head.m_Radius = 80.0; // Phóng to cực đại vùng nhận diện đầu
+                
+                // Khóa chết Aim Assist vào đây
+                hitboxes.head.snap_weight = this.godWeight;
+                hitboxes.head.horizontal_magnetism_multiplier = this.godWeight;
+                hitboxes.head.vertical_magnetism_multiplier = this.godWeight;
+                hitboxes.head.friction = this.godWeight;
             } else {
-                // Phase 0: Chạy mượt, không giật màn hình
+                // Trạng thái thả lỏng
+                hitboxes.head.priority = "NORMAL";
                 hitboxes.head.snap_weight = 100.0;
-                hitboxes.head.friction = 0.0;
+                hitboxes.head.m_Radius = 15.0;
+                hitboxes.head.friction = 20.0;
             }
         }
     }
 
-    processRecursive(node, context = { isFiring: false, closestDist: 999.0 }) {
+    processRecursive(node, context = { selfVel: {x:0, y:0, z:0}, isFiring: false }) {
         if (typeof node !== 'object' || node === null) return node;
         
         if (Array.isArray(node)) {
@@ -117,58 +106,80 @@ class OmniSnapEngine {
             return node;
         }
 
-        // Đọc trạng thái vũ khí
+        if (node.ping !== undefined) _global.__QuantumState.currentPing = node.ping / 1000.0;
+        if (node.player_velocity) context.selfVel = node.player_velocity;
+        
         if (node.weapon || node.camera_state) {
-            context.isFiring = this.getCombatPhase(node.weapon, node.camera_state) === 1;
+            context.isFiring = !!(node.weapon?.is_firing || node.weapon?.recoil_accumulation > 0 || node.camera_state?.is_firing);
+            this.enforceZeroPoint(node.weapon);
         }
 
         if (node.players && Array.isArray(node.players)) {
-            // Tìm khoảng cách gần nhất để cấu hình FOV
-            node.players.forEach(p => { if (p.distance && p.distance < context.closestDist) context.closestDist = p.distance; });
+            // LỌC KẺ ĐỊCH (TARGET STICKINESS LOGIC)
+            let validTargets = node.players.filter(p => p.is_visible !== false && p.occluded !== true);
+            
+            // Xử lý mất mục tiêu
+            if (!context.isFiring || validTargets.length === 0) {
+                _global.__QuantumState.lockedTargetId = null;
+                _global.__QuantumState.lockedFrames = 0;
+            } else {
+                _global.__QuantumState.lockedFrames++;
+            }
 
             node.players.forEach(enemy => {
                 if (!enemy || typeof enemy !== 'object') return;
-
-                // LINE OF SIGHT CHECK (Kiểm tra đường nhìn)
-                // Các Engine thường dùng cờ is_visible = true hoặc occluded = false
-                let isVisible = true; 
-                if (enemy.is_visible === false || enemy.occluded === true) {
-                    isVisible = false;
+                
+                const enemyId = enemy.id || enemy.uid || 'unknown';
+                const isVisible = (enemy.is_visible !== false && enemy.occluded !== true);
+                
+                // Thuật toán chọn mục tiêu
+                let isLockedTarget = false;
+                if (isVisible && context.isFiring) {
+                    if (_global.__QuantumState.lockedTargetId === null) {
+                        // Nếu chưa khóa ai, khóa người đang bị duyệt đầu tiên (có thể tối ưu tìm người gần tâm nhất)
+                        _global.__QuantumState.lockedTargetId = enemyId;
+                        isLockedTarget = true;
+                    } else if (_global.__QuantumState.lockedTargetId === enemyId) {
+                        // Đang khóa đúng mục tiêu này
+                        isLockedTarget = true;
+                    }
                 }
 
-                // Chiếm quyền tọa độ tuyệt đối (Absolute Hijack)
-                if (enemy.head_pos && enemy.center_of_mass && isVisible) {
-                    // Ép trực tiếp trọng tâm vào vị trí đầu trừ đi sai số rất nhỏ
-                    enemy.center_of_mass.x = enemy.head_pos.x;
-                    enemy.center_of_mass.z = enemy.head_pos.z;
-                    enemy.center_of_mass.y = enemy.head_pos.y - 0.012;
+                // TIẾN HÀNH "GÁN" (ASSIGNMENT)
+                if (isLockedTarget && enemy.head_pos && enemy.center_of_mass) {
+                    // 1. Tính toán tọa độ đầu ở Tương lai
+                    const absoluteHeadFuture = QuantumMath.calculateAbsoluteHeadPos(
+                        enemy.head_pos, 
+                        enemy.velocity || {x:0, y:0, z:0}, 
+                        context.selfVel, 
+                        enemy.distance || 20.0
+                    );
+
+                    // 2. GÁN TRỌNG TÂM = ĐỈNH ĐẦU
+                    // Máy chủ Aim Assist tự động coi trọng tâm (Center of Mass) là điểm phải nhắm vào.
+                    // Chúng ta đánh tráo khái niệm này: Trọng tâm bay lên đầu.
+                    enemy.center_of_mass.x = absoluteHeadFuture.x;
+                    enemy.center_of_mass.z = absoluteHeadFuture.z;
+                    enemy.center_of_mass.y = absoluteHeadFuture.y - 0.01; // Trừ hao nhẹ để đạn ghim giữa trán
                 }
 
-                this.warpHitboxes(enemy.hitboxes, enemy.distance || 20.0, context.isFiring, isVisible);
+                this.assignHitboxOverlay(enemy.hitboxes, context.isFiring, isLockedTarget);
             });
         }
 
-        // BÓP CÒ LÀ DỊCH CHUYỂN (CAMERA TELEPORT)
+        // ĐỒNG BỘ CAMERA VỚI LỆNH GÁN
         if (node.camera_state && context.isFiring) {
+            // Không kéo rề rà, khóa cứng nội suy
             node.camera_state.interpolation = "ZERO";
-            node.camera_state.interpolation_frames = 0; // Triệt tiêu khung hình nội suy
-            node.camera_state.snap_speed = this.absoluteWeight;
-            node.camera_state.stickiness = this.absoluteWeight;
-            node.camera_state.max_pitch_velocity = 0.0; // Chống vượt đầu khi ngón tay lỡ vuốt lên
-            node.camera_state.vertical_sensitivity_multiplier = 0.0;
-            
-            // BONE ID HARD-LOCKING: Ép hệ thống nhắm thẳng vào xương sọ (ID = 8 hoặc 'bone_Head')
+            node.camera_state.interpolation_frames = 0;
+            node.camera_state.snap_speed = this.godWeight;
             node.camera_state.lock_bone = "bone_Head";
-            node.camera_state.target_bone_id = 8; 
+            node.camera_state.target_bone_id = 8; // ID Xương Đầu
+            node.camera_state.max_pitch_velocity = 0.0;
         } else if (node.camera_state && !context.isFiring) {
-            // Trả lại độ mượt 100% khi không bắn
             node.camera_state.interpolation = "NORMAL";
-            node.camera_state.vertical_sensitivity_multiplier = 1.0;
         }
 
-        if (node.weapon) this.enforceZeroPoint(node.weapon, context.closestDist);
-
-        // DATA PRUNING: Cắt tỉa nhánh dữ liệu không cần thiết để tăng tốc CPU
         for (const key of Object.keys(node)) {
             if (this.IGNORE_KEYS.has(key)) continue;
             const targetKeys = ['center_of_mass', 'head_pos', 'velocity', 'hitboxes', 'weapon', 'camera_state'];
@@ -180,18 +191,18 @@ class OmniSnapEngine {
     }
 }
 
-// EXECUTION BLOCK (Zero-Latency Optimized)
+// EXECUTION BLOCK
 if (typeof $response !== "undefined" && $response.body) {
     if ($response.body.includes('"players"') || $response.body.includes('"camera_state"')) {
         try {
             _global.__QuantumState.frameCounter++;
             const payload = JSON.parse($response.body);
-            const mutated = new OmniSnapEngine().processRecursive(payload);
+            const mutated = new AbsoluteOverlayEngine().processRecursive(payload);
             $done({ body: JSON.stringify(mutated) });
         } catch (e) {
             $done({ body: $response.body });
         }
     } else {
-        $done({ body: $response.body }); // Bỏ qua gói tin rác để giữ tốc độ mạng
+        $done({ body: $response.body });
     }
 }
