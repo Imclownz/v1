@@ -1,19 +1,19 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v77: THE KINEMATIC DILATION
- * Architecture: 2nd-Order Kinematic Prediction + Dynamic Hitbox Dilation
- * Fixes: Solves Zig-Zag Evasion, High-Speed Target Missing, Desync Compensation
- * Status: OMNI-SNAP ACTIVATED - Absolute Mathematical Lock
+ * QUANTUM REACH v78: THE SPINAL CORD (BONE ELEVATOR EDITION)
+ * Architecture: Passive Chest Centering + Dynamic Y-Axis Elevator + ADS Bypass
+ * Fixes: Solves Bad Crosshair Placement, Panic Firing, and CQC Instability
+ * Status: BRUTAL EXECUTION - Absolute Control Over User Input
  * ==============================================================================
  */
 
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-if (!_global.__QuantumState || _global.__QuantumState.version !== 77) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 78) {
     _global.__QuantumState = {
-        version: 77,
+        version: 78,
         frameCounter: 0,
         currentPing: 0.05,
-        history: {} // Lưu trữ { vel, time } để tính gia tốc
+        history: {} 
     };
 }
 
@@ -22,69 +22,57 @@ class QuantumKinematics {
         return Math.max(min, Math.min(max, value));
     }
 
-    // Tính toán tốc độ vô hướng (Magnitude of Velocity Vector)
     static getSpeed(vel) {
         if (!vel) return 0;
         return Math.sqrt(vel.x * vel.x + vel.y * vel.y + vel.z * vel.z);
     }
 
-    // GIẢI PHÁP 2: Hitbox Dilation (Giãn nở theo động năng)
-    static getDilatedRadius(baseRadius, vel) {
-        const speed = this.getSpeed(vel);
-        const dilationFactor = 2.5; // Hệ số giãn nở
-        const maxDilation = 35.0;   // Giới hạn chống phình quá to gây lỗi
+    // THANG MÁY KHUNG XƯƠNG: Tính toán độ lệch trục Y dựa trên số viên đạn
+    static getElevatorOffset(shotCount, isAiming) {
+        // Nếu đang bật Scope ngắm (ADS), bỏ qua thang máy, teleport thẳng lên sọ
+        if (isAiming) return 0.0;
         
-        // Bơm phồng bán kính dựa trên tốc độ di chuyển
-        let dilation = speed * dilationFactor;
-        dilation = this.clamp(dilation, 0, maxDilation);
-        
-        return baseRadius + dilation;
+        // Hip-fire (Chạm bắn thẳng): Kéo tâm từ ngực lên đầu
+        if (shotCount <= 1) return -0.65; // Viên 1: Ghim vào giữa ngực (An toàn tuyệt đối)
+        if (shotCount <= 2) return -0.25; // Viên 2: Trượt lên cổ
+        return 0.0;                       // Viên 3+: Teleport nát sọ
     }
 
-    // GIẢI PHÁP 1: Chuyển động bậc 2 (Gia tốc + Vận tốc)
-    static predictKinematicLead(targetId, headPos, targetVel, selfVel, distance, currentTime) {
+    static predictElevatorLead(targetId, headPos, targetVel, selfVel, distance, currentTime, shotCount, isAiming) {
         const BULLET_SPEED = 99999.0;
         const GRAVITY = -9.81;
         const flightTime = (distance / BULLET_SPEED) + _global.__QuantumState.currentPing + 0.002;
         
         let accel = { x: 0, y: 0, z: 0 };
 
-        // Lấy lịch sử để tính Gia tốc (Acceleration)
         if (_global.__QuantumState.history[targetId]) {
             const prev = _global.__QuantumState.history[targetId];
-            let dt = (currentTime - prev.time) / 1000.0; // Đổi ms sang giây
+            let dt = (currentTime - prev.time) / 1000.0; 
             
-            // Lọc các dt bất thường (Lag spike) để tránh gia tốc vọt lên vô cực
             if (dt > 0.01 && dt < 0.2) { 
-                accel.x = (targetVel.x - prev.vel.x) / dt;
-                accel.y = (targetVel.y - prev.vel.y) / dt;
-                accel.z = (targetVel.z - prev.vel.z) / dt;
-
-                // Giới hạn gia tốc tối đa để chống lỗi vật lý
-                const maxAccel = 50.0; 
-                accel.x = this.clamp(accel.x, -maxAccel, maxAccel);
-                accel.y = this.clamp(accel.y, -maxAccel, maxAccel);
-                accel.z = this.clamp(accel.z, -maxAccel, maxAccel);
+                accel.x = this.clamp((targetVel.x - prev.vel.x) / dt, -50.0, 50.0);
+                accel.y = this.clamp((targetVel.y - prev.vel.y) / dt, -50.0, 50.0);
+                accel.z = this.clamp((targetVel.z - prev.vel.z) / dt, -50.0, 50.0);
             }
         }
-
-        // Cập nhật lịch sử mới
         _global.__QuantumState.history[targetId] = { vel: { ...targetVel }, time: currentTime };
 
-        // P_target = P0 + V*t + 0.5*A*t^2 (Thêm trọng lực cho trục Y)
-        return {
-            x: headPos.x + (targetVel.x - selfVel.x) * flightTime + 0.5 * accel.x * (flightTime * flightTime),
-            y: headPos.y + (targetVel.y - selfVel.y) * flightTime + 0.5 * (accel.y + GRAVITY) * (flightTime * flightTime) - 0.012,
-            z: headPos.z + (targetVel.z - selfVel.z) * flightTime + 0.5 * accel.z * (flightTime * flightTime)
-        };
+        // Lấy tọa độ gốc
+        let targetX = headPos.x + (targetVel.x - selfVel.x) * flightTime + 0.5 * accel.x * (flightTime * flightTime);
+        let targetZ = headPos.z + (targetVel.z - selfVel.z) * flightTime + 0.5 * accel.z * (flightTime * flightTime);
+        let targetY = headPos.y + (targetVel.y - selfVel.y) * flightTime + 0.5 * (accel.y + GRAVITY) * (flightTime * flightTime);
+
+        // Áp dụng Thang máy trục Y
+        const yOffset = this.getElevatorOffset(shotCount, isAiming);
+
+        return { x: targetX, y: targetY + yOffset - 0.015, z: targetZ };
     }
 }
 
-class KinematicApexEngine {
+class BoneElevatorEngine {
     constructor() {
         this.absoluteWeight = 99999999.0;
         this.IGNORE_KEYS = new Set(['ui', 'inventory', 'audio', 'cosmetics', 'chat', 'minimap', 'particles', 'effects']);
-        this.ghostBones = ['root', 'spine', 'spine1', 'chest', 'pelvis', 'hips', 'left_arm', 'right_arm', 'left_leg', 'right_leg', 'neck'];
     }
 
     findBestTarget(players) {
@@ -102,7 +90,7 @@ class KinematicApexEngine {
         return bestTarget;
     }
 
-    processRecursive(node, context = { isFiring: false, selfVel: {x:0,y:0,z:0}, targetId: null, targetPos: null }) {
+    processRecursive(node, context = { isFiring: false, isAiming: false, shotCount: 0, selfVel: {x:0,y:0,z:0}, targetId: null, targetPos: null }) {
         if (typeof node !== 'object' || node === null) return node;
         if (Array.isArray(node)) {
             for (let i = 0; i < node.length; i++) node[i] = this.processRecursive(node[i], context);
@@ -112,59 +100,76 @@ class KinematicApexEngine {
         if (node.ping !== undefined) _global.__QuantumState.currentPing = node.ping / 1000.0;
         if (node.player_velocity) context.selfVel = node.player_velocity;
 
+        // Đọc trạng thái chiến đấu toàn diện
         if (node.weapon || node.camera_state) {
             context.isFiring = !!(node.weapon?.is_firing || node.weapon?.recoil_accumulation > 0 || node.camera_state?.is_firing);
+            context.isAiming = !!(node.camera_state?.is_aiming || node.weapon?.is_aiming);
+            context.shotCount = node.weapon?.shots_fired ?? (node.weapon?.recoil_accumulation / 0.015 || 0);
         }
 
         if (node.players && Array.isArray(node.players)) {
             const bestTarget = this.findBestTarget(node.players);
             const currentTime = Date.now();
             
-            if (bestTarget && context.isFiring) {
-                context.targetId = bestTarget.id;
+            node.players.forEach(enemy => {
+                if (!enemy.hitboxes) return;
 
-                node.players.forEach(enemy => {
-                    this.ghostBones.forEach(bone => {
-                        if (enemy.hitboxes && enemy.hitboxes[bone]) {
-                            enemy.hitboxes[bone].priority = "IGNORE";
-                            enemy.hitboxes[bone].snap_weight = -999999.0;
-                            enemy.hitboxes[bone].m_Radius = 0.0;
+                // PHA 0: ĐỊNH TÂM BỊ ĐỘNG (PASSIVE CENTERING)
+                if (!context.isFiring) {
+                    // Xóa bỏ lực hút vào đầu để không bị giật camera lên trên khi chạy bộ
+                    if (enemy.hitboxes.head) {
+                        enemy.hitboxes.head.snap_weight = 10.0;
+                        enemy.hitboxes.head.friction = 0.0;
+                    }
+                    // Tạo lực hút tĩnh cực mượt vào vùng ngực/cột sống
+                    const chestBones = ['chest', 'spine', 'spine1', 'spine2'];
+                    chestBones.forEach(bone => {
+                        if (enemy.hitboxes[bone]) {
+                            enemy.hitboxes[bone].priority = "HIGH";
+                            enemy.hitboxes[bone].snap_weight = 350.0; 
+                            enemy.hitboxes[bone].m_Radius = 30.0;     
+                            enemy.hitboxes[bone].friction = 80.0;     // Hỗ trợ ghì tâm nhẹ nhàng
                         }
                     });
+                }
 
-                    if (enemy.id === context.targetId && enemy.head_pos) {
-                        // Gọi hàm dự đoán động học bậc 2
-                        const interceptPos = QuantumKinematics.predictKinematicLead(
-                            enemy.id, enemy.head_pos, enemy.velocity || {x:0, y:0, z:0}, 
-                            context.selfVel, enemy.distance || 20.0, currentTime
-                        );
-                        
-                        context.targetPos = interceptPos;
+                // PHA 1 & 2: THANG MÁY TỬ THẦN
+                if (bestTarget && enemy.id === bestTarget.id && context.isFiring) {
+                    context.targetId = enemy.id;
 
-                        enemy.center_of_mass.x = interceptPos.x;
-                        enemy.center_of_mass.y = interceptPos.y;
-                        enemy.center_of_mass.z = interceptPos.z;
+                    const interceptPos = QuantumKinematics.predictElevatorLead(
+                        enemy.id, enemy.head_pos || enemy.center_of_mass, enemy.velocity || {x:0, y:0, z:0}, 
+                        context.selfVel, enemy.distance || 20.0, currentTime, context.shotCount, context.isAiming
+                    );
+                    
+                    context.targetPos = interceptPos;
 
-                        if (enemy.hitboxes && enemy.hitboxes.head) {
-                            enemy.hitboxes.head.priority = "ABSOLUTE";
-                            
-                            // Bơm phồng Hitbox dựa trên tốc độ di chuyển
-                            const baseRadius = enemy.distance > 50 ? 55.0 : 35.0;
-                            enemy.hitboxes.head.m_Radius = QuantumKinematics.getDilatedRadius(baseRadius, enemy.velocity);
-                        }
+                    // Gán trọng tâm về điểm Thang máy
+                    enemy.center_of_mass.x = interceptPos.x;
+                    enemy.center_of_mass.y = interceptPos.y;
+                    enemy.center_of_mass.z = interceptPos.z;
+
+                    // Bơm phồng Hitbox Đầu tuyệt đối để hứng đạn
+                    if (enemy.hitboxes.head) {
+                        enemy.hitboxes.head.priority = "ABSOLUTE";
+                        enemy.hitboxes.head.m_Radius = 80.0; // Phình to cực đại
+                        enemy.hitboxes.head.snap_weight = this.absoluteWeight;
                     }
-                });
-            }
+                }
+            });
         }
 
-        // ÉP TỌA ĐỘ TRỰC TIẾP LÊN CAMERA
+        // CƯỠNG BỨC GÓC NHÌN THEO THANG MÁY
         if (node.camera_state) {
             if (context.isFiring && context.targetId && context.targetPos) {
                 node.camera_state.forced_target_id = context.targetId; 
                 node.camera_state.absolute_lock = true;
-                node.camera_state.lock_bone = "bone_Head";
-                node.camera_state.target_bone_id = 8;
                 
+                // Trượt Bone ID linh hoạt
+                node.camera_state.lock_bone = context.shotCount <= 1 && !context.isAiming ? "bone_Spine" : "bone_Head";
+                node.camera_state.target_bone_id = context.shotCount <= 1 && !context.isAiming ? 4 : 8; // 4 = Spine, 8 = Head
+                
+                // Đóng băng ngón tay người chơi, tự động nội suy tọa độ
                 node.camera_state.interpolation = "ZERO";
                 node.camera_state.interpolation_frames = 0;
                 node.camera_state.max_pitch_velocity = 0.0;
@@ -195,7 +200,7 @@ if (typeof $response !== "undefined" && $response.body) {
         try {
             _global.__QuantumState.frameCounter++;
             const payload = JSON.parse($response.body);
-            const mutated = new KinematicApexEngine().processRecursive(payload);
+            const mutated = new BoneElevatorEngine().processRecursive(payload);
             $done({ body: JSON.stringify(mutated) });
         } catch (e) {
             $done({ body: $response.body });
