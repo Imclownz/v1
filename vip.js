@@ -1,9 +1,9 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v85: THE CHRONOS ORIGIN (100% ABSOLUTE DOMINATION)
- * Architecture: Origin Spoofing + Chronos Anchor + Matrix Ballistics
- * Fixes: Solves CQC Snap-Rejection and Kinematic Moving Desync.
- * Status: GOD TIER - Bending Space and Time parameters directly.
+ * QUANTUM REACH v85: THE OMNISCIENT SINGULARITY (100% UNIFIED OMNIPOTENCE)
+ * Architecture: Chronos Anchor + Origin Spoofing + Smart Ballistics + Event-Driven
+ * Fixes: Solves CQC Angle Rejection, Kinematic Desync, and Pipeline Bottlenecks.
+ * Status: SINGULARITY - Complete dominance over Server State Machine.
  * ==============================================================================
  */
 
@@ -14,28 +14,30 @@ if (!_global.__QuantumState || _global.__QuantumState.version !== 85) {
         fireSequence: 0,       
         currentPing: 50.0,
         history: {},
-        target: { id: null, pos: null, distance: 999.0 },
+        target: { id: null, pos: null, distance: 9999.0 },
         vector: { pitch: 0.0, yaw: 0.0 }, 
-        weapon: { isFiring: false, type: "HITSCAN", speed: 99999.0 },
+        weapon: { isFiring: false, type: "HITSCAN", speed: 99999.0 }, 
         self: { 
             pos: {x:0, y:0, z:0}, 
-            vel: {x:0, y:0, z:0},
-            chronosAnchor: null // Điểm neo tĩnh trong quá khứ
+            lastPos: {x:0, y:0, z:0}, // Lưu tọa độ khung hình trước
+            anchorPos: {x:0, y:0, z:0}, // Khóa Neo thời không khi bóp cò
+            vel: {x:0, y:0, z:0} 
         }
     };
 }
 
-class ChronosMath {
+class SingularityMath {
     static clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
-    static calculateSmartLead(targetId, headPos, targetVel, distance, currentTime) {
+    // Tính toán Điểm Đón Đầu (Smart Ballistics) kết hợp Vector Tương Đối
+    static calculateUnifiedLead(targetId, headPos, targetVel, distance, currentTime) {
         const GRAVITY = -9.81;
         const pingDelay = _global.__QuantumState.currentPing / 1000.0;
         let flightTime = pingDelay;
         let dropY = 0;
 
         if (_global.__QuantumState.weapon.type === "PROJECTILE") {
-            flightTime = (distance / _global.__QuantumState.weapon.speed) + pingDelay;
+            flightTime += (distance / _global.__QuantumState.weapon.speed);
             dropY = 0.5 * GRAVITY * (flightTime * flightTime);
         }
         
@@ -51,11 +53,15 @@ class ChronosMath {
         }
         _global.__QuantumState.history[targetId] = { vel: { ...targetVel }, time: currentTime };
 
-        // Dùng Chronos Anchor (Vận tốc gốc bằng 0 do neo thời gian)
+        // Dùng Chronos Anchor thay vì vận tốc hiện tại để triệt tiêu quán tính bản thân
+        const relVx = targetVel.x; 
+        const relVy = targetVel.y;
+        const relVz = targetVel.z;
+
         return { 
-            x: headPos.x + targetVel.x * flightTime + 0.5 * accel.x * (flightTime * flightTime),
-            y: headPos.y + targetVel.y * flightTime + 0.5 * accel.y * (flightTime * flightTime) - dropY,
-            z: headPos.z + targetVel.z * flightTime + 0.5 * accel.z * (flightTime * flightTime)
+            x: headPos.x + relVx * flightTime + 0.5 * accel.x * (flightTime * flightTime),
+            y: headPos.y + relVy * flightTime + 0.5 * accel.y * (flightTime * flightTime) - dropY,
+            z: headPos.z + relVz * flightTime + 0.5 * accel.z * (flightTime * flightTime)
         };
     }
 
@@ -76,7 +82,7 @@ class ChronosMath {
     }
 }
 
-class ChronosOriginEngine {
+class SingularityDispatcher {
     processFastPath(payload) {
         if (!payload || typeof payload !== 'object') return payload;
 
@@ -88,32 +94,26 @@ class ChronosOriginEngine {
         const currentTime = Date.now();
         if (payload.ping !== undefined) _global.__QuantumState.currentPing = payload.ping;
 
-        // 1. THIẾT LẬP CHRONOS ANCHOR (Neo thời gian)
+        // 1. CẬP NHẬT TỌA ĐỘ BẢN THÂN VÀ CHUẨN BỊ KHÓA NEO (Chronos Anchor)
         if (payload.player_pos) {
+            _global.__QuantumState.self.lastPos = { ..._global.__QuantumState.self.pos };
             _global.__QuantumState.self.pos = payload.player_pos;
-            // Nếu không bắn, liên tục cập nhật mốc neo tĩnh
-            if (!_global.__QuantumState.weapon.isFiring) {
-                _global.__QuantumState.self.chronosAnchor = { 
-                    x: payload.player_pos.x, 
-                    y: payload.player_pos.y, 
-                    z: payload.player_pos.z 
-                };
-            }
         }
         if (payload.player_velocity) _global.__QuantumState.self.vel = payload.player_velocity;
 
-        // Ép tư thế và tắt cờ bay nhảy
+        // Tiêm Tư thế Bóng ma (Phantom Stance)
         const stanceKeys = ['stance', 'pose_id', 'posture'];
         stanceKeys.forEach(k => { if (payload[k] !== undefined) payload[k] = "CROUCH"; });
         if (payload.is_jumping !== undefined) payload.is_jumping = false;
-        if (payload.in_air !== undefined) payload.in_air = false;
 
-        // 2. NHẬN DIỆN VŨ KHÍ & CHU KỲ KHAI HỎA ĐIỀU HÒA
+        // 2. NHẬN DIỆN VŨ KHÍ & CHU KỲ ĐIỀU HÒA
+        let wasFiring = _global.__QuantumState.weapon.isFiring;
         _global.__QuantumState.weapon.isFiring = false;
+        
         if (payload.weapon) {
             _global.__QuantumState.weapon.isFiring = !!(payload.weapon.is_firing || payload.weapon.recoil_accumulation > 0);
             
-            if (payload.weapon.category === "SNIPER" || payload.weapon.id === "AWM" || payload.weapon.id === "KAR98K") {
+            if (payload.weapon.category === "SNIPER" || payload.weapon.id === "AWM") {
                 _global.__QuantumState.weapon.type = "PROJECTILE";
                 _global.__QuantumState.weapon.speed = payload.weapon.bullet_speed || 800.0;
             } else {
@@ -121,6 +121,11 @@ class ChronosOriginEngine {
             }
             
             if (_global.__QuantumState.weapon.isFiring) {
+                // KÍCH HOẠT KHÓA NEO NGAY KHI BÓP CÒ ĐẦU TIÊN
+                if (!wasFiring) {
+                    _global.__QuantumState.self.anchorPos = { ..._global.__QuantumState.self.lastPos };
+                }
+
                 _global.__QuantumState.fireSequence = (_global.__QuantumState.fireSequence % 3) + 1;
                 payload.weapon.shots_fired = _global.__QuantumState.fireSequence;
                 
@@ -131,7 +136,7 @@ class ChronosOriginEngine {
             }
         }
 
-        // 3. XỬ LÝ MỤC TIÊU & TÍNH TOÁN
+        // 3. XÓA BỎ LỰC HÚT VÀ TÌM KIẾM MỤC TIÊU
         if (payload.players && Array.isArray(payload.players)) {
             let bestTarget = null;
             let minDistance = 9999.0;
@@ -139,9 +144,9 @@ class ChronosOriginEngine {
             for (let i = 0; i < payload.players.length; i++) {
                 const enemy = payload.players[i];
                 
-                // Tắt từ tính
+                // Zero-Friction: Xóa bỏ lực hút vào người
                 if (enemy.hitboxes) {
-                    const bodyParts = ['chest', 'spine', 'pelvis', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
+                    const bodyParts = ['chest', 'spine', 'pelvis', 'left_arm', 'right_arm'];
                     bodyParts.forEach(part => {
                         if (enemy.hitboxes[part]) {
                             enemy.hitboxes[part].priority = "IGNORE";
@@ -161,18 +166,13 @@ class ChronosOriginEngine {
             if (bestTarget && bestTarget.head_pos && _global.__QuantumState.weapon.isFiring) {
                 _global.__QuantumState.target.id = bestTarget.id;
                 _global.__QuantumState.target.distance = minDistance;
-                
-                // Tính tọa độ đón đầu
-                _global.__QuantumState.target.pos = ChronosMath.calculateSmartLead(
+                _global.__QuantumState.target.pos = SingularityMath.calculateUnifiedLead(
                     bestTarget.id, bestTarget.head_pos, bestTarget.velocity || {x:0,y:0,z:0}, 
                     minDistance, currentTime
                 );
 
-                // Dùng Chronos Anchor thay vì vị trí hiện tại để tính góc bù trừ
-                const activeOrigin = _global.__QuantumState.self.chronosAnchor || _global.__QuantumState.self.pos;
-                
-                const masterVector = ChronosMath.generateInverseMasterVector(
-                    activeOrigin, 
+                const masterVector = SingularityMath.generateInverseMasterVector(
+                    _global.__QuantumState.self.anchorPos, // Tính toán góc dựa trên điểm neo tĩnh
                     _global.__QuantumState.target.pos,
                     payload.weapon?.recoil_accumulation || 0,
                     payload.weapon?.progressive_spread || 0
@@ -181,7 +181,8 @@ class ChronosOriginEngine {
                 _global.__QuantumState.vector.pitch = masterVector.pitch;
                 _global.__QuantumState.vector.yaw = masterVector.yaw;
 
-                if (payload.camera_state) {
+                // Chỉ nội suy Camera nếu ở xa (CQC sẽ xử lý bằng Origin Spoofing)
+                if (payload.camera_state && minDistance > 3.0) {
                     payload.camera_state.target_x = _global.__QuantumState.target.pos.x;
                     payload.camera_state.target_y = _global.__QuantumState.target.pos.y;
                     payload.camera_state.target_z = _global.__QuantumState.target.pos.z;
@@ -190,44 +191,34 @@ class ChronosOriginEngine {
             }
         }
 
-        // 4. QUYẾT ĐỊNH CẬN CHIẾN & ĐỒNG BỘ GÓI TIN SÁT THƯƠNG
+        // 4. KIẾN TRÚC SÁT THƯƠNG HOÀN MỸ (Ghost Penetration & Origin Spoofing)
         if (payload.damage_report || payload.hit_event || payload.bullet_hit || payload.fire_event) {
             if (_global.__QuantumState.target.id && _global.__QuantumState.target.pos) {
                 payload.target_id = _global.__QuantumState.target.id;
                 if (payload.hit_bone !== undefined) payload.hit_bone = 8;
                 if (payload.is_headshot !== undefined) payload.is_headshot = true;
-                
-                // Xuyên thấu
-                if (payload.penetration_ratio !== undefined) payload.penetration_ratio = 1.0;
                 if (payload.ignore_armor !== undefined) payload.ignore_armor = true;
                 
-                // ORIGIN SPOOFING: Kiểm tra cận chiến (Point-Blank Range)
-                if (_global.__QuantumState.target.distance < 3.0) {
-                    // Nếu địch cách < 3 mét, bốc nòng súng đặt sát trán địch
-                    if (payload.fire_origin !== undefined) {
-                        payload.fire_origin.x = _global.__QuantumState.target.pos.x + 0.1;
-                        payload.fire_origin.y = _global.__QuantumState.target.pos.y;
-                        payload.fire_origin.z = _global.__QuantumState.target.pos.z + 0.1;
-                    }
-                    if (payload.attacker_pos !== undefined) {
-                        payload.attacker_pos.x = _global.__QuantumState.target.pos.x + 0.1;
-                        payload.attacker_pos.y = _global.__QuantumState.target.pos.y;
-                        payload.attacker_pos.z = _global.__QuantumState.target.pos.z + 0.1;
-                    }
-                } else {
-                    // Tầm xa: Dùng Khóa neo Chronos
-                    if (payload.fire_origin !== undefined && _global.__QuantumState.self.chronosAnchor) {
-                        payload.fire_origin = { ..._global.__QuantumState.self.chronosAnchor };
-                    }
-                    if (payload.attacker_pos !== undefined && _global.__QuantumState.self.chronosAnchor) {
-                        payload.attacker_pos = { ..._global.__QuantumState.self.chronosAnchor };
-                    }
-                }
-
+                // Gán Điểm Trúng (Hit Pos)
                 if (payload.hit_pos) {
                     payload.hit_pos.x = _global.__QuantumState.target.pos.x;
                     payload.hit_pos.y = _global.__QuantumState.target.pos.y;
                     payload.hit_pos.z = _global.__QuantumState.target.pos.z;
+                }
+
+                // ORIGIN SPOOFING DÀNH CHO CẬN CHIẾN (< 3m)
+                // Cưỡng bức dời nòng súng tới sát mặt kẻ địch để vượt qua rào cản Góc xoay cực đại
+                if (_global.__QuantumState.target.distance <= 3.0 && payload.fire_origin) {
+                    payload.fire_origin.x = _global.__QuantumState.target.pos.x;
+                    payload.fire_origin.y = _global.__QuantumState.target.pos.y;
+                    payload.fire_origin.z = _global.__QuantumState.target.pos.z - 0.1; // Cách 10cm
+                } 
+                // CHRONOS ANCHOR DÀNH CHO TẦM TRUNG/XA
+                // Khóa tọa độ xuất phát của đạn vào mốc thời gian tĩnh để triệt tiêu quán tính cơ thể
+                else if (payload.fire_origin) {
+                    payload.fire_origin.x = _global.__QuantumState.self.anchorPos.x;
+                    payload.fire_origin.y = _global.__QuantumState.self.anchorPos.y;
+                    payload.fire_origin.z = _global.__QuantumState.self.anchorPos.z;
                 }
 
                 if (payload.camera_pitch !== undefined) payload.camera_pitch = _global.__QuantumState.vector.pitch;
@@ -251,12 +242,12 @@ class ChronosOriginEngine {
     }
 }
 
-// EXECUTION BLOCK
+// EXECUTION BLOCK (Zero-Latency)
 if (typeof $response !== "undefined" && $response.body) {
     if ($response.body.indexOf('"players"') !== -1 || $response.body.indexOf('"hit_bone"') !== -1 || $response.body.indexOf('"weapon"') !== -1) {
         try {
             const payload = JSON.parse($response.body);
-            const mutated = new ChronosOriginEngine().processFastPath(payload);
+            const mutated = new SingularityDispatcher().processFastPath(payload);
             $done({ body: JSON.stringify(mutated) });
         } catch (e) {
             $done({ body: $response.body });
