@@ -1,40 +1,41 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v89: THE PHOENIX PROTOCOL (IMMORTAL STATE)
- * Architecture: Session Annihilation + Dynamic Ping Calib + Auto-Scale Neck Offset
- * Fixes: Memory Ghosting, Late-game Inaccuracy, Time-Sync Drift, Hitbox Variances.
- * Status: IMMORTAL - 100% Automated, self-cleaning, and adaptive network execution.
+ * QUANTUM REACH v85: THE CHRONOS ORIGIN (100% ABSOLUTE DOMINATION)
+ * Architecture: Origin Spoofing + Chronos Anchor + Matrix Ballistics
+ * Fixes: Solves CQC Snap-Rejection and Kinematic Moving Desync.
+ * Status: GOD TIER - Bending Space and Time parameters directly.
  * ==============================================================================
  */
 
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-
-// KHỞI TẠO HOẶC NÂNG CẤP PHIÊN BẢN (Không giữ lại rác bộ nhớ cũ)
-if (!_global.__QuantumState || _global.__QuantumState.version !== 89) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 85) {
     _global.__QuantumState = {
-        version: 89,
-        currentMatchId: null,
-        burstCounter: 0,
+        version: 85,
+        fireSequence: 0,       
         currentPing: 50.0,
-        history: {}, // Lịch sử tọa độ (Sẽ bị reset mỗi trận)
-        target: { id: null, executionPos: {x:0, y:0, z:0}, distance: 9999.0 },
-        internalVector: { pitch: 0.0, yaw: 0.0 },
-        weapon: { type: "HITSCAN", speed: 99999.0 },
-        self: { pos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0} }
+        history: {},
+        target: { id: null, pos: null, distance: 999.0 },
+        vector: { pitch: 0.0, yaw: 0.0 }, 
+        weapon: { isFiring: false, type: "HITSCAN", speed: 99999.0 },
+        self: { 
+            pos: {x:0, y:0, z:0}, 
+            vel: {x:0, y:0, z:0},
+            chronosAnchor: null // Điểm neo tĩnh trong quá khứ
+        }
     };
 }
 
-class PhoenixMath {
+class ChronosMath {
     static clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
 
-    // DỰ ĐOÁN QUỸ ĐẠO VỚI KHÓA TRỤC Y VÀ AUTO-SCALING NECK OFFSET
-    static calculateExecutionPoint(targetId, headPos, headRadius, targetVel, distance, currentTime) {
-        let flightTime = (_global.__QuantumState.currentPing / 1000.0);
+    static calculateSmartLead(targetId, headPos, targetVel, distance, currentTime) {
+        const GRAVITY = -9.81;
+        const pingDelay = _global.__QuantumState.currentPing / 1000.0;
+        let flightTime = pingDelay;
         let dropY = 0;
 
         if (_global.__QuantumState.weapon.type === "PROJECTILE") {
-            const GRAVITY = -9.81;
-            flightTime += (distance / _global.__QuantumState.weapon.speed);
+            flightTime = (distance / _global.__QuantumState.weapon.speed) + pingDelay;
             dropY = 0.5 * GRAVITY * (flightTime * flightTime);
         }
         
@@ -48,51 +49,34 @@ class PhoenixMath {
                 accel.z = this.clamp((targetVel.z - prev.vel.z) / dt, -50.0, 50.0);
             }
         }
-        // Lưu lịch sử tọa độ mới
         _global.__QuantumState.history[targetId] = { vel: { ...targetVel }, time: currentTime };
 
-        // 1. Asymmetric Y-Clamp (Chống đạn vọt qua đầu)
-        let predictedY = headPos.y;
-        if (targetVel.y < 0) {
-            predictedY += (targetVel.y * flightTime) + (0.5 * accel.y * flightTime * flightTime);
-        }
-
-        // 2. TỰ ĐỘNG CO GIÃN ĐIỂM NGẮM YẾT HẦU (Auto-Scale Neck Offset)
-        // Thay vì trừ cứng 0.15m, hệ thống tính toán dựa trên bán kính đầu thực tế.
-        // Hạ xuống 85% bán kính đầu để luôn chạm đúng vào Yết hầu bất kể nhân vật nào.
-        const dynamicNeckOffset = headRadius * 0.85; 
-        predictedY -= dynamicNeckOffset; 
-        predictedY -= dropY; 
-
-        const predictedX = headPos.x + (targetVel.x * flightTime) + (0.5 * accel.x * flightTime * flightTime);
-        const predictedZ = headPos.z + (targetVel.z * flightTime) + (0.5 * accel.z * flightTime * flightTime);
-
-        return { x: predictedX, y: predictedY, z: predictedZ };
+        // Dùng Chronos Anchor (Vận tốc gốc bằng 0 do neo thời gian)
+        return { 
+            x: headPos.x + targetVel.x * flightTime + 0.5 * accel.x * (flightTime * flightTime),
+            y: headPos.y + targetVel.y * flightTime + 0.5 * accel.y * (flightTime * flightTime) - dropY,
+            z: headPos.z + targetVel.z * flightTime + 0.5 * accel.z * (flightTime * flightTime)
+        };
     }
 
-    static generateSilentVector(fromPos, toPos) {
+    static generateInverseMasterVector(fromPos, toPos, recoilY, spreadX) {
         if (!fromPos || !toPos) return { pitch: 0, yaw: 0 };
         const dx = toPos.x - fromPos.x;
         const dy = toPos.y - fromPos.y;
         const dz = toPos.z - fromPos.z;
         const distXZ = Math.sqrt(dx * dx + dz * dz);
         
-        return {
-            yaw: Math.atan2(dx, dz) * (180.0 / Math.PI),
-            pitch: Math.atan2(-dy, distXZ) * (180.0 / Math.PI)
-        };
+        let yaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
+        let pitch = Math.atan2(-dy, distXZ) * (180.0 / Math.PI);
+
+        pitch -= recoilY; 
+        yaw -= spreadX;   
+
+        return { pitch, yaw };
     }
 }
 
-class PhoenixDispatcher {
-    // GIAO THỨC TẨY NÃO (Session Annihilation)
-    cleanseMemory(newMatchId) {
-        _global.__QuantumState.currentMatchId = newMatchId;
-        _global.__QuantumState.history = {}; // Quét sạch rác tọa độ
-        _global.__QuantumState.burstCounter = 0; // Reset nhịp đạn
-        _global.__QuantumState.target = { id: null, executionPos: {x:0, y:0, z:0}, distance: 9999.0 };
-    }
-
+class ChronosOriginEngine {
     processFastPath(payload) {
         if (!payload || typeof payload !== 'object') return payload;
 
@@ -102,47 +86,71 @@ class PhoenixDispatcher {
         }
 
         const currentTime = Date.now();
+        if (payload.ping !== undefined) _global.__QuantumState.currentPing = payload.ping;
 
-        // ĐỒNG BỘ PING THỜI GIAN THỰC (Dynamic Ping Calibration)
-        if (payload.ping !== undefined) {
-            // Làm mượt độ nhiễu Ping để tránh giật cục khi lùi thời gian
-            _global.__QuantumState.currentPing = (_global.__QuantumState.currentPing * 0.7) + (payload.ping * 0.3);
+        // 1. THIẾT LẬP CHRONOS ANCHOR (Neo thời gian)
+        if (payload.player_pos) {
+            _global.__QuantumState.self.pos = payload.player_pos;
+            // Nếu không bắn, liên tục cập nhật mốc neo tĩnh
+            if (!_global.__QuantumState.weapon.isFiring) {
+                _global.__QuantumState.self.chronosAnchor = { 
+                    x: payload.player_pos.x, 
+                    y: payload.player_pos.y, 
+                    z: payload.player_pos.z 
+                };
+            }
         }
-
-        // KIỂM TRA TRẬN ĐẤU MỚI (Trigger Tẩy Não)
-        if (payload.match_id !== undefined && payload.match_id !== _global.__QuantumState.currentMatchId) {
-            this.cleanseMemory(payload.match_id);
-        }
-        if (payload.game_state === "SPAWN_ISLAND" || payload.game_state === "STARTING") {
-            this.cleanseMemory(_global.__QuantumState.currentMatchId);
-        }
-
-        if (payload.player_pos) _global.__QuantumState.self.pos = payload.player_pos;
         if (payload.player_velocity) _global.__QuantumState.self.vel = payload.player_velocity;
 
-        // KIẾN TRÚC pSILENT: Hoàn toàn không đụng vào camera_state
+        // Ép tư thế và tắt cờ bay nhảy
+        const stanceKeys = ['stance', 'pose_id', 'posture'];
+        stanceKeys.forEach(k => { if (payload[k] !== undefined) payload[k] = "CROUCH"; });
+        if (payload.is_jumping !== undefined) payload.is_jumping = false;
+        if (payload.in_air !== undefined) payload.in_air = false;
 
+        // 2. NHẬN DIỆN VŨ KHÍ & CHU KỲ KHAI HỎA ĐIỀU HÒA
+        _global.__QuantumState.weapon.isFiring = false;
         if (payload.weapon) {
+            _global.__QuantumState.weapon.isFiring = !!(payload.weapon.is_firing || payload.weapon.recoil_accumulation > 0);
+            
             if (payload.weapon.category === "SNIPER" || payload.weapon.id === "AWM" || payload.weapon.id === "KAR98K") {
                 _global.__QuantumState.weapon.type = "PROJECTILE";
                 _global.__QuantumState.weapon.speed = payload.weapon.bullet_speed || 800.0;
             } else {
                 _global.__QuantumState.weapon.type = "HITSCAN";
             }
+            
+            if (_global.__QuantumState.weapon.isFiring) {
+                _global.__QuantumState.fireSequence = (_global.__QuantumState.fireSequence % 3) + 1;
+                payload.weapon.shots_fired = _global.__QuantumState.fireSequence;
+                
+                if (payload.weapon.recoil_accumulation) payload.weapon.recoil_accumulation *= 0.1;
+                if (payload.weapon.progressive_spread) payload.weapon.progressive_spread *= 0.1;
+            } else {
+                _global.__QuantumState.fireSequence = 0; 
+            }
         }
 
-        // TÌM MỤC TIÊU & TÍNH TOÁN (Chạy ngầm)
+        // 3. XỬ LÝ MỤC TIÊU & TÍNH TOÁN
         if (payload.players && Array.isArray(payload.players)) {
             let bestTarget = null;
             let minDistance = 9999.0;
 
             for (let i = 0; i < payload.players.length; i++) {
                 const enemy = payload.players[i];
+                
+                // Tắt từ tính
+                if (enemy.hitboxes) {
+                    const bodyParts = ['chest', 'spine', 'pelvis', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
+                    bodyParts.forEach(part => {
+                        if (enemy.hitboxes[part]) {
+                            enemy.hitboxes[part].priority = "IGNORE";
+                            enemy.hitboxes[part].friction = 0.0;
+                        }
+                    });
+                }
+
                 if (enemy.is_visible !== false && enemy.occluded !== true) {
-                    if (enemy.hitboxes && enemy.hitboxes.chest) {
-                        enemy.hitboxes.chest.priority = "IGNORE";
-                        enemy.hitboxes.chest.magnetism = 0.0;
-                    }
                     if (enemy.distance < minDistance) { 
                         minDistance = enemy.distance; 
                         bestTarget = enemy; 
@@ -150,54 +158,83 @@ class PhoenixDispatcher {
                 }
             }
 
-            if (bestTarget && bestTarget.head_pos) {
+            if (bestTarget && bestTarget.head_pos && _global.__QuantumState.weapon.isFiring) {
                 _global.__QuantumState.target.id = bestTarget.id;
                 _global.__QuantumState.target.distance = minDistance;
                 
-                // Lấy bán kính đầu động để tính yết hầu
-                const headRadius = bestTarget.hitboxes?.head?.radius || 0.18;
-                
-                _global.__QuantumState.target.executionPos = PhoenixMath.calculateExecutionPoint(
-                    bestTarget.id, bestTarget.head_pos, headRadius, bestTarget.velocity || {x:0,y:0,z:0}, 
+                // Tính tọa độ đón đầu
+                _global.__QuantumState.target.pos = ChronosMath.calculateSmartLead(
+                    bestTarget.id, bestTarget.head_pos, bestTarget.velocity || {x:0,y:0,z:0}, 
                     minDistance, currentTime
                 );
 
-                const silentVec = PhoenixMath.generateSilentVector(
-                    _global.__QuantumState.self.pos, 
-                    _global.__QuantumState.target.executionPos
+                // Dùng Chronos Anchor thay vì vị trí hiện tại để tính góc bù trừ
+                const activeOrigin = _global.__QuantumState.self.chronosAnchor || _global.__QuantumState.self.pos;
+                
+                const masterVector = ChronosMath.generateInverseMasterVector(
+                    activeOrigin, 
+                    _global.__QuantumState.target.pos,
+                    payload.weapon?.recoil_accumulation || 0,
+                    payload.weapon?.progressive_spread || 0
                 );
                 
-                _global.__QuantumState.internalVector.pitch = silentVec.pitch;
-                _global.__QuantumState.internalVector.yaw = silentVec.yaw;
+                _global.__QuantumState.vector.pitch = masterVector.pitch;
+                _global.__QuantumState.vector.yaw = masterVector.yaw;
+
+                if (payload.camera_state) {
+                    payload.camera_state.target_x = _global.__QuantumState.target.pos.x;
+                    payload.camera_state.target_y = _global.__QuantumState.target.pos.y;
+                    payload.camera_state.target_z = _global.__QuantumState.target.pos.z;
+                    payload.camera_state.interpolation = "ZERO";
+                }
             }
         }
 
-        // 3. THỰC THI SÁT THƯƠNG & NÉN GÓI TIN ĐỘNG (Dynamic Ghost Bursting)
+        // 4. QUYẾT ĐỊNH CẬN CHIẾN & ĐỒNG BỘ GÓI TIN SÁT THƯƠNG
         if (payload.damage_report || payload.hit_event || payload.bullet_hit || payload.fire_event) {
-            if (_global.__QuantumState.target.id && _global.__QuantumState.target.executionPos) {
-                
+            if (_global.__QuantumState.target.id && _global.__QuantumState.target.pos) {
                 payload.target_id = _global.__QuantumState.target.id;
                 if (payload.hit_bone !== undefined) payload.hit_bone = 8;
                 if (payload.is_headshot !== undefined) payload.is_headshot = true;
+                
+                // Xuyên thấu
+                if (payload.penetration_ratio !== undefined) payload.penetration_ratio = 1.0;
                 if (payload.ignore_armor !== undefined) payload.ignore_armor = true;
                 
-                // Đóng đinh đạn vào tọa độ Yết hầu
-                if (payload.hit_pos) {
-                    payload.hit_pos.x = _global.__QuantumState.target.executionPos.x;
-                    payload.hit_pos.y = _global.__QuantumState.target.executionPos.y;
-                    payload.hit_pos.z = _global.__QuantumState.target.executionPos.z;
+                // ORIGIN SPOOFING: Kiểm tra cận chiến (Point-Blank Range)
+                if (_global.__QuantumState.target.distance < 3.0) {
+                    // Nếu địch cách < 3 mét, bốc nòng súng đặt sát trán địch
+                    if (payload.fire_origin !== undefined) {
+                        payload.fire_origin.x = _global.__QuantumState.target.pos.x + 0.1;
+                        payload.fire_origin.y = _global.__QuantumState.target.pos.y;
+                        payload.fire_origin.z = _global.__QuantumState.target.pos.z + 0.1;
+                    }
+                    if (payload.attacker_pos !== undefined) {
+                        payload.attacker_pos.x = _global.__QuantumState.target.pos.x + 0.1;
+                        payload.attacker_pos.y = _global.__QuantumState.target.pos.y;
+                        payload.attacker_pos.z = _global.__QuantumState.target.pos.z + 0.1;
+                    }
+                } else {
+                    // Tầm xa: Dùng Khóa neo Chronos
+                    if (payload.fire_origin !== undefined && _global.__QuantumState.self.chronosAnchor) {
+                        payload.fire_origin = { ..._global.__QuantumState.self.chronosAnchor };
+                    }
+                    if (payload.attacker_pos !== undefined && _global.__QuantumState.self.chronosAnchor) {
+                        payload.attacker_pos = { ..._global.__QuantumState.self.chronosAnchor };
+                    }
                 }
 
-                // Tiêm Vector ngầm
-                if (payload.aim_pitch !== undefined) payload.aim_pitch = _global.__QuantumState.internalVector.pitch;
-                if (payload.aim_yaw !== undefined) payload.aim_yaw = _global.__QuantumState.internalVector.yaw;
+                if (payload.hit_pos) {
+                    payload.hit_pos.x = _global.__QuantumState.target.pos.x;
+                    payload.hit_pos.y = _global.__QuantumState.target.pos.y;
+                    payload.hit_pos.z = _global.__QuantumState.target.pos.z;
+                }
+
+                if (payload.camera_pitch !== undefined) payload.camera_pitch = _global.__QuantumState.vector.pitch;
+                if (payload.camera_yaw !== undefined) payload.camera_yaw = _global.__QuantumState.vector.yaw;
                 
                 if (payload.client_timestamp !== undefined) {
-                    _global.__QuantumState.burstCounter = (_global.__QuantumState.burstCounter + 1) % 5;
-                    const ghostDelay = _global.__QuantumState.burstCounter * 2.0; 
-                    
-                    // Lùi thời gian cực kỳ chính xác nhờ Ping đã được làm mượt
-                    payload.client_timestamp -= (_global.__QuantumState.currentPing * 0.45) + ghostDelay;
+                    payload.client_timestamp -= (_global.__QuantumState.currentPing * 0.45);
                 }
             }
         }
@@ -214,11 +251,12 @@ class PhoenixDispatcher {
     }
 }
 
+// EXECUTION BLOCK
 if (typeof $response !== "undefined" && $response.body) {
-    if ($response.body.indexOf('"players"') !== -1 || $response.body.indexOf('"hit_bone"') !== -1 || $response.body.indexOf('"match_id"') !== -1) {
+    if ($response.body.indexOf('"players"') !== -1 || $response.body.indexOf('"hit_bone"') !== -1 || $response.body.indexOf('"weapon"') !== -1) {
         try {
             const payload = JSON.parse($response.body);
-            const mutated = new PhoenixDispatcher().processFastPath(payload);
+            const mutated = new ChronosOriginEngine().processFastPath(payload);
             $done({ body: JSON.stringify(mutated) });
         } catch (e) {
             $done({ body: $response.body });
