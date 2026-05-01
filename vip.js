@@ -1,27 +1,26 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v85.1: PHOENIX CHRONOS (IMMORTAL DOMINATION)
- * Architecture: Origin Spoofing + Chronos Anchor + Session Annihilation
- * Fixes: Solves Memory Ghosting and Effectiveness Degradation after restarting.
- * Status: GOD TIER - Immortal Chronos Anchor.
+ * QUANTUM REACH v85: THE CHRONOS ORIGIN (100% ABSOLUTE DOMINATION)
+ * Architecture: Origin Spoofing + Chronos Anchor + Matrix Ballistics
+ * Fixes: Solves CQC Snap-Rejection and Kinematic Moving Desync.
+ * Status: GOD TIER - Bending Space and Time parameters directly.
  * ==============================================================================
  */
 
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-if (!_global.__QuantumState || _global.__QuantumState.version !== 85.1) {
+if (!_global.__QuantumState || _global.__QuantumState.version !== 85) {
     _global.__QuantumState = {
-        version: 85.1,
-        currentMatchId: null, // Nhận diện trận đấu mới
+        version: 85,
         fireSequence: 0,       
         currentPing: 50.0,
-        history: {}, // Sẽ bị xóa sạch sau mỗi trận
+        history: {},
         target: { id: null, pos: null, distance: 999.0 },
         vector: { pitch: 0.0, yaw: 0.0 }, 
         weapon: { isFiring: false, type: "HITSCAN", speed: 99999.0 },
         self: { 
             pos: {x:0, y:0, z:0}, 
             vel: {x:0, y:0, z:0},
-            chronosAnchor: null 
+            chronosAnchor: null // Điểm neo tĩnh trong quá khứ
         }
     };
 }
@@ -52,6 +51,7 @@ class ChronosMath {
         }
         _global.__QuantumState.history[targetId] = { vel: { ...targetVel }, time: currentTime };
 
+        // Dùng Chronos Anchor (Vận tốc gốc bằng 0 do neo thời gian)
         return { 
             x: headPos.x + targetVel.x * flightTime + 0.5 * accel.x * (flightTime * flightTime),
             y: headPos.y + targetVel.y * flightTime + 0.5 * accel.y * (flightTime * flightTime) - dropY,
@@ -77,15 +77,6 @@ class ChronosMath {
 }
 
 class ChronosOriginEngine {
-    // 1. GIAO THỨC TẨY NÃO PHIÊN CHƠI (Xóa bỏ rác bộ nhớ)
-    cleanseMemory(newMatchId) {
-        _global.__QuantumState.currentMatchId = newMatchId;
-        _global.__QuantumState.history = {}; 
-        _global.__QuantumState.fireSequence = 0;
-        _global.__QuantumState.self.chronosAnchor = null;
-        _global.__QuantumState.target = { id: null, pos: null, distance: 999.0 };
-    }
-
     processFastPath(payload) {
         if (!payload || typeof payload !== 'object') return payload;
 
@@ -95,22 +86,12 @@ class ChronosOriginEngine {
         }
 
         const currentTime = Date.now();
-        
-        // 2. ĐỒNG BỘ PING ĐỘNG (Chống lệch pha khi mạng thay đổi)
-        if (payload.ping !== undefined) {
-            _global.__QuantumState.currentPing = (_global.__QuantumState.currentPing * 0.7) + (payload.ping * 0.3);
-        }
+        if (payload.ping !== undefined) _global.__QuantumState.currentPing = payload.ping;
 
-        // 3. LẮNG NGHE SỰ KIỆN TRẬN MỚI ĐỂ RESET
-        if (payload.match_id !== undefined && payload.match_id !== _global.__QuantumState.currentMatchId) {
-            this.cleanseMemory(payload.match_id);
-        }
-        if (payload.game_state === "SPAWN_ISLAND" || payload.game_state === "STARTING") {
-            this.cleanseMemory(_global.__QuantumState.currentMatchId);
-        }
-
+        // 1. THIẾT LẬP CHRONOS ANCHOR (Neo thời gian)
         if (payload.player_pos) {
             _global.__QuantumState.self.pos = payload.player_pos;
+            // Nếu không bắn, liên tục cập nhật mốc neo tĩnh
             if (!_global.__QuantumState.weapon.isFiring) {
                 _global.__QuantumState.self.chronosAnchor = { 
                     x: payload.player_pos.x, 
@@ -121,11 +102,13 @@ class ChronosOriginEngine {
         }
         if (payload.player_velocity) _global.__QuantumState.self.vel = payload.player_velocity;
 
+        // Ép tư thế và tắt cờ bay nhảy
         const stanceKeys = ['stance', 'pose_id', 'posture'];
         stanceKeys.forEach(k => { if (payload[k] !== undefined) payload[k] = "CROUCH"; });
         if (payload.is_jumping !== undefined) payload.is_jumping = false;
         if (payload.in_air !== undefined) payload.in_air = false;
 
+        // 2. NHẬN DIỆN VŨ KHÍ & CHU KỲ KHAI HỎA ĐIỀU HÒA
         _global.__QuantumState.weapon.isFiring = false;
         if (payload.weapon) {
             _global.__QuantumState.weapon.isFiring = !!(payload.weapon.is_firing || payload.weapon.recoil_accumulation > 0);
@@ -148,12 +131,15 @@ class ChronosOriginEngine {
             }
         }
 
+        // 3. XỬ LÝ MỤC TIÊU & TÍNH TOÁN
         if (payload.players && Array.isArray(payload.players)) {
             let bestTarget = null;
             let minDistance = 9999.0;
 
             for (let i = 0; i < payload.players.length; i++) {
                 const enemy = payload.players[i];
+                
+                // Tắt từ tính
                 if (enemy.hitboxes) {
                     const bodyParts = ['chest', 'spine', 'pelvis', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
                     bodyParts.forEach(part => {
@@ -176,11 +162,13 @@ class ChronosOriginEngine {
                 _global.__QuantumState.target.id = bestTarget.id;
                 _global.__QuantumState.target.distance = minDistance;
                 
+                // Tính tọa độ đón đầu
                 _global.__QuantumState.target.pos = ChronosMath.calculateSmartLead(
                     bestTarget.id, bestTarget.head_pos, bestTarget.velocity || {x:0,y:0,z:0}, 
                     minDistance, currentTime
                 );
 
+                // Dùng Chronos Anchor thay vì vị trí hiện tại để tính góc bù trừ
                 const activeOrigin = _global.__QuantumState.self.chronosAnchor || _global.__QuantumState.self.pos;
                 
                 const masterVector = ChronosMath.generateInverseMasterVector(
@@ -202,15 +190,20 @@ class ChronosOriginEngine {
             }
         }
 
+        // 4. QUYẾT ĐỊNH CẬN CHIẾN & ĐỒNG BỘ GÓI TIN SÁT THƯƠNG
         if (payload.damage_report || payload.hit_event || payload.bullet_hit || payload.fire_event) {
             if (_global.__QuantumState.target.id && _global.__QuantumState.target.pos) {
                 payload.target_id = _global.__QuantumState.target.id;
                 if (payload.hit_bone !== undefined) payload.hit_bone = 8;
                 if (payload.is_headshot !== undefined) payload.is_headshot = true;
+                
+                // Xuyên thấu
                 if (payload.penetration_ratio !== undefined) payload.penetration_ratio = 1.0;
                 if (payload.ignore_armor !== undefined) payload.ignore_armor = true;
                 
+                // ORIGIN SPOOFING: Kiểm tra cận chiến (Point-Blank Range)
                 if (_global.__QuantumState.target.distance < 3.0) {
+                    // Nếu địch cách < 3 mét, bốc nòng súng đặt sát trán địch
                     if (payload.fire_origin !== undefined) {
                         payload.fire_origin.x = _global.__QuantumState.target.pos.x + 0.1;
                         payload.fire_origin.y = _global.__QuantumState.target.pos.y;
@@ -222,6 +215,7 @@ class ChronosOriginEngine {
                         payload.attacker_pos.z = _global.__QuantumState.target.pos.z + 0.1;
                     }
                 } else {
+                    // Tầm xa: Dùng Khóa neo Chronos
                     if (payload.fire_origin !== undefined && _global.__QuantumState.self.chronosAnchor) {
                         payload.fire_origin = { ..._global.__QuantumState.self.chronosAnchor };
                     }
@@ -257,8 +251,9 @@ class ChronosOriginEngine {
     }
 }
 
+// EXECUTION BLOCK
 if (typeof $response !== "undefined" && $response.body) {
-    if ($response.body.indexOf('"players"') !== -1 || $response.body.indexOf('"hit_bone"') !== -1 || $response.body.indexOf('"weapon"') !== -1 || $response.body.indexOf('"match_id"') !== -1) {
+    if ($response.body.indexOf('"players"') !== -1 || $response.body.indexOf('"hit_bone"') !== -1 || $response.body.indexOf('"weapon"') !== -1) {
         try {
             const payload = JSON.parse($response.body);
             const mutated = new ChronosOriginEngine().processFastPath(payload);
