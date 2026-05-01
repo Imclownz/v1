@@ -1,9 +1,8 @@
 /**
  * ==============================================================================
- * QUANTUM REACH v90: ABSOLUTE ZERO (THE FINAL APEX)
- * Architecture: Micro-Proximity 0.01m + Inverse Recoil Nullification + Omni-Hit Forcing
- * Base: v85 Phoenix Chronos (Memory Cleanse + Ping Sync)
- * Status: GOD TIER - 100% Headshot. Zero Recoil. Zero Angular Rejection.
+ * QUANTUM REACH v90: KINETIC APEX (SYNCHRONIZED DOMINATION)
+ * Architecture: Telescopic Origin (10m) + Predictive Camera Snap + Chronos Anchor
+ * Status: HIGH-STABILITY - Visibly snaps to target, mathematically perfect trajectory.
  * ==============================================================================
  */
 
@@ -12,18 +11,51 @@ if (!_global.__QuantumState || _global.__QuantumState.version !== 90) {
     _global.__QuantumState = {
         version: 90,
         currentMatchId: null,
-        burstCounter: 0,
         currentPing: 50.0,
-        target: { id: null, corePos: {x:0, y:0, z:0}, spoofedOrigin: {x:0, y:0, z:0}, distance: 999.0 },
-        internalVector: { pitch: 0.0, yaw: 0.0 }, 
-        weapon: { isFiring: false, recoilY: 0.0, spreadX: 0.0 },
-        self: { chronosAnchor: null }
+        history: {},
+        target: { id: null, predictedPos: null, distance: 999.0 },
+        weapon: { isFiring: false, recoilY: 0, spreadX: 0 },
+        self: { pos: {x:0, y:0, z:0}, chronosAnchor: null }
     };
 }
 
-class AbsoluteZeroMath {
-    // TÍNH TOÁN BÙ TRỪ NGHỊCH ĐẢO ĐỘ GIẬT (Lừa Máy Chủ)
-    static generateInverseVector(fromPos, toPos, recoilY, spreadX) {
+class KineticMath {
+    static clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+
+    // 1. TÍNH TOÁN TỌA ĐỘ ĐÓN ĐẦU (Dùng cho cả Camera và Sát thương)
+    static calculateKineticLead(targetId, headPos, targetVel, distance, currentTime) {
+        const pingDelay = _global.__QuantumState.currentPing / 1000.0;
+        let accel = { x: 0, y: 0, z: 0 };
+        
+        if (_global.__QuantumState.history[targetId]) {
+            const prev = _global.__QuantumState.history[targetId];
+            let dt = (currentTime - prev.time) / 1000.0; 
+            if (dt > 0.01 && dt < 0.2) { 
+                accel.x = this.clamp((targetVel.x - prev.vel.x) / dt, -50.0, 50.0);
+                accel.y = this.clamp((targetVel.y - prev.vel.y) / dt, -50.0, 50.0);
+                accel.z = this.clamp((targetVel.z - prev.vel.z) / dt, -50.0, 50.0);
+            }
+        }
+        _global.__QuantumState.history[targetId] = { vel: { ...targetVel }, time: currentTime };
+
+        // Ép trục Y (Ngăn đạn vọt qua đầu khi địch nhảy)
+        let predictedY = headPos.y;
+        if (targetVel.y < 0) {
+            predictedY += (targetVel.y * pingDelay) + (0.5 * accel.y * pingDelay * pingDelay);
+        }
+
+        // Hạ điểm ngắm xuống yết hầu để bù trừ giật Server
+        predictedY -= 0.15; 
+
+        return { 
+            x: headPos.x + targetVel.x * pingDelay + 0.5 * accel.x * (pingDelay * pingDelay),
+            y: predictedY,
+            z: headPos.z + targetVel.z * pingDelay + 0.5 * accel.z * (pingDelay * pingDelay)
+        };
+    }
+
+    // 2. TÍNH TOÁN VECTOR KÉO CAMERA (Bù trừ độ giật)
+    static calculateCameraVector(fromPos, toPos, recoilY, spreadX) {
         if (!fromPos || !toPos) return { pitch: 0, yaw: 0 };
         const dx = toPos.x - fromPos.x;
         const dy = toPos.y - fromPos.y;
@@ -33,7 +65,6 @@ class AbsoluteZeroMath {
         let yaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
         let pitch = Math.atan2(-dy, distXZ) * (180.0 / Math.PI);
 
-        // Trừ đi độ giật vật lý. Server sẽ tự cộng vào lại -> Đạn thẳng tắp.
         pitch -= recoilY; 
         yaw -= spreadX;   
 
@@ -41,13 +72,11 @@ class AbsoluteZeroMath {
     }
 }
 
-class AbsoluteZeroEngine {
-    // GIAO THỨC TẨY NÃO (Chống tràn bộ nhớ và rác dữ liệu)
+class KineticEngine {
     cleanseMemory(newMatchId) {
         _global.__QuantumState.currentMatchId = newMatchId;
-        _global.__QuantumState.burstCounter = 0;
+        _global.__QuantumState.history = {}; 
         _global.__QuantumState.self.chronosAnchor = null;
-        _global.__QuantumState.target = { id: null, corePos: null, spoofedOrigin: null, distance: 999.0 };
     }
 
     processFastPath(payload) {
@@ -58,27 +87,24 @@ class AbsoluteZeroEngine {
             return payload;
         }
 
-        // ĐỒNG BỘ PING (Chống lệch pha mạng)
+        const currentTime = Date.now();
+        
         if (payload.ping !== undefined) {
             _global.__QuantumState.currentPing = (_global.__QuantumState.currentPing * 0.7) + (payload.ping * 0.3);
         }
 
-        // LẮNG NGHE SỰ KIỆN TRẬN MỚI
         if (payload.match_id !== undefined && payload.match_id !== _global.__QuantumState.currentMatchId) {
             this.cleanseMemory(payload.match_id);
         }
-        if (payload.game_state === "SPAWN_ISLAND" || payload.game_state === "STARTING") {
-            this.cleanseMemory(_global.__QuantumState.currentMatchId);
-        }
 
-        // KHÓA NEO CƠ THỂ (Bảo vệ thân thể ở quá khứ)
+        // NEO CHRONOS[cite: 2]
         if (payload.player_pos) {
+            _global.__QuantumState.self.pos = payload.player_pos;
             if (!_global.__QuantumState.weapon.isFiring) {
                 _global.__QuantumState.self.chronosAnchor = { ...payload.player_pos };
             }
         }
 
-        // ĐỌC THÔNG SỐ VŨ KHÍ (Lấy độ giật thực tế để bù trừ)
         _global.__QuantumState.weapon.isFiring = false;
         if (payload.weapon) {
             _global.__QuantumState.weapon.isFiring = !!(payload.weapon.is_firing || payload.weapon.recoil_accumulation > 0);
@@ -88,7 +114,7 @@ class AbsoluteZeroEngine {
             }
         }
 
-        // TÌM MỤC TIÊU GẦN NHẤT
+        // TÌM MỤC TIÊU & XỬ LÝ CAMERA
         if (payload.players && Array.isArray(payload.players)) {
             let bestTarget = null;
             let minDistance = 9999.0;
@@ -103,78 +129,78 @@ class AbsoluteZeroEngine {
                 }
             }
 
-            // TÍNH TOÁN ÉP NÒNG SÚNG VÀ TOÁN HỌC NGHỊCH ĐẢO
             if (bestTarget && bestTarget.head_pos && _global.__QuantumState.weapon.isFiring) {
                 _global.__QuantumState.target.id = bestTarget.id;
                 _global.__QuantumState.target.distance = minDistance;
                 
-                // Lõi sọ tuyệt đối (Hạ 10% để bám chắc vào yết hầu)
-                const headRadius = bestTarget.hitboxes?.head?.radius || 0.18;
-                _global.__QuantumState.target.corePos = {
-                    x: bestTarget.head_pos.x,
-                    y: bestTarget.head_pos.y - (headRadius * 0.85),
-                    z: bestTarget.head_pos.z
-                };
+                // Tính điểm đón đầu hoàn hảo
+                _global.__QuantumState.target.predictedPos = KineticMath.calculateKineticLead(
+                    bestTarget.id, bestTarget.head_pos, bestTarget.velocity || {x:0,y:0,z:0}, 
+                    minDistance, currentTime
+                );
 
-                // MICRO-PROXIMITY: Tạo điểm bắn ảo cách trán địch đúng 1 cm (0.01m)
-                // Đạn bắn từ khoảng cách này thì Nở tâm (Spread) hay rớt đạn (Gravity) đều bằng 0
-                _global.__QuantumState.target.spoofedOrigin = {
-                    x: _global.__QuantumState.target.corePos.x,
-                    y: _global.__QuantumState.target.corePos.y,
-                    z: _global.__QuantumState.target.corePos.z + 0.01 
-                };
-
-                // Tính Vector Nghịch đảo từ điểm cách 1cm vào tâm não
-                const masterVector = AbsoluteZeroMath.generateInverseVector(
-                    _global.__QuantumState.target.spoofedOrigin, 
-                    _global.__QuantumState.target.corePos,
+                const activeOrigin = _global.__QuantumState.self.chronosAnchor || _global.__QuantumState.self.pos;
+                
+                // Tính Vector Camera
+                const camVector = KineticMath.calculateCameraVector(
+                    activeOrigin, 
+                    _global.__QuantumState.target.predictedPos,
                     _global.__QuantumState.weapon.recoilY,
                     _global.__QuantumState.weapon.spreadX
                 );
-                
-                _global.__QuantumState.internalVector.pitch = masterVector.pitch;
-                _global.__QuantumState.internalVector.yaw = masterVector.yaw;
 
-                // TÀNG HÌNH CAMERA: Không chạm vào camera_state để Client không bị giật cục
+                // ÉP CAMERA SNAP VÀO ĐẦU (Sử dụng camera_state)
+                if (payload.camera_state) {
+                    payload.camera_state.target_x = _global.__QuantumState.target.predictedPos.x;
+                    payload.camera_state.target_y = _global.__QuantumState.target.predictedPos.y;
+                    payload.camera_state.target_z = _global.__QuantumState.target.predictedPos.z;
+                    payload.camera_state.interpolation = "LOCKED"; // Khóa cứng vào mục tiêu
+                }
+                
+                if (payload.camera_pitch !== undefined) payload.camera_pitch = camVector.pitch;
+                if (payload.camera_yaw !== undefined) payload.camera_yaw = camVector.yaw;
             }
         }
 
-        // CƯỠNG CHẾ SÁT THƯƠNG (OMNI-HIT FORCING)
-        // Bắt mọi sự kiện nổ súng (kể cả trượt) và biến chúng thành Headshot
+        // XỬ LÝ SÁT THƯƠNG & TELESCOPIC ORIGIN SPOOFING (Dịch chuyển 10m)
         if (payload.damage_report || payload.hit_event || payload.bullet_hit || payload.fire_event) {
-            if (_global.__QuantumState.target.id && _global.__QuantumState.target.corePos) {
+            if (_global.__QuantumState.target.id && _global.__QuantumState.target.predictedPos) {
                 
-                // ÉP TÍNH CHẤT GÓI TIN: Kẻ địch phải chết
                 payload.target_id = _global.__QuantumState.target.id;
-                if (payload.hit_bone !== undefined) payload.hit_bone = 8; // Đỉnh sọ
+                if (payload.hit_bone !== undefined) payload.hit_bone = 8;
                 if (payload.is_headshot !== undefined) payload.is_headshot = true;
-                if (payload.ignore_armor !== undefined) payload.ignore_armor = true;
-                if (payload.penetration_ratio !== undefined) payload.penetration_ratio = 1.0;
                 
-                // THỰC THI ÉP NÒNG SÚNG (Micro-Proximity 0.01m)
+                // TELESCOPIC ORIGIN SPOOFING (Mở rộng từ v85)
                 if (payload.fire_origin !== undefined) {
-                    payload.fire_origin = { ..._global.__QuantumState.target.spoofedOrigin };
+                    // Tính toán khoảng cách dịch chuyển an toàn (Tối đa 10m, nhưng luôn cách địch 0.5m)
+                    const maxSpoof = 10.0;
+                    const safetyMargin = 0.5;
+                    const spoofDistance = Math.min(_global.__QuantumState.target.distance - safetyMargin, maxSpoof);
+                    
+                    if (spoofDistance > 0) {
+                        // Nội suy điểm xuất phát đạn trên đường thẳng từ người chơi đến kẻ địch
+                        const activeOrigin = _global.__QuantumState.self.chronosAnchor || _global.__QuantumState.self.pos;
+                        const targetPos = _global.__QuantumState.target.predictedPos;
+                        
+                        const ratio = spoofDistance / _global.__QuantumState.target.distance;
+                        
+                        payload.fire_origin.x = activeOrigin.x + (targetPos.x - activeOrigin.x) * ratio;
+                        payload.fire_origin.y = activeOrigin.y + (targetPos.y - activeOrigin.y) * ratio;
+                        payload.fire_origin.z = activeOrigin.z + (targetPos.z - activeOrigin.z) * ratio;
+                    }
                 }
                 
-                // Khai báo cơ thể người chơi an toàn ở mốc neo quá khứ
+                // Khai báo vị trí cơ thể ở quá khứ[cite: 2]
                 if (payload.attacker_pos !== undefined && _global.__QuantumState.self.chronosAnchor) {
                     payload.attacker_pos = { ..._global.__QuantumState.self.chronosAnchor };
                 }
 
-                // Điểm chạm thực tế là Lõi Não
                 if (payload.hit_pos) {
-                    payload.hit_pos = { ..._global.__QuantumState.target.corePos };
+                    payload.hit_pos = { ..._global.__QuantumState.target.predictedPos };
                 }
 
-                // Tiêm Vector Bù Trừ Nghịch Đảo
-                if (payload.aim_pitch !== undefined) payload.aim_pitch = _global.__QuantumState.internalVector.pitch;
-                if (payload.aim_yaw !== undefined) payload.aim_yaw = _global.__QuantumState.internalVector.yaw;
-                
-                // NÉN GÓI TIN (Chống rớt mạng UDP)
                 if (payload.client_timestamp !== undefined) {
-                    _global.__QuantumState.burstCounter = (_global.__QuantumState.burstCounter + 1) % 5;
-                    const ghostDelay = _global.__QuantumState.burstCounter * 2.0; 
-                    payload.client_timestamp -= (_global.__QuantumState.currentPing * 0.45) + ghostDelay;
+                    payload.client_timestamp -= (_global.__QuantumState.currentPing * 0.45);
                 }
             }
         }
@@ -191,12 +217,11 @@ class AbsoluteZeroEngine {
     }
 }
 
-// KHỐI THỰC THI ZERO-LATENCY
 if (typeof $response !== "undefined" && $response.body) {
     if ($response.body.indexOf('"players"') !== -1 || $response.body.indexOf('"hit_bone"') !== -1 || $response.body.indexOf('"weapon"') !== -1 || $response.body.indexOf('"match_id"') !== -1) {
         try {
             const payload = JSON.parse($response.body);
-            const mutated = new AbsoluteZeroEngine().processFastPath(payload);
+            const mutated = new KineticEngine().processFastPath(payload);
             $done({ body: JSON.stringify(mutated) });
         } catch (e) {
             $done({ body: $response.body });
