@@ -292,6 +292,158 @@ class TargetKinematics {
 }
 
 // ============================================================================
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG THỊ GIÁC - V2.6.1 TUNED)
+// Tích hợp: Aim-Step, Y-Axis Breakaway (Phá vỡ lực hút ngực cực đại), 
+// Meter-by-Meter Lerping (Nội suy theo mét), và Ceiling Dampener (Trần bay).
+// ============================================================================
+class CameraManipulator {
+    
+    static normalizeAngle(angle) {
+        while (angle > 180.0) angle -= 360.0;
+        while (angle < -180.0) angle += 360.0;
+        return angle;
+    }
+
+    // ------------------------------------------------------------------------
+    // HÀM NỘI SUY TỪNG MÉT (ĐÃ ĐƯỢC ÉP LỰC CỰC ĐOAN HƠN)
+    // ------------------------------------------------------------------------
+    static calculatePitchMultiplier(distance) {
+        // Cự ly cực gần (< 2m): Tăng từ 2.5 lên 4.0 (Gấp 4 lần lực kéo)
+        // Lực này giống như giật tung một sợi dây thun, xé toạc hoàn toàn lực hút ngực.
+        if (distance <= 2.0) return 4.0; 
+        
+        // Cự ly 2m - 10m: Giảm gắt từ 4.0 xuống 1.0
+        if (distance <= 10.0) {
+            let t = (distance - 2.0) / 8.0; 
+            return 4.0 - (3.0 * t); 
+        }
+        
+        // Cự ly 10m - 50m: Giảm mạnh hơn phiên bản cũ (từ 1.0 xuống 0.15)
+        // Tạo cảm giác tâm lướt lên cực kỳ êm ái, chống rung.
+        if (distance <= 50.0) {
+            let t = (distance - 10.0) / 40.0;
+            return 1.0 - (0.85 * t);
+        }
+        
+        // Cự ly rất xa (> 50m): Giảm về 0.05 (Gần như không dùng lực động cơ, chỉ trôi theo quán tính)
+        return 0.05;
+    }
+
+    static execute(payload) {
+        const targetState = _global.__OmniState.target;
+        const selfState = _global.__OmniState.self;
+        const camState = _global.__OmniState.camera;
+        const weaponState = _global.__OmniState.weapon;
+
+        if (!targetState.id || !targetState.predicted_pos || payload.aim_yaw === undefined) return payload;
+
+        const currentTime = Date.now();
+        let dt = (currentTime - camState.lastTime) / 1000.0;
+        if (dt <= 0.0 || dt > 0.1) dt = 0.016; 
+        camState.lastTime = currentTime;
+
+        const origin = { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
+        const dest = targetState.predicted_pos;
+
+        const dx = dest.x - origin.x;
+        const dy = dest.y - origin.y;
+        const dz = dest.z - origin.z;
+        const distXZ = Math.sqrt(dx * dx + dz * dz);
+
+        let targetYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
+        let targetPitch = Math.atan2(-dy, distXZ) * (180.0 / Math.PI);
+
+        if (weaponState.isFiring && payload.weapon && payload.weapon.recoil_accumulation !== undefined) {
+            const recoil = payload.weapon.recoil_accumulation;
+            targetPitch -= (recoil * 1.35); 
+        }
+
+        const currentYaw = payload.aim_yaw;
+        const currentPitch = payload.aim_pitch;
+
+        let errorYaw = this.normalizeAngle(targetYaw - currentYaw);
+        let errorPitch = this.normalizeAngle(targetPitch - currentPitch);
+
+        if (Math.abs(errorYaw) > 45.0) {
+            camState.integralYaw = 0; camState.integralPitch = 0;
+            return payload; 
+        }
+
+        // ====================================================================
+        // DYNAMIC PID VỚI THÔNG SỐ ÉP LỰC MỚI
+        // ====================================================================
+        let Kp_yaw = 6.8, Kp_pitch = 6.8;
+        let Ki = 0.015;
+        let Kd_yaw = 0.35, Kd_pitch = 0.35;
+        let maxSpeed = 55.0; 
+        let deadzone = 0.4;  
+
+        let pitchMultiplier = this.calculatePitchMultiplier(targetState.distance);
+        Kp_pitch *= pitchMultiplier; 
+
+        if (targetState.distance <= 5.0) {
+            // [BUFF CẬN CHIẾN]: Mạnh mẽ và nhanh nhạy hơn
+            Kp_yaw = 18.0;       // Tăng từ 14.0 -> 18.0 (Kéo ngang cực gắt)
+            Kd_yaw = 0.98; Kd_pitch = 0.98; // Tăng phanh để hãm tốc độ kinh hoàng này lại
+            maxSpeed = 150.0;    // Tăng giới hạn tốc độ quay từ 120 -> 150 độ/giây
+            deadzone = 1.5;      
+        } 
+        else if (targetState.distance > 50.0) {
+            // [NERF TẦM XA]: Tĩnh lặng và Legit hơn
+            Kp_yaw = 3.0;        // Giảm từ 4.5 -> 3.0 (Kéo ngang từ từ)
+            Kd_yaw = 0.1; Kd_pitch = 0.1; // Phanh mềm mại như trượt băng
+            maxSpeed = 25.0;     // Giảm tốc độ tối đa xuống 25 độ/giây để giấu hành vi
+            deadzone = 0.15;      
+        }
+
+        // TRẦN BAY (CEILING DAMPENER)
+        if (targetState.distance > 10.0 && Math.abs(errorPitch) < 1.5) {
+            Kd_pitch = 2.0; 
+        }
+
+        if (Math.abs(errorYaw) < deadzone && Math.abs(errorPitch) < deadzone) {
+            camState.integralYaw = 0; camState.integralPitch = 0;
+            return payload;
+        }
+
+        camState.integralYaw += errorYaw * dt;
+        let derivYaw = (errorYaw - camState.prevErrorYaw) / dt;
+        let outputYaw = (errorYaw * Kp_yaw) + (camState.integralYaw * Ki) + (derivYaw * Kd_yaw);
+
+        camState.integralPitch += errorPitch * dt;
+        let derivPitch = (errorPitch - camState.prevErrorPitch) / dt;
+        let outputPitch = (errorPitch * Kp_pitch) + (camState.integralPitch * Ki) + (derivPitch * Kd_pitch);
+
+        if (targetState.distance > 10.0) {
+            let maxPitchStep = errorPitch / dt;
+            if (Math.abs(outputPitch) > Math.abs(maxPitchStep)) {
+                outputPitch = maxPitchStep * 0.9; 
+            }
+        }
+
+        camState.prevErrorYaw = errorYaw;
+        camState.prevErrorPitch = errorPitch;
+
+        const maxDegPerFrame = maxSpeed * dt; 
+        outputYaw = Math.max(-maxDegPerFrame, Math.min(maxDegPerFrame, outputYaw * dt));
+        outputPitch = Math.max(-maxDegPerFrame, Math.min(maxDegPerFrame, outputPitch * dt));
+
+        payload.aim_yaw = this.normalizeAngle(currentYaw + outputYaw);
+        payload.aim_pitch = this.normalizeAngle(currentPitch + outputPitch);
+
+        if (payload.camera_state) {
+            payload.camera_state.yaw = payload.aim_yaw;
+            payload.camera_state.pitch = payload.aim_pitch;
+            delete payload.camera_state.target_x;
+            delete payload.camera_state.target_y;
+            delete payload.camera_state.target_z;
+        }
+
+        return payload;
+    }
+}
+
+// ============================================================================
 // MODULE 3: AUTO CORE (LÕI SÁT THƯƠNG LIÊN THANH - V2.3)
 // Nhiệm vụ: Xóa bỏ hoàn toàn độ giật và độ nở tâm cộng dồn. 
 // Khóa chặt mọi viên đạn trong băng thành 1 tia Laser liên tục.
@@ -372,174 +524,6 @@ class AutoCore {
             if (payload.damage_report.distance_penalty !== undefined) {
                 payload.damage_report.distance_penalty = 0.0;
             }
-        }
-
-        return payload;
-    }
-}
-
-// ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG THỊ GIÁC - V2.5 PREDATOR)
-// Tích hợp: Aim-Step, Y-Axis Breakaway (Phá vỡ lực hút ngực), 
-// Meter-by-Meter Lerping (Nội suy theo mét), và Ceiling Dampener (Trần bay).
-// ============================================================================
-class CameraManipulator {
-    
-    // Chuẩn hóa góc xoay (Giữ trong khoảng -180 đến 180 độ)
-    static normalizeAngle(angle) {
-        while (angle > 180.0) angle -= 360.0;
-        while (angle < -180.0) angle += 360.0;
-        return angle;
-    }
-
-    // ------------------------------------------------------------------------
-    // HÀM NỘI SUY TỪNG MÉT (METER-BY-METER LERPING) DÀNH RIÊNG CHO TRỤC Y
-    // ------------------------------------------------------------------------
-    static calculatePitchMultiplier(distance) {
-        // Cự ly cực gần (< 2m): Lực kéo X2.5 lần để xé toạc lực hút vào Ngực của Game
-        if (distance <= 2.0) return 2.5; 
-        
-        // Cự ly 2m - 10m: Giảm dần đều từ 2.5 xuống 1.0
-        if (distance <= 10.0) {
-            let t = (distance - 2.0) / 8.0; 
-            return 2.5 - (1.5 * t); 
-        }
-        
-        // Cự ly 10m - 50m: Giảm mượt mà từ 1.0 xuống 0.3 (Kéo lên đầu êm ái)
-        if (distance <= 50.0) {
-            let t = (distance - 10.0) / 40.0;
-            return 1.0 - (0.7 * t);
-        }
-        
-        // Cự ly rất xa (> 50m): Gần như không dùng lực kéo mạnh, chỉ mớm nhẹ (0.1)
-        return 0.1;
-    }
-
-    static execute(payload) {
-        const targetState = _global.__OmniState.target;
-        const selfState = _global.__OmniState.self;
-        const camState = _global.__OmniState.camera;
-        const weaponState = _global.__OmniState.weapon;
-
-        if (!targetState.id || !targetState.predicted_pos || payload.aim_yaw === undefined) return payload;
-
-        // 1. TÍNH TOÁN DELTATIME (Ổn định khung hình)
-        const currentTime = Date.now();
-        let dt = (currentTime - camState.lastTime) / 1000.0;
-        if (dt <= 0.0 || dt > 0.1) dt = 0.016; 
-        camState.lastTime = currentTime;
-
-        // 2. VECTOR TO EULER (Tọa độ 3D -> Góc nhìn)
-        const origin = { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
-        const dest = targetState.predicted_pos;
-
-        const dx = dest.x - origin.x;
-        const dy = dest.y - origin.y;
-        const dz = dest.z - origin.z;
-        const distXZ = Math.sqrt(dx * dx + dz * dz);
-
-        let targetYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
-        let targetPitch = Math.atan2(-dy, distXZ) * (180.0 / Math.PI);
-
-        // 3. TIỀN TRẠM GHÌ TÂM (RCS - Recoil Control System)
-        if (weaponState.isFiring && payload.weapon && payload.weapon.recoil_accumulation !== undefined) {
-            const recoil = payload.weapon.recoil_accumulation;
-            targetPitch -= (recoil * 1.35); 
-        }
-
-        const currentYaw = payload.aim_yaw;
-        const currentPitch = payload.aim_pitch;
-
-        let errorYaw = this.normalizeAngle(targetYaw - currentYaw);
-        let errorPitch = this.normalizeAngle(targetPitch - currentPitch);
-
-        // [GIAO THỨC 1]: AIM-STEP PROTOCOL (CHỐNG LẬT MÀN HÌNH)
-        if (Math.abs(errorYaw) > 45.0) {
-            camState.integralYaw = 0; camState.integralPitch = 0;
-            return payload; // Buông tay nếu địch lướt ra sau lưng
-        }
-
-        // ====================================================================
-        // [GIAO THỨC 2]: DYNAMIC PID VỚI TRỤC ĐỘC LẬP (INDEPENDENT AXIS PID)
-        // ====================================================================
-        // Tách riêng thông số Yaw (Ngang) và Pitch (Dọc)
-        let Kp_yaw = 6.8, Kp_pitch = 6.8;
-        let Ki = 0.015;
-        let Kd_yaw = 0.35, Kd_pitch = 0.35;
-        let maxSpeed = 55.0; 
-        let deadzone = 0.4;  
-
-        // ÁP DỤNG HỆ SỐ NỘI SUY Y-MULTIPLIER DỰA TRÊN KHOẢNG CÁCH
-        let pitchMultiplier = this.calculatePitchMultiplier(targetState.distance);
-        Kp_pitch *= pitchMultiplier; 
-
-        // ĐIỀU CHỈNH THEO KỊCH BẢN CHIẾN ĐẤU
-        if (targetState.distance <= 5.0) {
-            // CẬN CHIẾN: Ngang phải xoay cực nhanh, Dọc được bơm Lực Bứt Phá (Breakaway Force)
-            Kp_yaw = 14.0;       
-            Kd_yaw = 0.95; Kd_pitch = 0.95; // Phanh cháy lốp cả 2 trục
-            maxSpeed = 120.0;    
-            deadzone = 1.2;      
-        } 
-        else if (targetState.distance > 50.0) {
-            // BẮN TỈA: Giảm lực kéo ngang cho êm, trục Dọc đã bị hàm Lerp ép xuống 0.1
-            Kp_yaw = 4.5;        
-            Kd_yaw = 0.15; Kd_pitch = 0.15;
-            maxSpeed = 35.0;     
-            deadzone = 0.2;      
-        }
-
-        // [GIAO THỨC 3]: CẢM BIẾN TRẦN BAY (CEILING DAMPENER)
-        // Xóa sổ lỗi "Vọt qua đầu" (Overshoot) ở cự ly > 10m
-        if (targetState.distance > 10.0 && Math.abs(errorPitch) < 1.5) {
-            // Khi hồng tâm đã vào sát sọ (sai số < 1.5 độ), bơm Lực Phanh (Kd) lên mức tàn bạo
-            Kd_pitch = 2.0; // Phanh cứng như đập vào tường tàng hình
-        }
-
-        // VÙNG CHẾT (Deadzone): Tắt động cơ nếu tâm đã vào đúng điểm
-        if (Math.abs(errorYaw) < deadzone && Math.abs(errorPitch) < deadzone) {
-            camState.integralYaw = 0; camState.integralPitch = 0;
-            return payload;
-        }
-
-        // 4. TÍNH TOÁN ĐỘNG CƠ PID CHO TỪNG TRỤC
-        // Trục Ngang (Yaw)
-        camState.integralYaw += errorYaw * dt;
-        let derivYaw = (errorYaw - camState.prevErrorYaw) / dt;
-        let outputYaw = (errorYaw * Kp_yaw) + (camState.integralYaw * Ki) + (derivYaw * Kd_yaw);
-
-        // Trục Dọc (Pitch)
-        camState.integralPitch += errorPitch * dt;
-        let derivPitch = (errorPitch - camState.prevErrorPitch) / dt;
-        let outputPitch = (errorPitch * Kp_pitch) + (camState.integralPitch * Ki) + (derivPitch * Kd_pitch);
-
-        // GIỚI HẠN TUYỆT ĐỐI CHỐNG OVERSHOOT TRỤC Y
-        // Không bao giờ cho phép lực kéo (outputPitch) lớn hơn chính khoảng cách cần kéo (errorPitch)
-        if (targetState.distance > 10.0) {
-            let maxPitchStep = errorPitch / dt;
-            if (Math.abs(outputPitch) > Math.abs(maxPitchStep)) {
-                outputPitch = maxPitchStep * 0.9; // Cắt giảm để vừa vặn chạm mép sọ
-            }
-        }
-
-        camState.prevErrorYaw = errorYaw;
-        camState.prevErrorPitch = errorPitch;
-
-        // 5. HUMANIZER (Giới hạn tốc độ cơ học)
-        const maxDegPerFrame = maxSpeed * dt; 
-        outputYaw = Math.max(-maxDegPerFrame, Math.min(maxDegPerFrame, outputYaw * dt));
-        outputPitch = Math.max(-maxDegPerFrame, Math.min(maxDegPerFrame, outputPitch * dt));
-
-        // 6. GHI ĐÈ THỊ GIÁC VÀO GÓI TIN
-        payload.aim_yaw = this.normalizeAngle(currentYaw + outputYaw);
-        payload.aim_pitch = this.normalizeAngle(currentPitch + outputPitch);
-
-        if (payload.camera_state) {
-            payload.camera_state.yaw = payload.aim_yaw;
-            payload.camera_state.pitch = payload.aim_pitch;
-            delete payload.camera_state.target_x;
-            delete payload.camera_state.target_y;
-            delete payload.camera_state.target_z;
         }
 
         return payload;
