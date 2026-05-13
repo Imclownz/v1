@@ -319,9 +319,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - SINGULARITY MERGE FIX)
-// Bản vá: First-Frame Absolute Snap, Xóa lỗi Double-Recoil, Dynamic EMA.
-// Đảm bảo Crosshair dán chặt vào pixel lõi sọ ngay khi chạm nút bắn.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - BẢN VÁ DRAG-SHOT)
+// Bổ sung: Force Absolute Snap (Đọc lệnh vẩy tâm từ TriggerCheck).
+// Kéo tâm từ mọi vị trí bất lợi lên đầu địch trong đúng 200ms.
 // ============================================================================
 class CameraManipulator {
     
@@ -342,28 +342,24 @@ class CameraManipulator {
             return payload;
         }
 
+        // Lấy cờ khai hỏa HOẶC cờ Pending (Đang trong thời gian đợi 0.2s)
         const isFiring = weaponState.isFiring || weaponState.triggerFired || payload.is_firing;
+        const isPending = weaponState.isPendingFire || weaponState.forceAbsoluteSnap;
         const isScoping = payload.is_scoping || (payload.weapon && payload.weapon.is_scoping);
         
-        // Nhận diện CHÍNH XÁC khung hình (frame) đầu tiên người chơi bấm bắn
-        const justStartedFiring = isFiring && !camState.wasFiring;
-        camState.wasFiring = isFiring;
+        camState.wasFiring = isFiring || isPending;
 
-        // Chỉ nội suy lực hút khi Bóp cò hoặc Bật ống ngắm
-        if (!isFiring && !isScoping) {
+        if (!isFiring && !isScoping && !isPending) {
             camState.integralYaw = 0;
             camState.integralPitch = 0;
             return payload;
         }
 
-        // ====================================================================
-        // 1. TÍNH TOÁN GÓC LƯỢNG TỬ (ĐỒNG BỘ CHRONOS ANCHOR)
-        // ====================================================================
         const origin = selfState.lastAnchor ? 
             { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
             { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
             
-        const dest = targetState.predicted_pos;
+        const dest = targetState.predicted_pos; // M4 liên tục cập nhật vị trí di chuyển của địch
 
         const dx = dest.x - origin.x;
         const dy = dest.y - origin.y;
@@ -372,10 +368,6 @@ class CameraManipulator {
 
         let trueYaw = this.normalizeAngle(Math.atan2(dx, dz) * (180.0 / Math.PI));
         let truePitch = this.normalizeAngle(Math.atan2(-dy, distXZ) * (180.0 / Math.PI));
-
-        // [BẢN VÁ TỐI QUAN TRỌNG]: ĐÃ XÓA BỎ LỆNH TRỪ HAO RECOIL Ở ĐÂY.
-        // Trả lại Pitch thuần túy để Crosshair luôn dán thẳng vào mặt địch. 
-        // Lõi M8 sẽ tự động bù trừ Vector Đạn đạo sau.
 
         const currentYaw = payload.aim_yaw;
         const currentPitch = payload.aim_pitch;
@@ -393,20 +385,18 @@ class CameraManipulator {
         let isAbsoluteLock = false;
 
         // ====================================================================
-        // 2. KÍCH HOẠT DỊCH CHUYỂN TỨC THỜI (FIRST-FRAME SNAP)
+        // GIAO THỨC VẨY TÂM BẠO LỰC (DRAG-SHOT OVERRIDE)
         // ====================================================================
-        if (justStartedFiring) {
-            // Ngay tại mili-giây chạm nút bắn, BỎ QUA MỌI TOÁN HỌC PID!
-            // Dịch chuyển 100% khoảng cách còn thiếu, ép tâm vào sọ ngay lập tức.
-            outputYawStep = errorYaw;
-            outputPitchStep = errorPitch;
+        if (weaponState.forceAbsoluteSnap) {
+            // Trong 200ms này, bỏ qua mọi vùng chết và PID từ từ.
+            // Ép nội suy siêu tốc: Nuốt trọn 60% khoảng cách còn thiếu mỗi khung hình (frame).
+            // Trông trên màn hình sẽ giống như một cú vẩy chuột (flick) cực gắt của Pro Player.
+            outputYawStep = errorYaw * 0.6;
+            outputPitchStep = errorPitch * 0.6;
             camState.integralYaw = 0;
             camState.integralPitch = 0;
             isAbsoluteLock = true;
         }
-        // ====================================================================
-        // 3. CQC LAZY TRACK (GẦN < 3 MÉT)
-        // ====================================================================
         else if (targetState.distance < 3.0) {
             outputYawStep = errorYaw * 4.0 * dt; 
             outputPitchStep = errorPitch * 4.0 * dt;
@@ -414,15 +404,10 @@ class CameraManipulator {
             outputYawStep = Math.max(-maxStep, Math.min(maxStep, outputYawStep));
             outputPitchStep = Math.max(-maxStep, Math.min(maxStep, outputPitchStep));
         } 
-        // ====================================================================
-        // 4. TẦM XA: VÙNG CHẾT & PHANH TỪ TRƯỜNG (HYBRID PID)
-        // ====================================================================
         else {
-            // Mở rộng vùng chết từ 0.35 lên 0.8 khi đang sấy (isFiring) để tâm bám chắc hơn
-            const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
+            const dynamicDeadzone = (isFiring || isPending) ? 0.8 : 0.35; 
             
             if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
-                // Đã vào vùng lõi sọ -> Khóa vĩnh viễn (Snap & Hold)
                 outputYawStep = errorYaw;
                 outputPitchStep = errorPitch;
                 camState.integralYaw = 0;
@@ -464,19 +449,14 @@ class CameraManipulator {
         camState.prevErrorYaw = errorYaw;
         camState.prevErrorPitch = errorPitch;
 
-        // ====================================================================
-        // 5. KÍNH LỌC EMA & ÉP GÓC TUYỆT ĐỐI
-        // ====================================================================
         if (camState.emaYaw === undefined) camState.emaYaw = currentYaw;
         if (camState.emaPitch === undefined) camState.emaPitch = currentPitch;
 
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        // Nếu đang Bóp cò (isFiring) HOẶC đã lọt vào lõi sọ (isAbsoluteLock)
-        // -> Tắt toàn bộ độ trễ làm mượt, ép alpha = 1.0 (Phản hồi 0ms).
-        // Chỉ dùng bộ làm mượt (0.85) khi đang bật Scope tìm địch (Chưa bóp cò).
-        let alpha = (isFiring || isAbsoluteLock) ? 1.0 : 0.85; 
+        // Ép alpha = 1.0 (Không làm mượt, xóa độ trễ) khi đang Vẩy tâm (Pending) hoặc Khai hỏa
+        let alpha = (isFiring || isAbsoluteLock || isPending) ? 1.0 : 0.85; 
 
         camState.emaYaw = this.normalizeAngle((rawNewYaw * alpha) + (camState.emaYaw * (1.0 - alpha)));
         camState.emaPitch = this.normalizeAngle((rawNewPitch * alpha) + (camState.emaPitch * (1.0 - alpha)));
@@ -497,62 +477,94 @@ class CameraManipulator {
 }
 
 // ============================================================================
-// MODULE PHỤ TRỢ: TRIGGER CHECK (LÕI KIỂM ĐỊNH KHAI HỎA)
-// Nhiệm vụ: Đánh giá độ lệch hồng tâm so với mục tiêu. Nếu nằm trong ngưỡng
-// sát thương (Headshot), tự động kích hoạt cờ Bóp cò (TriggerBot) để M5 đóng băng.
+// MODULE 6.5: TRIGGER CHECK (BỘ LỌC ĐỒNG BỘ - BẢN VÁ DRAG-SHOT 200ms)
+// Tích hợp: 0.2s Delayed Execution, Force Snap Signal.
 // ============================================================================
 class TriggerCheck {
     static evaluate(payload) {
         const targetState = _global.__OmniState.target;
-        const selfState = _global.__OmniState.self;
-        const profile = _global.__OmniState.weaponProfile;
         const weaponState = _global.__OmniState.weapon;
+        const profile = _global.__OmniState.weaponProfile;
 
-        // Xóa cờ Trigger cũ của khung hình trước
+        // Reset tín hiệu phát sóng
         weaponState.triggerFired = false;
+        if (profile.Core === "IGNORE") return payload;
 
-        // Điều kiện 1: Chỉ chạy TriggerBot nếu đang cầm súng Nhóm ONETAP (Sniper/Pistol)
-        if (profile.Core !== "ONETAP") return payload;
+        let isManualFiring = payload.is_firing || (payload.weapon && payload.weapon.is_firing);
 
-        // Điều kiện 2: Phải có mục tiêu, có tọa độ điểm rơi và có góc nhìn Camera hiện tại
-        if (!targetState.id || !targetState.predicted_pos || payload.aim_yaw === undefined) return payload;
-
-        // --------------------------------------------------------------------
-        // TOÁN HỌC KHÔNG GIAN: TÍNH GÓC LỆCH HỒNG TÂM
-        // --------------------------------------------------------------------
-        const origin = { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
-        const dest = targetState.predicted_pos;
-
-        const dx = dest.x - origin.x;
-        const dy = dest.y - origin.y;
-        const dz = dest.z - origin.z;
-        const distXZ = Math.sqrt(dx * dx + dz * dz);
-
-        const requiredYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
-        const requiredPitch = Math.atan2(-dy, distXZ) * (180.0 / Math.PI);
-
-        // Tính sai số giữa hướng Camera (sau khi M7 đã xoay) và Hướng lý tưởng
-        let diffYaw = Math.abs(requiredYaw - payload.aim_yaw);
-        if (diffYaw > 180) diffYaw = 360 - diffYaw;
-        let diffPitch = Math.abs(requiredPitch - payload.aim_pitch);
-
-        // --------------------------------------------------------------------
-        // NGƯỠNG KÍCH HOẠT TỬ THẦN (Trigger Threshold)
-        // --------------------------------------------------------------------
-        // Ngưỡng 0.8 độ tương đương với việc hồng tâm vừa chạm vào viền Lõi Sọ.
-        // Ở cự ly xa, 0.8 độ là một diện tích rất nhỏ, đảm bảo chỉ nổ súng khi chắc chắn Headshot.
-        const triggerThreshold = 0.8;
-
-        if (diffYaw <= triggerThreshold && diffPitch <= triggerThreshold) {
+        // ====================================================================
+        // GIAO THỨC DRAG-SHOT (VẨY TÂM CÓ ĐỘ TRỄ 200ms)
+        // ====================================================================
+        if (isManualFiring && targetState.id && targetState.predicted_pos) {
             
-            // KÍCH HOẠT KHAI HỎA
-            // Ghi đè vào gói tin để Server tin rằng bạn vừa chạm tay vào nút bắn
+            // Nếu là frame đầu tiên chạm nút bắn, khởi động Đồng hồ đếm ngược
+            if (!weaponState.aimSnapStartTime) {
+                weaponState.aimSnapStartTime = Date.now();
+                weaponState.isPendingFire = true;
+            }
+
+            // Tính toán thời gian đã trôi qua kể từ lúc chạm nút bắn
+            const elapsed = Date.now() - weaponState.aimSnapStartTime;
+
+            // PHA 1: TRONG VÒNG 0.2 GIÂY ĐẦU TIÊN (200ms)
+            if (elapsed < 200) {
+                // 1. Tịch thu lệnh khai hỏa (Cấm nổ súng)
+                payload.is_firing = false;
+                if (payload.weapon) payload.weapon.is_firing = false;
+                weaponState.isFiring = false;
+                
+                // 2. Phát lệnh báo động đỏ cho Module 7: "VẨY TÂM NGAY LẬP TỨC!"
+                weaponState.forceAbsoluteSnap = true; 
+                
+                return payload; // Trả gói tin đi, súng không nổ nhưng màn hình đang lia
+            } 
+            // PHA 2: SAU 0.2 GIÂY
+            else {
+                // Nhả cò súng, tắt lệnh báo động đỏ
+                weaponState.forceAbsoluteSnap = false; 
+                weaponState.isPendingFire = false;
+                
+                // Tiếp tục xử lý Hitchance và Pre-fire bên dưới
+            }
+        } else {
+            // Nếu nhả nút bắn hoặc mất mục tiêu -> Reset toàn bộ hệ thống đếm giờ
+            weaponState.aimSnapStartTime = null;
+            weaponState.isPendingFire = false;
+            weaponState.forceAbsoluteSnap = false;
+        }
+
+        // ====================================================================
+        // KIỂM TRA HITCHANCE & THỰC THI (Bảo lưu code cũ của bạn)
+        // ====================================================================
+        if (!targetState.id || !targetState.predicted_pos) {
+            if (isManualFiring) {
+                payload.is_firing = false;
+                if (payload.weapon) payload.weapon.is_firing = false;
+                weaponState.isFiring = false;
+            }
+            return payload;
+        }
+
+        let hitchance = 100.0;
+        const tracker = _global.__OmniState.tracker[targetState.id];
+        
+        if (tracker && tracker.is_behind_cover && profile.Core !== "ONETAP") {
+            hitchance = 0.0; 
+        }
+
+        if (hitchance === 0.0) {
+            payload.is_firing = false;
+            if (payload.weapon) payload.weapon.is_firing = false;
+            weaponState.isFiring = false;
+            return payload;
+        }
+
+        if (isManualFiring) {
             payload.is_firing = true;
             if (payload.weapon) {
                 payload.weapon.is_firing = true;
+                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 9999.0;
             }
-            
-            // Báo cáo cho Hệ thống (M5) biết rằng cò súng đã được kéo
             weaponState.isFiring = true;
             weaponState.triggerFired = true; 
         }
