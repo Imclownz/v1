@@ -124,8 +124,9 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - TỐI ƯU HÓA LẮC NGANG)
-// Cập nhật Strafe Dampener: Xử lý hoàn hảo các pha lách trái/phải liên tục.
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - FEEDFORWARD PREP)
+// Tích hợp: Velocity Smoother (Bộ lọc vận tốc mạng), Dual-Reality Output 
+// (Tách biệt Tọa độ Hiện tại cho M7 và Tọa độ Tương lai cho M8).
 // ============================================================================
 class TargetKinematics {
     
@@ -142,6 +143,7 @@ class TargetKinematics {
             _global.__OmniState.self.anchorPos = { ...payload.pos };
         }
 
+        // Triệt tiêu ma sát Aim-Assist của Game Engine
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.friction = 0.0;
             payload.aim_assist.adhesion = 0.0;
@@ -158,6 +160,9 @@ class TargetKinematics {
         const currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (_global.__OmniState.camera.prevYaw || 0.0);
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
+        // ====================================================================
+        // 1. SMART THREAT MATRIX 3.0 (MA TRẬN MỤC TIÊU)
+        // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
             
@@ -207,6 +212,9 @@ class TargetKinematics {
             }
         }
 
+        // ====================================================================
+        // 2. KINEMATIC ENGINE & VELOCITY EXPORT (CHUẨN BỊ CHO FEEDFORWARD)
+        // ====================================================================
         if (bestTarget) {
             const targetState = _global.__OmniState.target;
             const tracker = _global.__OmniState.tracker;
@@ -215,11 +223,12 @@ class TargetKinematics {
             targetState.id = bestTarget.id;
             targetState.distance = bestTarget.distance;
             
+            // Theo dõi Lõi Sọ thay vì rễ tọa độ thân
             let headCenter = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
             let targetAimPos = headCenter;
-            
             if (bestTarget.distance <= 5.0 && bestTarget.hitboxes?.chest) targetAimPos = bestTarget.hitboxes.chest.pos; 
 
+            // EXPORT 1: Tọa độ Hiện Tại (Dùng cho M7 khóa trục Y và bám sát đồ họa)
             targetState.pos = { ...targetAimPos };
 
             if (!tracker[bestTarget.id]) {
@@ -229,6 +238,7 @@ class TargetKinematics {
                     lastVelocity: {x:0, y:0, z:0} 
                 };
                 targetState.predicted_pos = { ...targetAimPos }; 
+                targetState.velocity = {x:0, y:0, z:0};
             } 
             else {
                 let trackData = tracker[bestTarget.id];
@@ -240,12 +250,29 @@ class TargetKinematics {
                 let dt = (currentTime - prevFrame.time) / 1000.0;
                 
                 if (dt > 0.0 && dt < 0.2) { 
-                    let vx = (targetAimPos.x - prevFrame.pos.x) / dt;
-                    let vy = (targetAimPos.y - prevFrame.pos.y) / dt;
-                    let vz = (targetAimPos.z - prevFrame.pos.z) / dt;
-                    let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
-                    trackData.velocity = { x: vx, y: vy, z: vz };
+                    // --------------------------------------------------------
+                    // A. TÍNH TOÁN & LỌC VẬN TỐC (VELOCITY SMOOTHING)
+                    // --------------------------------------------------------
+                    let raw_vx = (targetAimPos.x - prevFrame.pos.x) / dt;
+                    let raw_vy = (targetAimPos.y - prevFrame.pos.y) / dt;
+                    let raw_vz = (targetAimPos.z - prevFrame.pos.z) / dt;
 
+                    // Kính lọc EMA cho Vận Tốc (Alpha = 0.5)
+                    // Trộn 50% vận tốc mới và 50% quán tính cũ để tạo ra dòng chảy mượt mà.
+                    // Đảm bảo Camera của M7 khi Feedforward sẽ trôi êm như nước, không bị giật lag mạng.
+                    let alphaV = 0.5;
+                    let vx = (raw_vx * alphaV) + (trackData.velocity.x * (1.0 - alphaV));
+                    let vy = (raw_vy * alphaV) + (trackData.velocity.y * (1.0 - alphaV));
+                    let vz = (raw_vz * alphaV) + (trackData.velocity.z * (1.0 - alphaV));
+                    
+                    trackData.velocity = { x: vx, y: vy, z: vz };
+                    
+                    // EXPORT 2: Vận Tốc Siêu Mượt (Cấp nguồn trực tiếp cho Lõi Camera M7)
+                    targetState.velocity = { x: vx, y: vy, z: vz };
+
+                    // --------------------------------------------------------
+                    // B. TÍNH TOÁN GIA TỐC & TIÊN ĐOÁN TƯƠNG LAI (CHO M8 BẮN)
+                    // --------------------------------------------------------
                     let ax = 0, ay = 0, az = 0;
                     if (trackData.lastVelocity) {
                         ax = (vx - trackData.lastVelocity.x) / dt;
@@ -255,41 +282,33 @@ class TargetKinematics {
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
                     const pingDelay = _global.__OmniState.currentPing / 1000.0;
-                    let bulletSpeed = 850.0; 
-                    if (_global.__OmniState.weaponProfile.Core === "SHOTGUN") bulletSpeed = 400.0;
-                    
+                    let bulletSpeed = _global.__OmniState.weaponProfile.Core === "SHOTGUN" ? 400.0 : 850.0;
                     let timeToTarget = pingDelay + (bestTarget.distance / bulletSpeed);
                     if (timeToTarget > 0.35) timeToTarget = 0.35; 
 
-                    // [BẢN VÁ]: KIỂM SOÁT GIA TỐC NGANG (CHỐNG BẮN LỐ KHI ĐỊCH LẮC)
                     let accelMagXZ = Math.sqrt(ax*ax + az*az);
-                    let strafeDampener = 1.0;
-                    
-                    if (accelMagXZ > 40.0) {
-                        // Kẻ địch lắc ziczac quá gắt, bóp nghẹt 90% gia tốc để đạn không bị văng xa
-                        strafeDampener = 0.1; 
-                    } else if (accelMagXZ > 15.0) {
-                        // Kẻ địch đang lách trái/phải cơ bản
-                        strafeDampener = 0.4;
-                    }
+                    let strafeDampener = (accelMagXZ > 40.0) ? 0.2 : ((accelMagXZ > 15.0) ? 0.6 : 1.0);
 
                     let predX = targetAimPos.x + (vx * timeToTarget) + (0.5 * ax * timeToTarget * timeToTarget * strafeDampener);
                     let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
                     let predY = targetAimPos.y + (vy * timeToTarget);
 
+                    let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
                     if (isJumping) {
                         predY -= 0.5 * 9.81 * (timeToTarget * timeToTarget);
                     }
 
+                    // EXPORT 3: Tọa độ Tương lai (Đạn đạo của M8 sẽ hướng vào đây)
                     targetState.predicted_pos = { x: predX, y: predY, z: predZ };
                     
                 } else {
                     targetState.predicted_pos = { ...targetAimPos };
+                    targetState.velocity = {x:0, y:0, z:0};
                 }
             }
         } else {
-            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 9999.0 };
+            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 9999.0, velocity: {x:0, y:0, z:0} };
         }
 
         return payload;
@@ -297,9 +316,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - BẢN VÁ LỆCH TÂM NGANG)
-// Tách biệt Thị giác và Đạn đạo. Camera chỉ nhìn vào Hiện Tại (pos).
-// Đảm bảo Crosshair KHÔNG bị kéo đi trước mặt hoặc chúi xuống đất khi địch nhảy.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - FEEDFORWARD SINGULARITY)
+// Tích hợp: Angular Feedforward (Bơm vận tốc góc), Y-Axis Rail Lock (Khóa trục Y),
+// Anti-Trailing System (Chống kéo lê tâm ngang), và Drag-Shot 200ms Override.
 // ============================================================================
 class CameraManipulator {
     
@@ -315,6 +334,7 @@ class CameraManipulator {
         const camState = _global.__OmniState.camera;
         const weaponState = _global.__OmniState.weapon;
 
+        // Bỏ qua nếu mất mục tiêu
         if (!targetState.id || !targetState.pos || payload.aim_yaw === undefined) {
             camState.wasFiring = false;
             return payload;
@@ -332,13 +352,13 @@ class CameraManipulator {
             return payload;
         }
 
+        // Lấy tọa độ Neo (Anchor) từ M5
         const origin = selfState.lastAnchor ? 
             { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
             { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
             
-        // [SỬA LỖI CHÍNH Ở ĐÂY]: DÙNG POS HIỆN TẠI THAY VÌ PREDICTED_POS
-        // Màn hình chỉ cần dính chặt vào sọ địch thực tế. 
-        // Việc bắn đón tương lai cứ để Lõi M8 (Magic Bullet) lo!
+        // [QUAN TRỌNG]: M7 sử dụng Thực Tại Đồ Họa (pos) thay vì Thực Tại Tương Lai (predicted_pos)
+        // Điều này đảm bảo crosshair dán sát vào mô hình nhân vật trên màn hình, không bị chệch ra ngoài.
         const dest = targetState.pos; 
 
         const dx = dest.x - origin.x;
@@ -362,58 +382,91 @@ class CameraManipulator {
 
         let outputYawStep = 0;
         let outputPitchStep = 0;
-        let isAbsoluteLock = false;
+        let disableYawEMA = false;
 
         // ====================================================================
-        // GIAO THỨC VẨY TÂM (DRAG-SHOT CHUẨN XÁC VÀO ĐẦU)
+        // 1. CHUYỂN ĐỔI VẬN TỐC TỊNH TIẾN THÀNH VẬN TỐC GÓC (FEEDFORWARD MATH)
         // ====================================================================
-        if (weaponState.forceAbsoluteSnap) {
-            outputYawStep = errorYaw * 0.6;
-            outputPitchStep = errorPitch * 0.6;
-            camState.integralYaw = 0;
-            camState.integralPitch = 0;
-            isAbsoluteLock = true;
+        let feedforwardYawStep = 0;
+        let feedforwardPitchStep = 0;
+
+        if (targetState.velocity) {
+            // Giả lập vị trí của kẻ địch ở 1 mili-giây tiếp theo bằng vận tốc hiện tại
+            let futureX = dest.x + (targetState.velocity.x * 0.001);
+            let futureY = dest.y + (targetState.velocity.y * 0.001);
+            let futureZ = dest.z + (targetState.velocity.z * 0.001);
+            
+            let futureDx = futureX - origin.x;
+            let futureDy = futureY - origin.y;
+            let futureDz = futureZ - origin.z;
+            let futureDistXZ = Math.sqrt(futureDx*futureDx + futureDz*futureDz);
+
+            let futureYaw = this.normalizeAngle(Math.atan2(futureDx, futureDz) * (180.0 / Math.PI));
+            let futurePitch = this.normalizeAngle(Math.atan2(-futureDy, futureDistXZ) * (180.0 / Math.PI));
+
+            // Vận tốc góc = (Góc tương lai - Góc hiện tại) / 0.001
+            let angularVelYaw = this.normalizeAngle(futureYaw - trueYaw) / 0.001;
+            let angularVelPitch = this.normalizeAngle(futurePitch - truePitch) / 0.001;
+
+            // Tính bước nhảy Feedforward cho khung hình hiện tại (dt)
+            feedforwardYawStep = angularVelYaw * dt;
+            feedforwardPitchStep = angularVelPitch * dt;
         }
+
+        // ====================================================================
+        // 2. GIAO THỨC ĐIỀU HƯỚNG TÁCH TRỤC (AXIS-SPLIT ROUTING)
+        // ====================================================================
+
+        // TRƯỜNG HỢP A: DRAG-SHOT BẠO LỰC (200ms đầu tiên do Trigger yêu cầu)
+        if (weaponState.forceAbsoluteSnap) {
+            outputYawStep = errorYaw * 0.65; // Vẩy ngang siêu tốc
+            outputPitchStep = errorPitch * 0.85; // Trục Y vẩy bạo lực hơn để khóa đầu ngay
+            disableYawEMA = true;
+        }
+        // TRƯỜNG HỢP B: CẬN CHIẾN (< 3 MÉT) - Lazy Track
         else if (targetState.distance < 3.0) {
-            outputYawStep = errorYaw * 4.0 * dt; 
-            outputPitchStep = errorPitch * 4.0 * dt;
+            // Bơm 100% Feedforward + 1 chút PID sửa lỗi
+            outputYawStep = feedforwardYawStep + (errorYaw * 2.0 * dt); 
+            outputPitchStep = feedforwardPitchStep + (errorPitch * 2.0 * dt);
+            
             let maxStep = 45.0 * dt; 
             outputYawStep = Math.max(-maxStep, Math.min(maxStep, outputYawStep));
             outputPitchStep = Math.max(-maxStep, Math.min(maxStep, outputPitchStep));
         } 
+        // TRƯỜNG HỢP C: GIAO TRANH TẦM TRUNG/XA
         else {
             const dynamicDeadzone = (isFiring || isPending) ? 0.8 : 0.35; 
             
-            if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
-                outputYawStep = errorYaw;
-                outputPitchStep = errorPitch;
-                camState.integralYaw = 0;
+            // Y-AXIS RAIL LOCK (Khóa đường ray trục Y)
+            // Bất chấp việc tâm ngang (Yaw) đang ở đâu, trục dọc (Pitch) luôn khóa cứng 100% vào cao độ của Lõi Sọ.
+            // Điều này cho phép bạn vuốt tay theo địch chạy ngang mà không bao giờ bị rơi tâm xuống thân dưới.
+            if (Math.abs(errorPitch) > 0.1) {
+                outputPitchStep = errorPitch; // Absolute Snap cho trục Y
                 camState.integralPitch = 0;
-                isAbsoluteLock = true; 
-            } 
-            else {
-                let Kp_yaw = 45.0; 
-                let Kp_pitch = 60.0; 
-                let baseKd = 0.2;
-                let dynamicKd_yaw = baseKd + (8.0 / (Math.abs(errorYaw) + 0.5));
-                let dynamicKd_pitch = baseKd + (12.0 / (Math.abs(errorPitch) + 0.5));
-                let Ki = 0.01;
+            } else {
+                outputPitchStep = feedforwardPitchStep; // Địch nhảy thì trục Y trôi theo vận tốc nhảy
+            }
 
+            // X-AXIS FEEDFORWARD TRACKING (Bám sát trục X bằng Vận Tốc)
+            if (Math.abs(errorYaw) <= dynamicDeadzone) {
+                // Tâm đã lọt vào vùng sọ: Chỉ dùng Feedforward để "Trôi" theo địch.
+                // Tắt hoàn toàn PID để không đánh nhau với thao tác vuốt tay của người chơi.
+                outputYawStep = feedforwardYawStep; 
+                disableYawEMA = true; // Cấm làm mượt để tâm không bị trễ (Anti-Trailing)
+            } else {
+                // Kéo tâm lại gần bằng PID kết hợp Feedforward
+                let Kp_yaw = 40.0; 
+                let dynamicKd_yaw = 0.2 + (8.0 / (Math.abs(errorYaw) + 0.5));
                 camState.integralYaw = (camState.integralYaw || 0) + (errorYaw * dt);
-                camState.integralPitch = (camState.integralPitch || 0) + (errorPitch * dt);
-
                 let derivYaw = (errorYaw - (camState.prevErrorYaw || errorYaw)) / dt;
-                let derivPitch = (errorPitch - (camState.prevErrorPitch || errorPitch)) / dt;
 
-                outputYawStep = ((errorYaw * Kp_yaw) + (camState.integralYaw * Ki) + (derivYaw * dynamicKd_yaw)) * dt;
-                outputPitchStep = ((errorPitch * Kp_pitch) + (camState.integralPitch * Ki) + (derivPitch * dynamicKd_pitch)) * dt;
-
-                if (Math.abs(outputPitchStep) > Math.abs(errorPitch)) {
-                    outputPitchStep = errorPitch; 
-                    camState.integralPitch = 0;   
-                }
-                if (Math.abs(outputYawStep) > Math.abs(errorYaw)) {
-                    outputYawStep = errorYaw;
+                let pidYaw = (errorYaw * Kp_yaw) + (camState.integralYaw * 0.01) + (derivYaw * dynamicKd_yaw);
+                
+                // Trộn lực kéo PID với Quán tính của kẻ địch
+                outputYawStep = (pidYaw * dt) + feedforwardYawStep;
+                
+                if (Math.abs(outputYawStep) > Math.abs(errorYaw) && (errorYaw * outputYawStep > 0)) {
+                    outputYawStep = errorYaw; 
                     camState.integralYaw = 0;
                 }
             }
@@ -422,16 +475,24 @@ class CameraManipulator {
         camState.prevErrorYaw = errorYaw;
         camState.prevErrorPitch = errorPitch;
 
+        // ====================================================================
+        // 3. KÍNH LỌC EMA ĐỘC LẬP TỪNG TRỤC (DUAL-AXIS EMA)
+        // ====================================================================
         if (camState.emaYaw === undefined) camState.emaYaw = currentYaw;
         if (camState.emaPitch === undefined) camState.emaPitch = currentPitch;
 
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        let alpha = (isFiring || isAbsoluteLock || isPending) ? 1.0 : 0.85; 
+        // Trục Y (Pitch): Luôn tắt EMA khi bắn để dán cứng vào sọ, hoặc dùng 0.85 khi chưa bắn.
+        let alphaPitch = (isFiring || isPending) ? 1.0 : 0.85; 
 
-        camState.emaYaw = this.normalizeAngle((rawNewYaw * alpha) + (camState.emaYaw * (1.0 - alpha)));
-        camState.emaPitch = this.normalizeAngle((rawNewPitch * alpha) + (camState.emaPitch * (1.0 - alpha)));
+        // Trục X (Yaw): Bị tắt EMA (alpha = 1.0) khi DisableYawEMA = true. 
+        // Điều này triệt tiêu hoàn toàn độ trễ, giúp crosshair không bao giờ bị "kéo lê" sau lưng địch.
+        let alphaYaw = (disableYawEMA || isFiring || isPending) ? 1.0 : 0.85;
+
+        camState.emaYaw = this.normalizeAngle((rawNewYaw * alphaYaw) + (camState.emaYaw * (1.0 - alphaYaw)));
+        camState.emaPitch = this.normalizeAngle((rawNewPitch * alphaPitch) + (camState.emaPitch * (1.0 - alphaPitch)));
 
         payload.aim_yaw = camState.emaYaw;
         payload.aim_pitch = camState.emaPitch;
