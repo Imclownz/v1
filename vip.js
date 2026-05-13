@@ -124,9 +124,10 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - SINGULARITY MERGE)
-// Tích hợp: Zero-Friction (Triệt tiêu lực cản Aim-Assist gốc), 
-// Singularity Lead (Dự đoán gia tốc), Threat Matrix 3.0 và Backtracking.
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - BẢN VÁ TƯƠNG LAI)
+// Tích hợp: 3D Predictive Engine, Parabolic Gravity (Chống Nhảy), 
+// Ziczac Dampener (Chống Lắc), và Head-Track Offset.
+// XÓA BỎ: Backtracking (Bắn vào quá khứ).
 // ============================================================================
 class TargetKinematics {
     
@@ -137,19 +138,12 @@ class TargetKinematics {
     }
 
     static processTargetState(payload) {
-        // 1. TỰ ĐỘNG LẤY MỐC TỌA ĐỘ BẢN THÂN
         if (payload.anchorPos !== undefined) {
             _global.__OmniState.self.anchorPos = { ...payload.anchorPos };
         } else if (payload.pos !== undefined && _global.__OmniState.self.anchorPos.x === 0) {
             _global.__OmniState.self.anchorPos = { ...payload.pos };
         }
 
-        // ====================================================================
-        // [V85 KẾ THỪA] GIAO THỨC ZERO-FRICTION (TRIỆT TIÊU MA SÁT AIM-ASSIST)
-        // ====================================================================
-        // Game Engine thường có một lực hút ngầm (Friction) kéo tâm vào ngực địch.
-        // Lực này sẽ đánh nhau với thuật toán PID của Module 7 gây ra rung tâm.
-        // Ta phải vô hiệu hóa nó ngay từ Tầng Nhận diện để giải phóng Camera.
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.friction = 0.0;
             payload.aim_assist.adhesion = 0.0;
@@ -167,12 +161,11 @@ class TargetKinematics {
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
         // ====================================================================
-        // 2. SMART THREAT MATRIX 3.0 (MA TRẬN HIỂM HỌA THÔNG MINH)
+        // 1. SMART THREAT MATRIX 3.0
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
             
-            // Xóa sổ lực ma sát của từng Hitbox cá nhân (Bypass sâu)
             if (enemy.hitboxes) {
                 const bodyParts = ['head', 'chest', 'pelvis', 'legs', 'arms'];
                 for (let p = 0; p < bodyParts.length; p++) {
@@ -196,13 +189,11 @@ class TargetKinematics {
 
             let threatScore = distance3D; 
 
-            // Trọng số 1: Địch đang nhìn mình
             let angleToMe = Math.atan2(-dx, -dz) * (180.0 / Math.PI);
             let enemyYaw = enemy.aim_yaw || enemy.yaw || 0.0;
             let isLookingAtMe = Math.abs(this.normalizeAngle(enemyYaw - angleToMe)) < 30.0;
             if (isLookingAtMe) threatScore -= 200.0; 
 
-            // Trọng số 2: Độ nguy hiểm vũ khí & Lượng máu
             if (enemy.weapon && enemy.weapon.category) {
                 let cat = enemy.weapon.category.toUpperCase();
                 if (cat.includes("SNIPER") || cat.includes("SHOTGUN")) threatScore -= 100.0;
@@ -222,7 +213,7 @@ class TargetKinematics {
         }
 
         // ====================================================================
-        // 3. KINEMATICS ENGINE & TIME-SHIFT BACKTRACKING
+        // 2. DYNAMIC PREDICTIVE ENGINE (ĐỘNG CƠ TIÊN ĐOÁN TƯƠNG LAI 3D)
         // ====================================================================
         if (bestTarget) {
             const targetState = _global.__OmniState.target;
@@ -232,20 +223,19 @@ class TargetKinematics {
             targetState.id = bestTarget.id;
             targetState.distance = bestTarget.distance;
             
-            // [GIAO THỨC ĐA ĐIỂM]
+            // Xử lý tư thế nghiêng/ngồi: Liên tục tracking vào tâm của Hitbox Đầu thay vì tọa độ gốc
             let headCenter = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
             let targetAimPos = headCenter;
-            if (bestTarget.is_partially_hidden) targetAimPos = { x: headCenter.x, y: headCenter.y + 0.12, z: headCenter.z }; // Bắn sượt đỉnh đầu
-            if (bestTarget.distance <= 5.0 && bestTarget.hitboxes?.chest) targetAimPos = bestTarget.hitboxes.chest.pos; // Cận chiến khóa ngực
+            
+            if (bestTarget.distance <= 5.0 && bestTarget.hitboxes?.chest) targetAimPos = bestTarget.hitboxes.chest.pos; 
 
             targetState.pos = { ...targetAimPos };
 
-            // BỘ NHỚ LỊCH SỬ (HISTORY BUFFER)
             if (!tracker[bestTarget.id]) {
                 tracker[bestTarget.id] = { 
                     history: [], 
                     velocity: {x:0, y:0, z:0},
-                    lastVelocity: {x:0, y:0, z:0} // V85: Cần lưu Vận tốc cũ để tính Gia tốc
+                    lastVelocity: {x:0, y:0, z:0} 
                 };
                 targetState.predicted_pos = { ...targetAimPos }; 
             } 
@@ -253,20 +243,20 @@ class TargetKinematics {
                 let trackData = tracker[bestTarget.id];
                 
                 trackData.history.unshift({ pos: { ...targetAimPos }, time: currentTime });
-                if (trackData.history.length > 20) trackData.history.pop();
+                if (trackData.history.length > 10) trackData.history.pop();
 
                 let prevFrame = trackData.history[1] || trackData.history[0];
                 let dt = (currentTime - prevFrame.time) / 1000.0;
                 
                 if (dt > 0.0 && dt < 0.2) { 
-                    // TÍNH TOÁN VẬN TỐC
+                    // 1. TÍNH VẬN TỐC (VELOCITY)
                     let vx = (targetAimPos.x - prevFrame.pos.x) / dt;
                     let vy = (targetAimPos.y - prevFrame.pos.y) / dt;
                     let vz = (targetAimPos.z - prevFrame.pos.z) / dt;
                     let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     trackData.velocity = { x: vx, y: vy, z: vz };
 
-                    // [V85 KẾ THỪA] TÍNH TOÁN GIA TỐC (ACCELERATION)
+                    // 2. TÍNH GIA TỐC (ACCELERATION) - Bẻ lái/Ziczac
                     let ax = 0, ay = 0, az = 0;
                     if (trackData.lastVelocity) {
                         ax = (vx - trackData.lastVelocity.x) / dt;
@@ -275,37 +265,50 @@ class TargetKinematics {
                     }
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
-                    // BACKTRACKING (TUA NGƯỢC THỜI GIAN)
-                    if (speed > 8.0 || bestTarget.is_behind_cover) {
-                        let backtrackFrame = trackData.history[0];
-                        let targetTime = currentTime - 150; 
-                        
-                        for (let i = 0; i < trackData.history.length; i++) {
-                            let frame = trackData.history[i];
-                            if (Math.abs(frame.time - targetTime) < 50) {
-                                backtrackFrame = frame; break;
-                            }
-                        }
-                        targetState.predicted_pos = { ...backtrackFrame.pos };
-                    } 
-                    // [V85 KẾ THỪA] SINGULARITY LEAD (DỰ ĐOÁN TƯƠNG LAI CÓ GIA TỐC)
-                    else {
-                        const pingDelay = _global.__OmniState.currentPing / 1000.0;
-                        let bulletSpeed = _global.__OmniState.weaponProfile.Core === "SHOTGUN" ? 400.0 : 850.0;
-                        let extTime = (pingDelay + (bestTarget.distance / bulletSpeed));
-                        if (extTime > 0.15) extTime = 0.15; 
+                    // 3. TÍNH THỜI GIAN ĐẠN BAY + ĐỘ TRỄ MẠNG (t)
+                    const pingDelay = _global.__OmniState.currentPing / 1000.0;
+                    let bulletSpeed = 850.0; // Mặc định cho Sniper/AR
+                    if (_global.__OmniState.weaponProfile.Core === "SHOTGUN") bulletSpeed = 400.0;
+                    
+                    let timeToTarget = pingDelay + (bestTarget.distance / bulletSpeed);
+                    
+                    // Khóa trần thời gian tiên đoán: Chỉ dự đoán tối đa 0.35 giây (350ms) vào tương lai.
+                    // Nếu dự đoán quá xa (>1 giây), khi địch đổi hướng đột ngột đạn sẽ trượt.
+                    if (timeToTarget > 0.35) timeToTarget = 0.35; 
 
-                        // Phương trình Động học: P = P0 + V*t + 0.5*A*t^2
-                        let predX = targetAimPos.x + (vx * extTime) + (0.5 * ax * extTime * extTime);
-                        let predZ = targetAimPos.z + (vz * extTime) + (0.5 * az * extTime * extTime);
-                        let predY = targetAimPos.y + (vy * extTime) + (0.5 * ay * extTime * extTime);
-
-                        // Bù trừ trọng lực rơi tự do
-                        if (Math.abs(vy) > 1.5 && speed <= 8.0) {
-                            predY -= 0.5 * 9.8 * (extTime * extTime);
-                        }
-                        targetState.predicted_pos = { x: predX, y: predY, z: predZ };
+                    // 4. PHÂN TÍCH TƯ THẾ: ZICZAC DAMPENER (Bộ Hãm Gia Tốc)
+                    // Gia tốc XZ biểu thị cho việc đổi hướng trái/phải liên tục
+                    let accelMagXZ = Math.sqrt(ax*ax + az*az);
+                    let strafeDampener = 1.0;
+                    
+                    if (accelMagXZ > 40.0) {
+                        // Địch đang lắc gắt / Spin-bot. Nếu nhân gia tốc lên đạn sẽ văng xa hàng mét.
+                        // Ta bóp nghẹt 80% lực gia tốc, chủ yếu dựa vào Vận tốc quán tính để bắt tâm.
+                        strafeDampener = 0.2; 
+                    } else if (accelMagXZ > 15.0) {
+                        // Địch đang chạy lách bình thường
+                        strafeDampener = 0.6;
                     }
+
+                    // 5. TOÁN HỌC KHÔNG GIAN TƯƠNG LAI
+                    // Trục ngang (X/Z): P = P0 + V*t + 0.5*A*(t^2) * Dampener
+                    let predX = targetAimPos.x + (vx * timeToTarget) + (0.5 * ax * timeToTarget * timeToTarget * strafeDampener);
+                    let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
+                    
+                    // Trục dọc (Y): Mặc định là tuyến tính
+                    let predY = targetAimPos.y + (vy * timeToTarget);
+
+                    // 6. PHÂN TÍCH TƯ THẾ: NHẢY & RƠI (Parabolic Gravity)
+                    let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
+                    if (isJumping) {
+                        // Kích hoạt trọng lực Trái Đất (g = 9.81 m/s^2)
+                        // Bất kể địch đang vọt lên hay rơi xuống, phương trình Parabol sẽ tính ra điểm hạ cánh
+                        predY -= 0.5 * 9.81 * (timeToTarget * timeToTarget);
+                    }
+
+                    // Chốt tọa độ tương lai
+                    targetState.predicted_pos = { x: predX, y: predY, z: predZ };
+                    
                 } else {
                     targetState.predicted_pos = { ...targetAimPos };
                 }
