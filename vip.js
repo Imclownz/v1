@@ -319,9 +319,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - SINGULARITY MERGE)
-// Tích hợp: Hybrid Magnetic Lock (V3.5), CQC Lazy Track (Đồng bộ M5 V85),
-// Zero-Friction Synergy và Visual Recoil Anchoring.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - SINGULARITY MERGE FIX)
+// Bản vá: First-Frame Absolute Snap, Xóa lỗi Double-Recoil, Dynamic EMA.
+// Đảm bảo Crosshair dán chặt vào pixel lõi sọ ngay khi chạm nút bắn.
 // ============================================================================
 class CameraManipulator {
     
@@ -337,11 +337,18 @@ class CameraManipulator {
         const camState = _global.__OmniState.camera;
         const weaponState = _global.__OmniState.weapon;
 
-        if (!targetState.id || !targetState.predicted_pos || payload.aim_yaw === undefined) return payload;
+        if (!targetState.id || !targetState.predicted_pos || payload.aim_yaw === undefined) {
+            camState.wasFiring = false;
+            return payload;
+        }
 
         const isFiring = weaponState.isFiring || weaponState.triggerFired || payload.is_firing;
         const isScoping = payload.is_scoping || (payload.weapon && payload.weapon.is_scoping);
         
+        // Nhận diện CHÍNH XÁC khung hình (frame) đầu tiên người chơi bấm bắn
+        const justStartedFiring = isFiring && !camState.wasFiring;
+        camState.wasFiring = isFiring;
+
         // Chỉ nội suy lực hút khi Bóp cò hoặc Bật ống ngắm
         if (!isFiring && !isScoping) {
             camState.integralYaw = 0;
@@ -350,9 +357,8 @@ class CameraManipulator {
         }
 
         // ====================================================================
-        // 1. TÍNH TOÁN GÓC LƯỢNG TỬ (ĐỒNG BỘ CHRONOS ANCHOR TỪ M5)
+        // 1. TÍNH TOÁN GÓC LƯỢNG TỬ (ĐỒNG BỘ CHRONOS ANCHOR)
         // ====================================================================
-        // Lấy gốc ngắm từ Anchor tĩnh lặng của M5 thay vì vị trí cơ thể đang rung lắc
         const origin = selfState.lastAnchor ? 
             { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
             { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
@@ -367,10 +373,9 @@ class CameraManipulator {
         let trueYaw = this.normalizeAngle(Math.atan2(dx, dz) * (180.0 / Math.PI));
         let truePitch = this.normalizeAngle(Math.atan2(-dy, distXZ) * (180.0 / Math.PI));
 
-        // Neo góc nhìn chống giật hình ảnh (Visual Recoil)
-        if (payload.weapon && payload.weapon.recoil_accumulation !== undefined) {
-            truePitch -= (payload.weapon.recoil_accumulation * 1.35); 
-        }
+        // [BẢN VÁ TỐI QUAN TRỌNG]: ĐÃ XÓA BỎ LỆNH TRỪ HAO RECOIL Ở ĐÂY.
+        // Trả lại Pitch thuần túy để Crosshair luôn dán thẳng vào mặt địch. 
+        // Lõi M8 sẽ tự động bù trừ Vector Đạn đạo sau.
 
         const currentYaw = payload.aim_yaw;
         const currentPitch = payload.aim_pitch;
@@ -385,43 +390,49 @@ class CameraManipulator {
 
         let outputYawStep = 0;
         let outputPitchStep = 0;
-        let isHoldingDeadzone = false;
+        let isAbsoluteLock = false;
 
         // ====================================================================
-        // 2. CQC LAZY TRACK (ĐỒNG BỘ V85 - GẦN < 3 MÉT)
+        // 2. KÍCH HOẠT DỊCH CHUYỂN TỨC THỜI (FIRST-FRAME SNAP)
         // ====================================================================
-        if (targetState.distance < 3.0) {
-            // Khi ở rất gần, M5 đã dịch chuyển đạn vào thẳng đầu địch.
-            // M7 không cần phải giật màn hình 180 độ gây lộ liễu. 
-            // Chúng ta chỉ cho màn hình trôi mượt mà (Lazy Track) về phía địch.
+        if (justStartedFiring) {
+            // Ngay tại mili-giây chạm nút bắn, BỎ QUA MỌI TOÁN HỌC PID!
+            // Dịch chuyển 100% khoảng cách còn thiếu, ép tâm vào sọ ngay lập tức.
+            outputYawStep = errorYaw;
+            outputPitchStep = errorPitch;
+            camState.integralYaw = 0;
+            camState.integralPitch = 0;
+            isAbsoluteLock = true;
+        }
+        // ====================================================================
+        // 3. CQC LAZY TRACK (GẦN < 3 MÉT)
+        // ====================================================================
+        else if (targetState.distance < 3.0) {
             outputYawStep = errorYaw * 4.0 * dt; 
             outputPitchStep = errorPitch * 4.0 * dt;
-            
-            // Giới hạn tốc độ vẩy tâm để trông giống người thật
             let maxStep = 45.0 * dt; 
             outputYawStep = Math.max(-maxStep, Math.min(maxStep, outputYawStep));
             outputPitchStep = Math.max(-maxStep, Math.min(maxStep, outputPitchStep));
         } 
         // ====================================================================
-        // 3. TẦM XA: VÙNG CHẾT & PHANH TỪ TRƯỜNG (HYBRID PID)
+        // 4. TẦM XA: VÙNG CHẾT & PHANH TỪ TRƯỜNG (HYBRID PID)
         // ====================================================================
         else {
-            const microDeadzone = 0.35; 
+            // Mở rộng vùng chết từ 0.35 lên 0.8 khi đang sấy (isFiring) để tâm bám chắc hơn
+            const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
             
-            if (Math.abs(errorYaw) <= microDeadzone && Math.abs(errorPitch) <= microDeadzone) {
-                // SNAP & HOLD: Dính chặt vào sọ, xóa nội suy để chống rung
+            if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
+                // Đã vào vùng lõi sọ -> Khóa vĩnh viễn (Snap & Hold)
                 outputYawStep = errorYaw;
                 outputPitchStep = errorPitch;
                 camState.integralYaw = 0;
                 camState.integralPitch = 0;
-                isHoldingDeadzone = true; 
+                isAbsoluteLock = true; 
             } 
             else {
-                // Lực hút Từ Trường bạo lực (Đã được M4 dọn đường ma sát)
                 let Kp_yaw = 45.0; 
                 let Kp_pitch = 60.0; 
 
-                // Phanh hàm mũ (Exponential Damping)
                 let baseKd = 0.2;
                 let dynamicKd_yaw = baseKd + (8.0 / (Math.abs(errorYaw) + 0.5));
                 let dynamicKd_pitch = baseKd + (12.0 / (Math.abs(errorPitch) + 0.5));
@@ -439,7 +450,6 @@ class CameraManipulator {
                 outputYawStep = outputYaw * dt;
                 outputPitchStep = outputPitch * dt;
 
-                // Khóa Trần Trục Y (Chống bắn vọt qua đầu)
                 if (Math.abs(outputPitchStep) > Math.abs(errorPitch)) {
                     outputPitchStep = errorPitch; 
                     camState.integralPitch = 0;   
@@ -455,7 +465,7 @@ class CameraManipulator {
         camState.prevErrorPitch = errorPitch;
 
         // ====================================================================
-        // 4. KÍNH LỌC EMA & TRẢ QUYỀN CHO ENGINE
+        // 5. KÍNH LỌC EMA & ÉP GÓC TUYỆT ĐỐI
         // ====================================================================
         if (camState.emaYaw === undefined) camState.emaYaw = currentYaw;
         if (camState.emaPitch === undefined) camState.emaPitch = currentPitch;
@@ -463,8 +473,10 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        let alpha = 0.85; 
-        if (isHoldingDeadzone) alpha = 1.0; // Dính chặt 100% không lọc
+        // Nếu đang Bóp cò (isFiring) HOẶC đã lọt vào lõi sọ (isAbsoluteLock)
+        // -> Tắt toàn bộ độ trễ làm mượt, ép alpha = 1.0 (Phản hồi 0ms).
+        // Chỉ dùng bộ làm mượt (0.85) khi đang bật Scope tìm địch (Chưa bóp cò).
+        let alpha = (isFiring || isAbsoluteLock) ? 1.0 : 0.85; 
 
         camState.emaYaw = this.normalizeAngle((rawNewYaw * alpha) + (camState.emaYaw * (1.0 - alpha)));
         camState.emaPitch = this.normalizeAngle((rawNewPitch * alpha) + (camState.emaPitch * (1.0 - alpha)));
@@ -475,7 +487,6 @@ class CameraManipulator {
         if (payload.camera_state) {
             payload.camera_state.yaw = payload.aim_yaw;
             payload.camera_state.pitch = payload.aim_pitch;
-            // Xóa target_xyz để Engine tự do hiển thị mượt mà trên màn hình người chơi
             delete payload.camera_state.target_x;
             delete payload.camera_state.target_y;
             delete payload.camera_state.target_z;
