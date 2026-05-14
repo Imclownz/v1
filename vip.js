@@ -124,10 +124,9 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - V4.0 SINGULARITY)
-// Tích hợp: Trojan Horse Hitbox Spoofing (Lừa Aim-Assist gốc),
-// Ping Mitigation (Nén 25% Ping), Absolute Hitscan Time (T = 0.2s + Ping),
-// và Velocity Smoother (Cấp nguồn Feedforward cho M7).
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - V5.0 NATIVE AIM-LOCK)
+// Tích hợp: Anatomy Spoofing (Đánh tráo giải phẫu học), Limb Nullification,
+// Global Magnetism Overdrive (Khuếch đại Aim-Assist), và Absolute Hitscan.
 // ============================================================================
 class TargetKinematics {
     
@@ -145,12 +144,15 @@ class TargetKinematics {
             _global.__OmniState.self.anchorPos = { ...payload.pos };
         }
 
-        // Vô hiệu hóa lực hút Aim-Assist tản mạn của hệ thống chung
-        // Để nhường toàn bộ quyền lực cho "Ngực Giả" mà chúng ta sắp tạo ra.
+        // ====================================================================
+        // [GIAO THỨC MỚI]: KHUẾCH ĐẠI TỪ TÍNH TỔNG (MAGNETISM OVERDRIVE)
+        // Kích hoạt tối đa hệ thống Aim-Assist gốc của Game Engine
+        // ====================================================================
         if (payload.aim_assist !== undefined) {
-            payload.aim_assist.friction = 0.0;
-            payload.aim_assist.adhesion = 0.0;
-            payload.aim_assist.snap_weight = -9999.0;
+            payload.aim_assist.enabled = true;
+            payload.aim_assist.friction = 1.0;      // Ma sát tối đa để tâm không trượt ra ngoài
+            payload.aim_assist.adhesion = 1.0;      // Độ bám dính tuyệt đối
+            if (payload.aim_assist.snap_weight !== undefined) payload.aim_assist.snap_weight = 9999.0;
         }
 
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
@@ -164,33 +166,39 @@ class TargetKinematics {
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
         // ====================================================================
-        // 2. SMART THREAT MATRIX & TROJAN HORSE (KẾ HOẠCH NGỰA GỖ)
+        // 2. SMART THREAT MATRIX & ANATOMY SPOOFING (PHẪU THUẬT ĐÁNH TRÁO)
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
             
-            // [GIAO THỨC NGỰA GỖ THÀNH TROY]: Can thiệp giải phẫu học
             if (enemy.hitboxes) {
-                // Đánh tráo tọa độ: Cưỡng chế Tọa độ Ngực phải trùng khớp tuyệt đối với Lõi Sọ
-                if (enemy.hitboxes.head && enemy.hitboxes.chest) {
-                    enemy.hitboxes.chest.pos = { 
-                        x: enemy.hitboxes.head.pos.x, 
-                        y: enemy.hitboxes.head.pos.y, // Trùng hoàn toàn cao độ với Head
-                        z: enemy.hitboxes.head.pos.z 
-                    };
-                    
-                    // Lừa Game Engine: "Đây là ngực, hãy dùng lực hút cực đại giật tâm vào đây!"
-                    if (enemy.hitboxes.chest.snap_weight !== undefined) enemy.hitboxes.chest.snap_weight = 9999.0;
-                    if (enemy.hitboxes.chest.friction !== undefined) enemy.hitboxes.chest.friction = 1.0;
+                let headPos = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.pos;
+
+                // BƯỚC A: TẠO NGỰC GIẢ TẠI ĐỈNH ĐẦU
+                // Cưỡng chế Tọa độ Ngực và Xương sống phải trùng khớp tuyệt đối với Lõi Sọ
+                const magnetParts = ['chest', 'spine']; 
+                for (let m = 0; m < magnetParts.length; m++) {
+                    let part = magnetParts[m];
+                    if (enemy.hitboxes[part]) {
+                        enemy.hitboxes[part].pos = { x: headPos.x, y: headPos.y, z: headPos.z };
+                        
+                        // Bơm từ tính cực đại vào các bộ phận này để Engine kéo tâm tới
+                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = 9999.0;
+                        if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 1.0;
+                        if (enemy.hitboxes[part].priority !== undefined) enemy.hitboxes[part].priority = "HIGHEST";
+                    }
                 }
 
-                // Cắt đứt lực từ tính của các bộ phận rác (Chân, tay, bụng) để tâm không bị nhiễu
-                const junkParts = ['pelvis', 'legs', 'arms', 'spine'];
-                for (let p = 0; p < junkParts.length; p++) {
-                    let part = junkParts[p];
+                // BƯỚC B: CÁCH LY VỆ TINH (LIMB NULLIFICATION)
+                // Triệt tiêu hoàn toàn từ tính của các bộ phận khác để Game không bị nhiễu.
+                // Lưu ý: Triệt tiêu cả từ tính của 'head' gốc để Aim-Assist dồn 100% lực vào 'chest' giả.
+                const nullParts = ['head', 'pelvis', 'legs', 'arms', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
+                for (let p = 0; p < nullParts.length; p++) {
+                    let part = nullParts[p];
                     if (enemy.hitboxes[part]) {
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
+                        if (enemy.hitboxes[part].priority !== undefined) enemy.hitboxes[part].priority = "IGNORE";
                     }
                 }
             }
@@ -232,7 +240,7 @@ class TargetKinematics {
         }
 
         // ====================================================================
-        // 3. KINEMATIC ENGINE & ABSOLUTE HITSCAN MATH
+        // 3. KINEMATIC ENGINE & ABSOLUTE HITSCAN MATH (CHUYÊN DÙNG CHO M8)
         // ====================================================================
         if (bestTarget) {
             const targetState = _global.__OmniState.target;
@@ -242,11 +250,11 @@ class TargetKinematics {
             targetState.id = bestTarget.id;
             targetState.distance = bestTarget.distance;
             
-            // Lấy tâm Lõi Sọ làm chuẩn. Dù Aim-Assist kéo vào "Ngực", nó vẫn là tọa độ này.
+            // Lấy tâm Lõi Sọ làm chuẩn.
             let headCenter = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
             let targetAimPos = headCenter;
 
-            // EXPORT 1: Thực tại Đồ họa hiện tại (Giao cho M7 vẽ Camera)
+            // EXPORT 1: Thực tại Đồ họa (Tọa độ hiện tại)
             targetState.pos = { ...targetAimPos };
 
             if (!tracker[bestTarget.id]) {
@@ -269,24 +277,24 @@ class TargetKinematics {
                 
                 if (dt > 0.0 && dt < 0.2) { 
                     // --------------------------------------------------------
-                    // A. BỘ LỌC VẬN TỐC KÉP (CẤP NGUỒN CHO FEEDFORWARD)
+                    // TÍNH TOÁN VẬN TỐC & BỘ LỌC
                     // --------------------------------------------------------
                     let raw_vx = (targetAimPos.x - prevFrame.pos.x) / dt;
                     let raw_vy = (targetAimPos.y - prevFrame.pos.y) / dt;
                     let raw_vz = (targetAimPos.z - prevFrame.pos.z) / dt;
 
-                    let alphaV = 0.5; // Bộ lọc mượt 50%
+                    let alphaV = 0.5; 
                     let vx = (raw_vx * alphaV) + (trackData.velocity.x * (1.0 - alphaV));
                     let vy = (raw_vy * alphaV) + (trackData.velocity.y * (1.0 - alphaV));
                     let vz = (raw_vz * alphaV) + (trackData.velocity.z * (1.0 - alphaV));
                     
                     trackData.velocity = { x: vx, y: vy, z: vz };
-                    
-                    // EXPORT 2: Vận tốc trôi chảy (Dành cho M7 bơm vào Camera)
                     targetState.velocity = { x: vx, y: vy, z: vz };
 
                     // --------------------------------------------------------
-                    // B. GIA TỐC & NÉN PING BÙ TRỪ (PING MITIGATION)
+                    // TÍNH TOÁN GIA TỐC & ĐIỂM RƠI TƯƠNG LAI CHO M8
+                    // Dù Game tự kéo tâm, M8 vẫn cần điểm tương lai chuẩn xác
+                    // để bẻ tia đạn (Raycast) khớp 100% trong trường hợp Aim-Assist có độ trễ.
                     // --------------------------------------------------------
                     let ax = 0, ay = 0, az = 0;
                     if (trackData.lastVelocity) {
@@ -296,27 +304,17 @@ class TargetKinematics {
                     }
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
-                    // QUY LUẬT TỐI GIẢN: Nén Ping xuống còn 25% (0.25)
-                    // Máy chủ đã bị lừa là bắn trong quá khứ nhờ M8, nên Client chỉ cần
-                    // bù trừ một lượng nhỏ Ping để khớp với hoạt ảnh hiển thị.
                     const pingDelay = (_global.__OmniState.currentPing / 1000.0) * 0.25;
-                    
-                    // HẰNG SỐ VẬT LÝ TUYỆT ĐỐI: Đạn Hitscan (Vận tốc vô cực)
-                    // Điểm ngắm duy nhất là 0.2s delay hoạt ảnh + phần Ping đã nén.
                     let timeToTarget = 0.20 + pingDelay;
-                    
-                    // Khóa trần thời gian (Chống Overshoot cực đoan)
                     if (timeToTarget > 0.35) timeToTarget = 0.35; 
 
                     let accelMagXZ = Math.sqrt(ax*ax + az*az);
                     let strafeDampener = (accelMagXZ > 40.0) ? 0.2 : ((accelMagXZ > 15.0) ? 0.6 : 1.0);
 
-                    // Toán học Không gian Tương lai
                     let predX = targetAimPos.x + (vx * timeToTarget) + (0.5 * ax * timeToTarget * timeToTarget * strafeDampener);
                     let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
                     let predY = targetAimPos.y + (vy * timeToTarget);
 
-                    // Trọng lực (Chỉ tác động đến thân xác kẻ địch đang rơi/nhảy, không tác động đến đạn)
                     let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
                     if (isJumping) {
