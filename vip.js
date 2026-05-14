@@ -124,9 +124,9 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - FEEDFORWARD PREP)
-// Tích hợp: Velocity Smoother (Bộ lọc vận tốc mạng), Dual-Reality Output 
-// (Tách biệt Tọa độ Hiện tại cho M7 và Tọa độ Tương lai cho M8).
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - HITSCAN SINGULARITY)
+// Tích hợp: Trojan Horse Hitbox Spoofing (Lừa Aim-Assist gốc),
+// Absolute Hitscan Time (T = 0.2s + Ping), và Velocity Smoother.
 // ============================================================================
 class TargetKinematics {
     
@@ -143,13 +143,6 @@ class TargetKinematics {
             _global.__OmniState.self.anchorPos = { ...payload.pos };
         }
 
-        // Triệt tiêu ma sát Aim-Assist của Game Engine
-        if (payload.aim_assist !== undefined) {
-            payload.aim_assist.friction = 0.0;
-            payload.aim_assist.adhesion = 0.0;
-            payload.aim_assist.snap_weight = -9999.0;
-        }
-
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
 
         const selfState = _global.__OmniState.self;
@@ -161,17 +154,34 @@ class TargetKinematics {
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
         // ====================================================================
-        // 1. SMART THREAT MATRIX 3.0 (MA TRẬN MỤC TIÊU)
+        // 1. SMART THREAT MATRIX & TROJAN HORSE (KẾ HOẠCH NGỰA GỖ)
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
             
+            // [GIAO THỨC NGỰA GỖ THÀNH TROY]: Can thiệp trực tiếp vào Hitbox
             if (enemy.hitboxes) {
-                const bodyParts = ['head', 'chest', 'pelvis', 'legs', 'arms'];
-                for (let p = 0; p < bodyParts.length; p++) {
-                    if (enemy.hitboxes[bodyParts[p]]) {
-                        if (enemy.hitboxes[bodyParts[p]].friction !== undefined) enemy.hitboxes[bodyParts[p]].friction = 0.0;
-                        if (enemy.hitboxes[bodyParts[p]].snap_weight !== undefined) enemy.hitboxes[bodyParts[p]].snap_weight = -9999.0;
+                
+                // Đánh tráo tọa độ: Cưỡng chế Tọa độ Ngực phải trùng khớp với Tọa độ Sọ Não
+                if (enemy.hitboxes.head && enemy.hitboxes.chest) {
+                    enemy.hitboxes.chest.pos = { 
+                        x: enemy.hitboxes.head.pos.x, 
+                        y: enemy.hitboxes.head.pos.y, // Trùng hoàn toàn với Head
+                        z: enemy.hitboxes.head.pos.z 
+                    };
+                    
+                    // Lừa Game Engine: "Hãy dùng lực hút Aim-assist cực đại hút vào cái Ngực này đi!"
+                    if (enemy.hitboxes.chest.snap_weight !== undefined) enemy.hitboxes.chest.snap_weight = 9999.0;
+                    if (enemy.hitboxes.chest.friction !== undefined) enemy.hitboxes.chest.friction = 1.0;
+                }
+
+                // Vô hiệu hóa ma sát của các bộ phận rác (Chân, tay, bụng)
+                const junkParts = ['pelvis', 'legs', 'arms', 'spine'];
+                for (let p = 0; p < junkParts.length; p++) {
+                    let part = junkParts[p];
+                    if (enemy.hitboxes[part]) {
+                        if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
+                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
                     }
                 }
             }
@@ -213,7 +223,7 @@ class TargetKinematics {
         }
 
         // ====================================================================
-        // 2. KINEMATIC ENGINE & VELOCITY EXPORT (CHUẨN BỊ CHO FEEDFORWARD)
+        // 2. KINEMATIC ENGINE & ABSOLUTE HITSCAN MATH
         // ====================================================================
         if (bestTarget) {
             const targetState = _global.__OmniState.target;
@@ -223,12 +233,12 @@ class TargetKinematics {
             targetState.id = bestTarget.id;
             targetState.distance = bestTarget.distance;
             
-            // Theo dõi Lõi Sọ thay vì rễ tọa độ thân
+            // Do chúng ta đã lừa Game Engine kéo tâm vào Ngực (nay đã biến thành Đầu),
+            // Tọa độ hiện tại (pos) được giao phó cho Head Hitbox một cách danh chính ngôn thuận.
             let headCenter = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
             let targetAimPos = headCenter;
-            if (bestTarget.distance <= 5.0 && bestTarget.hitboxes?.chest) targetAimPos = bestTarget.hitboxes.chest.pos; 
 
-            // EXPORT 1: Tọa độ Hiện Tại (Dùng cho M7 khóa trục Y và bám sát đồ họa)
+            // EXPORT 1: Thực tại Đồ họa (Để M7 vẽ Camera)
             targetState.pos = { ...targetAimPos };
 
             if (!tracker[bestTarget.id]) {
@@ -251,27 +261,24 @@ class TargetKinematics {
                 
                 if (dt > 0.0 && dt < 0.2) { 
                     // --------------------------------------------------------
-                    // A. TÍNH TOÁN & LỌC VẬN TỐC (VELOCITY SMOOTHING)
+                    // A. BỘ LỌC VẬN TỐC (CẤP NGUỒN CHO M7 FEEDFORWARD)
                     // --------------------------------------------------------
                     let raw_vx = (targetAimPos.x - prevFrame.pos.x) / dt;
                     let raw_vy = (targetAimPos.y - prevFrame.pos.y) / dt;
                     let raw_vz = (targetAimPos.z - prevFrame.pos.z) / dt;
 
-                    // Kính lọc EMA cho Vận Tốc (Alpha = 0.5)
-                    // Trộn 50% vận tốc mới và 50% quán tính cũ để tạo ra dòng chảy mượt mà.
-                    // Đảm bảo Camera của M7 khi Feedforward sẽ trôi êm như nước, không bị giật lag mạng.
-                    let alphaV = 0.5;
+                    let alphaV = 0.5; // Bộ lọc 50% trôi chảy
                     let vx = (raw_vx * alphaV) + (trackData.velocity.x * (1.0 - alphaV));
                     let vy = (raw_vy * alphaV) + (trackData.velocity.y * (1.0 - alphaV));
                     let vz = (raw_vz * alphaV) + (trackData.velocity.z * (1.0 - alphaV));
                     
                     trackData.velocity = { x: vx, y: vy, z: vz };
                     
-                    // EXPORT 2: Vận Tốc Siêu Mượt (Cấp nguồn trực tiếp cho Lõi Camera M7)
+                    // EXPORT 2: Vận tốc Siêu mượt cho Camera M7
                     targetState.velocity = { x: vx, y: vy, z: vz };
 
                     // --------------------------------------------------------
-                    // B. TÍNH TOÁN GIA TỐC & TIÊN ĐOÁN TƯƠNG LAI (CHO M8 BẮN)
+                    // B. TÍNH GIA TỐC & THỜI GIAN TUYỆT ĐỐI (ABSOLUTE HITSCAN)
                     // --------------------------------------------------------
                     let ax = 0, ay = 0, az = 0;
                     if (trackData.lastVelocity) {
@@ -282,24 +289,32 @@ class TargetKinematics {
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
                     const pingDelay = _global.__OmniState.currentPing / 1000.0;
-                    let bulletSpeed = _global.__OmniState.weaponProfile.Core === "SHOTGUN" ? 400.0 : 850.0;
-                    let timeToTarget = pingDelay + (bestTarget.distance / bulletSpeed);
+                    
+                    // [HẰNG SỐ VẬT LÝ MỚI]: Vận tốc đạn = 0 (Hitscan). 
+                    // Độ trễ Wind-up bóp cò = 0.2s (200ms).
+                    // Vậy điểm rơi tương lai duy nhất ta cần ngắm là: Vị trí của địch sau đúng 0.2s + Ping.
+                    // XÓA BỎ hoàn toàn biến số (Khoảng cách / Vận tốc đạn).
+                    let timeToTarget = 0.20 + pingDelay;
+                    
+                    // Giới hạn chống Overshoot khi ping nhảy vọt
                     if (timeToTarget > 0.35) timeToTarget = 0.35; 
 
                     let accelMagXZ = Math.sqrt(ax*ax + az*az);
                     let strafeDampener = (accelMagXZ > 40.0) ? 0.2 : ((accelMagXZ > 15.0) ? 0.6 : 1.0);
 
+                    // Tính điểm tương lai (Dành riêng cho M8 bẻ tia đạn)
                     let predX = targetAimPos.x + (vx * timeToTarget) + (0.5 * ax * timeToTarget * timeToTarget * strafeDampener);
                     let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
                     let predY = targetAimPos.y + (vy * timeToTarget);
 
+                    // Trọng lực chỉ áp dụng để dự đoán việc Rơi của "Cơ thể", không phải của "Viên đạn"
                     let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
                     if (isJumping) {
                         predY -= 0.5 * 9.81 * (timeToTarget * timeToTarget);
                     }
 
-                    // EXPORT 3: Tọa độ Tương lai (Đạn đạo của M8 sẽ hướng vào đây)
+                    // EXPORT 3: Thực tại Tương lai (Cho M8 bẻ Raycast)
                     targetState.predicted_pos = { x: predX, y: predY, z: predZ };
                     
                 } else {
@@ -510,8 +525,10 @@ class CameraManipulator {
 }
 
 // ============================================================================
-// MODULE 6.5: TRIGGER CHECK (BỘ LỌC ĐỒNG BỘ - BẢN VÁ DRAG-SHOT 200ms)
-// Tích hợp: 0.2s Delayed Execution, Force Snap Signal.
+// MODULE 6.5: TRIGGER CHECK (BỘ LỌC ĐỒNG BỘ - NATIVE SYNC ENGINE)
+// Tích hợp: Native 0.2s Wind-up Sync (Thả rông cò súng), Hitchance Evaluator 
+// (Chống lãng phí đạn), và Predictive Pre-Fire (Tự động cướp cò đón lõng).
+// XÓA BỎ: Artificial 200ms Delay (Giam lỏng cò súng).
 // ============================================================================
 class TriggerCheck {
     static evaluate(payload) {
@@ -519,57 +536,28 @@ class TriggerCheck {
         const weaponState = _global.__OmniState.weapon;
         const profile = _global.__OmniState.weaponProfile;
 
-        // Reset tín hiệu phát sóng
+        // 1. KHỞI TẠO CHU KỲ (Reset trạng thái của Tick trước)
         weaponState.triggerFired = false;
+        
+        // Xóa bỏ báo động vẩy tâm thủ công của bản cũ, 
+        // vì Native Aim-Assist của Game sẽ tự động kéo tâm vào "Ngực giả" của M4.
+        weaponState.forceAbsoluteSnap = false; 
+        weaponState.isPendingFire = false;
+        if (weaponState.aimSnapStartTime) weaponState.aimSnapStartTime = null;
+
+        // Bỏ qua nếu vũ khí không hỗ trợ (Lựu đạn/Cận chiến/Tay không)
         if (profile.Core === "IGNORE") return payload;
 
+        // Trạng thái gốc: Người chơi có đang CỐ TÌNH bấm nút bắn trên màn hình không?
         let isManualFiring = payload.is_firing || (payload.weapon && payload.weapon.is_firing);
 
         // ====================================================================
-        // GIAO THỨC DRAG-SHOT (VẨY TÂM CÓ ĐỘ TRỄ 200ms)
+        // 2. PERFECT SYNC INTERCEPTOR (Khóa Cò An Toàn)
         // ====================================================================
-        if (isManualFiring && targetState.id && targetState.predicted_pos) {
-            
-            // Nếu là frame đầu tiên chạm nút bắn, khởi động Đồng hồ đếm ngược
-            if (!weaponState.aimSnapStartTime) {
-                weaponState.aimSnapStartTime = Date.now();
-                weaponState.isPendingFire = true;
-            }
-
-            // Tính toán thời gian đã trôi qua kể từ lúc chạm nút bắn
-            const elapsed = Date.now() - weaponState.aimSnapStartTime;
-
-            // PHA 1: TRONG VÒNG 0.2 GIÂY ĐẦU TIÊN (200ms)
-            if (elapsed < 200) {
-                // 1. Tịch thu lệnh khai hỏa (Cấm nổ súng)
-                payload.is_firing = false;
-                if (payload.weapon) payload.weapon.is_firing = false;
-                weaponState.isFiring = false;
-                
-                // 2. Phát lệnh báo động đỏ cho Module 7: "VẨY TÂM NGAY LẬP TỨC!"
-                weaponState.forceAbsoluteSnap = true; 
-                
-                return payload; // Trả gói tin đi, súng không nổ nhưng màn hình đang lia
-            } 
-            // PHA 2: SAU 0.2 GIÂY
-            else {
-                // Nhả cò súng, tắt lệnh báo động đỏ
-                weaponState.forceAbsoluteSnap = false; 
-                weaponState.isPendingFire = false;
-                
-                // Tiếp tục xử lý Hitchance và Pre-fire bên dưới
-            }
-        } else {
-            // Nếu nhả nút bắn hoặc mất mục tiêu -> Reset toàn bộ hệ thống đếm giờ
-            weaponState.aimSnapStartTime = null;
-            weaponState.isPendingFire = false;
-            weaponState.forceAbsoluteSnap = false;
-        }
-
-        // ====================================================================
-        // KIỂM TRA HITCHANCE & THỰC THI (Bảo lưu code cũ của bạn)
-        // ====================================================================
+        // Nếu M4 chưa tìm thấy cái bóng nào hợp lệ, hoặc địch đã hoàn toàn out-range.
         if (!targetState.id || !targetState.predicted_pos) {
+            
+            // ĐÁNH CHẶN GÓI TIN: Tước quyền nổ súng để không phí đạn vào không khí.
             if (isManualFiring) {
                 payload.is_firing = false;
                 if (payload.weapon) payload.weapon.is_firing = false;
@@ -578,27 +566,77 @@ class TriggerCheck {
             return payload;
         }
 
-        let hitchance = 100.0;
+        // Truy xuất dữ liệu động học từ M4
         const tracker = _global.__OmniState.tracker[targetState.id];
+        if (!tracker) return payload;
+
+        // ====================================================================
+        // 3. HITCHANCE & PENETRATION ENGINE (Toán Tử Xác Suất Đục Tường)
+        // ====================================================================
+        let hitchance = 100.0;
         
-        if (tracker && tracker.is_behind_cover && profile.Core !== "ONETAP") {
-            hitchance = 0.0; 
+        // Phân tích trạng thái vật cản của mục tiêu từ các cờ ẩn trong gói tin
+        let isTargetBehindCover = tracker.is_behind_cover || false; 
+
+        if (isTargetBehindCover) {
+            // Nếu địch nấp kín và bạn cầm súng sấy (AR/SMG) -> Tỷ lệ trúng = 0%
+            // Cấm xả đạn bừa bãi vào tường làm lộ vị trí.
+            if (profile.Core !== "AUTO") {
+                hitchance = 0.0; 
+            } 
+            // Nếu bạn cầm súng bắn tỉa xuyên tường (M82B/ONETAP) -> Giữ nguyên 100% để đục.
         }
 
+        // TƯỚC QUYỀN NỔ SÚNG NẾU TỶ LỆ TRÚNG BẰNG 0
         if (hitchance === 0.0) {
             payload.is_firing = false;
             if (payload.weapon) payload.weapon.is_firing = false;
             weaponState.isFiring = false;
-            return payload;
+            return payload; 
         }
 
-        if (isManualFiring) {
+        // ====================================================================
+        // 4. PREDICTIVE PRE-FIRE (Đón Lõng Tiên Đoán)
+        // ====================================================================
+        let shouldAutoFire = false;
+        
+        if (tracker.velocity) {
+            // Đo đạc tốc độ di chuyển ngang của kẻ địch
+            const speed = Math.sqrt(tracker.velocity.x**2 + tracker.velocity.z**2);
+            
+            // TRƯỜNG HỢP A: Kẻ địch đang lướt Tatsuya ra khỏi vật cản (Vận tốc > 4.0 m/s)
+            // Tự động cướp cò đón lõng ngay lập tức trước khi tay người kịp phản xạ!
+            if (speed > 4.0 && tracker.is_partially_hidden) {
+                shouldAutoFire = true;
+            }
+            
+            // TRƯỜNG HỢP B: Kẻ địch đang đứng im loot đồ hoặc ngắm bắn lén (Vận tốc < 1.0 m/s)
+            // Và không có vật cản cứng. Bạn cầm súng Sniper. Tử hình lập tức!
+            if (profile.Core === "ONETAP" && speed < 1.0 && !isTargetBehindCover) {
+                shouldAutoFire = true;
+            }
+        }
+
+        // ====================================================================
+        // 5. THỰC THI ÁN TỬ (NATIVE EXECUTION COMMAND)
+        // ====================================================================
+        // Chốt hạ: Không giam cò nữa. Thả lệnh Khai hỏa đi ngay lập tức để 
+        // Engine C++ của Game bắt đầu đếm ngược 0.2s và kích hoạt lực hút Aim-Assist.
+        if (isManualFiring || shouldAutoFire) {
+            
+            // Tiêm cờ khai hỏa vào gói tin bay lên Server
             payload.is_firing = true;
             if (payload.weapon) {
                 payload.weapon.is_firing = true;
+                
+                // Loại bỏ delay tích tụ của súng (Ví dụ: Charge Buster, súng sạc năng lượng)
                 if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 9999.0;
             }
+            
+            // Phát sóng tín hiệu (Broadcast Signal) cho các Lõi bên dưới
             weaponState.isFiring = true;
+            
+            // Đánh thức M5: "Này Lõi Động Học, tôi bóp cò rồi, bật Fake Lag và Tàng Hình ngay!"
             weaponState.triggerFired = true; 
         }
 
