@@ -661,9 +661,9 @@ class TriggerCheck {
 }
 
 // ============================================================================
-// MODULE 5: SELF KINEMATICS (LÕI ĐỘNG HỌC BẢN THÂN - SINGULARITY MERGE)
-// Tích hợp: Chronos Anchor (Neo Thời Không T-1), CQC Origin Spoofing 
-// (Dịch chuyển nòng súng cận chiến), và Triệt tiêu Rubber-Banding.
+// MODULE 5: SELF KINEMATICS (LÕI ĐỘNG HỌC BẢN THÂN - V8.0 MICRO-BRAKING)
+// Tích hợp: 1-Tick Stance Spoofing (Phanh Lượng Tử), Chronos Anchor 
+// (Neo Thời Không T-1), và CQC Origin Spoofing (Dịch chuyển nòng súng).
 // ============================================================================
 class SelfKinematics {
     static processSelfState(payload) {
@@ -681,11 +681,11 @@ class SelfKinematics {
         // ====================================================================
         // TRẠNG THÁI NGHỈ: LIÊN TỤC CẬP NHẬT TỌA ĐỘ (CHỐNG GIẬT LAG)
         // ====================================================================
-        // KHÔNG BAO GIỜ can thiệp vào pos và velocity khi đang di chuyển bình thường.
-        // Điều này đảm bảo Server Reconciliation không giật lùi nhân vật của bạn.
+        // KHÔNG BAO GIỜ can thiệp vào pos khi đang di chuyển bình thường.
+        // Điều này đảm bảo Server Reconciliation không giật lùi nhân vật.
         if (payload.pos !== undefined) {
             state.history.unshift({ ...payload.pos });
-            if (state.history.length > 5) state.history.pop(); // Chỉ lưu 5 frames gần nhất
+            if (state.history.length > 5) state.history.pop(); 
         }
 
         if (!isFiring) {
@@ -701,8 +701,7 @@ class SelfKinematics {
         // ====================================================================
         
         // 1. CHRONOS ANCHOR (NEO THỜI KHÔNG T-1)
-        // Khi nổ súng, chúng ta không khóa 'pos' (Cơ thể) nữa để Server không báo lỗi.
-        // Chúng ta CHỈ khóa 'anchorPos' (Bệ phóng đạn) về tọa độ của mili-giây trước đó.
+        // Khóa 'anchorPos' (Bệ phóng đạn) về tọa độ tĩnh lặng của mili-giây trước đó.
         if (payload.anchorPos !== undefined && state.lastAnchor) {
             payload.anchorPos.x = state.lastAnchor.x;
             payload.anchorPos.y = state.lastAnchor.y;
@@ -711,34 +710,48 @@ class SelfKinematics {
 
         // 2. CQC ORIGIN SPOOFING (DỊCH CHUYỂN NÒNG SÚNG CẬN CHIẾN)
         if (payload.fire_origin !== undefined) {
-            // Nếu kẻ địch ở khoảng cách Cực Gần (< 3.0 mét) -> Góc quay lượng giác dễ bị văng.
             if (targetState.id && targetState.distance < 3.0 && targetState.predicted_pos) {
-                // Ma thuật V85: Dịch chuyển điểm sinh đạn vào thẳng Lõi Sọ kẻ thù!
-                // Viên đạn sẽ xuất hiện TỪ BÊN TRONG đầu địch, sát thương nổ ngay lập tức.
+                // Dịch chuyển điểm sinh đạn vào thẳng Lõi Sọ kẻ thù!
                 payload.fire_origin = {
                     x: targetState.predicted_pos.x,
                     y: targetState.predicted_pos.y,
-                    z: targetState.predicted_pos.z - 0.1 // Thụt vào 10cm so với tâm sọ
+                    z: targetState.predicted_pos.z - 0.1 
                 };
             } 
-            // Nếu ở khoảng cách xa -> Đạn sinh ra từ Anchor T-1 tĩnh lặng
             else if (state.lastAnchor) {
                 payload.fire_origin = {
                     x: state.lastAnchor.x,
-                    y: state.lastAnchor.y + 1.5, // Nâng lên ngang tầm mắt
+                    y: state.lastAnchor.y + 1.5, 
                     z: state.lastAnchor.z
                 };
             }
         }
 
         // 3. ANCHOR ROOTING (ĐÓNG BĂNG RỄ SINH HỌC)
-        // Xóa sạch nhịp thở và độ rung lắc cơ thể.
         if (payload.body_sway !== undefined) payload.body_sway = 0.0;
         
-        // LƯU Ý QUAN TRỌNG: 
-        // Đã GỠ BỎ toàn bộ lệnh ép `payload.velocity = 0` và `payload.speed = 0`.
-        // Gói tin khai hỏa giờ đây vẫn chứa vận tốc thật của bạn. Server sẽ chấp nhận
-        // nó như một pha vừa chạy vừa bắn bình thường -> Tạm biệt lỗi Giật cao su (Rubber-banding)!
+        // ====================================================================
+        // 4. MICRO-BRAKING (PHANH LƯỢNG TỬ 1-TICK) - [BẢN VÁ TỐI THƯỢNG]
+        // ====================================================================
+        // Thay vì đóng băng vận tốc liên tục gây lỗi giật lùi, chúng ta CHỈ tước đoạt 
+        // vận tốc ở ĐÚNG KHUNG HÌNH DUY NHẤT mà viên đạn đầu tiên thoát nòng (triggerFired = true).
+        // Máy chủ sẽ ghi nhận pha nổ súng này diễn ra trong trạng thái "Đứng im tuyệt đối".
+        if (weaponState.triggerFired) {
+            // Xóa sổ gia tốc và vận tốc di chuyển
+            if (payload.velocity !== undefined) {
+                payload.velocity = { x: 0.0, y: 0.0, z: 0.0 };
+            }
+            if (payload.acceleration !== undefined) {
+                payload.acceleration = { x: 0.0, y: 0.0, z: 0.0 };
+            }
+            
+            // Giả mạo trạng thái tĩnh lặng
+            if (payload.speed !== undefined) payload.speed = 0.0;
+            if (payload.is_moving !== undefined) payload.is_moving = false;
+        }
+        // Ở các khung hình tiếp theo (khi đè nút sấy đạn), triggerFired sẽ = false.
+        // Game Engine sẽ tự động bỏ qua khối lệnh trên, trả lại vận tốc thật cho gói tin.
+        // Nhân vật của bạn tiếp tục lướt đi trên màn hình mà không hề bị khựng lại!
 
         return payload;
     }
@@ -999,10 +1012,9 @@ class OneTapCore {
 }
 
 // ============================================================================
-// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V7.0 SLUG-SHOT)
-// Tích hợp: Tụ đạn Shotgun (Absolute Slug-Shot), Phân tách Đạn đạo (Silent 
-// Ray-Vectoring), Smart Anti-Overlap, và Ghost Penetration. 
-// ĐÃ XÓA BỎ THAO TÚNG THỜI GIAN (ZERO-PING ARCHITECTURE).
+// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V8.0 BALLISTIC DECOUPLING)
+// Tích hợp: Triệt tiêu Quán tính đạn (Inertia Nullification), Tụ đạn Shotgun 
+// (Slug-Shot), Phân tách Đạn đạo (Silent Raycast), và Smart Anti-Overlap.
 // ============================================================================
 class MagicBulletCore {
     static execute(payload) {
@@ -1033,8 +1045,7 @@ class MagicBulletCore {
         // 2. SMART ANTI-OVERLAP (THANH TRỪNG CHỌN LỌC)
         // ====================================================================
         // CHỈ thu nhỏ Hitbox của những kẻ địch KHÔNG PHẢI là mục tiêu hiện tại.
-        // Điều này đảm bảo tia đạn đi xuyên qua đám đông, nhưng vẫn giữ nguyên 
-        // Khung xương của mục tiêu chính để Aim-Assist gốc (M7) tiếp tục kéo tâm.
+        // Giữ nguyên Khung xương mục tiêu chính để Aim-Assist gốc kéo tâm mượt mà.
         if (payload.players && Array.isArray(payload.players)) {
             for (let i = 0; i < payload.players.length; i++) {
                 let enemy = payload.players[i];
@@ -1065,21 +1076,31 @@ class MagicBulletCore {
         }
 
         // ====================================================================
-        // 4. ABSOLUTE SLUG-SHOT & SILENT RAY-VECTORING (TỤ ĐẠN & BẺ CONG)
+        // 4. SLUG-SHOT & INERTIA NULLIFICATION (ĐÓNG BĂNG QUÁN TÍNH ĐẠN)
         // ====================================================================
         if (perfectDir && payload.bullet_events && Array.isArray(payload.bullet_events)) {
             for (let i = 0; i < payload.bullet_events.length; i++) {
                 let bullet = payload.bullet_events[i];
                 
-                // [GIẢI PHÁP SHOTGUN]: Tụ toàn bộ 8 mảnh đạn văng tứ tung thành 1 khối đặc
+                // [TỤ ĐẠN SHOTGUN & BẺ CONG VECTOR]
                 bullet.ray_dir = { ...perfectDir };
                 bullet.target_id = targetState.id;
                 
-                // Triệt tiêu góc lệch ngẫu nhiên của Game Engine đối với từng mảnh đạn
+                // Triệt tiêu góc lệch ngẫu nhiên của vũ khí
                 if (bullet.spread_angle !== undefined) bullet.spread_angle = 0.0;
                 if (bullet.deviation !== undefined) bullet.deviation = 0.0;
+
+                // [BẢN VÁ MỚI]: ĐÓNG BĂNG QUÁN TÍNH (BALLISTIC DECOUPLING)
+                // Cắt đứt mọi liên kết động lượng giữa viên đạn, Camera và chuyển động cơ thể.
+                // Xóa bỏ vận tốc góc sinh ra từ cú vẩy Snapaim cực gắt của M7.
+                if (bullet.angular_velocity !== undefined) bullet.angular_velocity = 0.0;
+                // Xóa bỏ độ trôi và độ cong do gia tốc chạy/trượt của nhân vật tạo ra.
+                if (bullet.momentum_offset !== undefined) bullet.momentum_offset = 0.0;
+                if (bullet.drift !== undefined) bullet.drift = 0.0;
+                if (bullet.trajectory_curve !== undefined) bullet.trajectory_curve = 0.0;
+                if (bullet.velocity_inheritance !== undefined) bullet.velocity_inheritance = 0.0;
                 
-                // Tiêm đặc quyền xuyên vật cản để tia đạn tàng hình bay xuyên qua cover
+                // Tiêm đặc quyền xuyên vật cản tàng hình
                 if (bullet.collision_obstacle !== undefined) bullet.collision_obstacle = false;
                 if (bullet.is_penetrating !== undefined) bullet.is_penetrating = true;
             }
@@ -1098,7 +1119,6 @@ class MagicBulletCore {
             report.is_headshot = true;
             
             // Ép Tọa độ va chạm vật lý (hit_pos) trùng khít với 0.1s Tương lai của M4.
-            // Nhờ đó, 8 mảnh đạn của Shotgun sẽ nổ ĐỒNG THỜI tại đúng 1 pixel trên sọ địch.
             report.hit_pos = { ...targetState.predicted_pos };
             if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
 
@@ -1108,9 +1128,7 @@ class MagicBulletCore {
             if (report.ignore_armor !== undefined) report.ignore_armor = true; 
             if (report.penetration_ratio !== undefined) report.penetration_ratio = 1.0; 
 
-            // [ZERO-PING ARCHITECTURE]: Bỏ trống client_timestamp. 
-            // Tuyệt đối không can thiệp vào thời gian để bảo vệ tài khoản khỏi thuật toán 
-            // Time Manipulation của máy chủ.
+            // [ZERO-PING ARCHITECTURE]: Không can thiệp Timestamp để bảo vệ tài khoản
         }
 
         return payload;
