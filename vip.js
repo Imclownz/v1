@@ -9,22 +9,19 @@
 const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
 
 // ============================================================================
-// 0. GLOBAL STATE (BỘ NHỚ DÙNG CHUNG ĐỒNG BỘ TỔNG V2.3)
+// 0. GLOBAL STATE (BỘ NHỚ DÙNG CHUNG ĐỒNG BỘ TỔNG V2.3 - ZERO PING)
 // ============================================================================
 if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
     _global.__OmniState = {
         version: "MATRIX_V2.3",
-        currentPing: 50.0,
+        // Đã xóa bỏ currentPing
         weaponProfile: { Core: "IGNORE", RequireZeroVelocity: false },
         
         target: { id: null, pos: null, predicted_pos: null, distance: 9999.0 },
         self: { pos: {x:0, y:0, z:0}, anchorPos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0}, isPerfectlyStill: false, anchoredFireOrigin: null },
         
-        // Bổ sung triggerFired để giao tiếp giữa M6_TriggerCheck và M5
         weapon: { isFiring: false, id: "", category: "", triggerFired: false }, 
-        
         tracker: {}, 
-        
         camera: {
             lastTime: Date.now(),
             integralYaw: 0.0,
@@ -124,9 +121,10 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - V5.0 ABSOLUTE SAFE)
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - ZERO PING EDITION)
 // Tích hợp: Magnetic Inversion (Đảo ngược từ tính, giữ nguyên Khung xương),
 // Zero-Ping Hitscan (T = 0.1s Wind-up), và Bộ lọc Feedforward EMA.
+// ĐÃ XÓA BỎ HOÀN TOÀN TÍNH TOÁN BÙ TRỪ PING.
 // ============================================================================
 class TargetKinematics {
     
@@ -167,7 +165,6 @@ class TargetKinematics {
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
             
-            // Xóa bỏ hoàn toàn trò đánh tráo tọa độ cũ (Ngựa Gỗ).
             // Giữ nguyên tính toàn vẹn của Khung xương (Skeleton Integrity) để chống Ban.
             if (enemy.hitboxes) {
                 
@@ -184,8 +181,8 @@ class TargetKinematics {
                 for (let p = 0; p < junkParts.length; p++) {
                     let part = junkParts[p];
                     if (enemy.hitboxes[part]) {
-                        // Tước quyền hút tâm của Ngực. Khi mất từ tính, Aim-Assist 
-                        // gốc của game sẽ tự động trượt lên tìm bộ phận có từ tính cao nhất (Đầu).
+                        // Tước quyền hút tâm của Ngực và Tứ chi. 
+                        // Khi mất từ tính, Aim-Assist gốc sẽ trượt lên tìm Đầu.
                         if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         enemy.hitboxes[part].priority = "IGNORE";
@@ -285,7 +282,7 @@ class TargetKinematics {
                     targetState.velocity = { x: vx, y: vy, z: vz };
 
                     // --------------------------------------------------------
-                    // B. GIA TỐC & HẰNG SỐ ZERO-PING
+                    // B. GIA TỐC & HẰNG SỐ THỜI GIAN (ZERO-PING HITSCAN)
                     // --------------------------------------------------------
                     let ax = 0, ay = 0, az = 0;
                     if (trackData.lastVelocity) {
@@ -295,10 +292,9 @@ class TargetKinematics {
                     }
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
-                    // [QUY LUẬT ZERO-PING]: Đã có M8 lo lùi Timestamp bằng Ping, 
-                    // M4 tuyệt đối không được dùng Ping để bù trừ tọa độ nữa.
-                    // Thời gian đón lõng (Lead Time) duy nhất là ĐỘ TRỄ CƠ HỌC (Wind-up).
-                    // Chúng ta nén thời gian này xuống mức siêu vi: 0.1 giây (100ms).
+                    // [XÓA BỎ HOÀN TOÀN PING BÙ TRỪ]
+                    // Chỉ sử dụng đúng độ trễ hoạt ảnh khởi động của game (Wind-up).
+                    // Hằng số 0.1s (100ms) là mức Lead-time hoàn hảo để tâm súng bám sát đầu địch.
                     let timeToTarget = 0.10;
 
                     let accelMagXZ = Math.sqrt(ax*ax + az*az);
@@ -309,7 +305,7 @@ class TargetKinematics {
                     let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
                     let predY = targetAimPos.y + (vy * timeToTarget);
 
-                    // Trọng lực (Rơi)
+                    // Trọng lực (Chỉ áp dụng để đoán độ Rơi của kẻ địch nhảy)
                     let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
                     if (isJumping) {
@@ -985,24 +981,19 @@ class OneTapCore {
 }
 
 // ============================================================================
-// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V5.0 SILENT RAYCAST)
-// Tích hợp: Phân tách Đạn đạo (Silent Ray-Vectoring), Chronos Timestamp Sync,
-// Smart Anti-Overlap (Bảo toàn từ tính mục tiêu), và Ghost Penetration.
+// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - PURE SILENT RAYCAST)
+// Tích hợp: Phân tách Đạn đạo (Silent Ray-Vectoring), Smart Anti-Overlap, 
+// và Ghost Penetration. ĐÃ XÓA BỎ THAO TÚNG THỜI GIAN (TIMESTAMP SYNC).
 // ============================================================================
 class MagicBulletCore {
     static execute(payload) {
         const targetState = _global.__OmniState.target;
         const selfState = _global.__OmniState.self;
-        const ping = _global.__OmniState.currentPing || 50.0;
 
-        // Bỏ qua nếu M4 chưa cung cấp tọa độ tĩnh của điểm kỳ dị
+        // Bỏ qua nếu M4 chưa cung cấp tọa độ tĩnh
         if (!targetState || !targetState.id || !targetState.predicted_pos) return payload;
 
-        // ====================================================================
         // 1. NGHỊCH ĐẢO SINH TỬ (MISS-TO-HIT INVERSION)
-        // ====================================================================
-        // Bắt cóc gói tin báo trượt do lỗi Engine (Đạn kẹt vào tay/tường), 
-        // luyện hóa thành Gói tin Trúng đích.
         if (payload.miss_event || (payload.bullet_event && payload.bullet_event.is_hit === false)) {
             if (payload.miss_event) {
                 payload.hit_event = { ...payload.miss_event }; 
@@ -1015,12 +1006,7 @@ class MagicBulletCore {
             payload.hit_event.target_id = targetState.id;
         }
 
-        // ====================================================================
         // 2. SMART ANTI-OVERLAP (THANH TRỪNG CHỌN LỌC)
-        // ====================================================================
-        // [BẢN VÁ QUAN TRỌNG]: Khắc phục lỗi làm mù Aim-Assist.
-        // CHỈ thu nhỏ Hitbox của những kẻ địch KHÔNG PHẢI là mục tiêu hiện tại.
-        // Giữ nguyên Khung xương của mục tiêu chính để Aim-Assist gốc tiếp tục kéo tâm.
         if (payload.players && Array.isArray(payload.players)) {
             for (let i = 0; i < payload.players.length; i++) {
                 let enemy = payload.players[i];
@@ -1035,12 +1021,8 @@ class MagicBulletCore {
             }
         }
 
-        // ====================================================================
         // 3. SILENT RAY-VECTORING (PHÂN TÁCH ĐẠN ĐẠO)
-        // ====================================================================
         let perfectDir = null;
-        
-        // Lấy tọa độ gốc từ M5 CQC spoofing hoặc Anchor gốc tĩnh lặng
         let origin = payload.fire_origin || selfState.lastAnchor || selfState.anchorPos;
         
         if (origin) {
@@ -1054,50 +1036,30 @@ class MagicBulletCore {
         if (perfectDir && payload.bullet_events && Array.isArray(payload.bullet_events)) {
             for (let i = 0; i < payload.bullet_events.length; i++) {
                 let bullet = payload.bullet_events[i];
-                
-                // [ẢO ẢNH QUANG HỌC]: Màn hình hiển thị tâm ở Ngực/Cổ do Game Engine tự kéo.
-                // Nhưng ở tầng Network, tia đạn vật lý bị bẻ cong ngược lên trên cắm thẳng vào Sọ.
                 bullet.ray_dir = { ...perfectDir };
                 bullet.target_id = targetState.id;
-                
-                // Tiêm đặc quyền xuyên vật cản để tia đạn tàng hình này không bị kẹt 
-                // vào tay hoặc vai của kẻ địch khi đang bay chéo lên.
                 if (bullet.collision_obstacle !== undefined) bullet.collision_obstacle = false;
                 if (bullet.is_penetrating !== undefined) bullet.is_penetrating = true;
             }
         }
 
-        // ====================================================================
-        // 4. CHRONOS TIMESTAMP & DAMAGE FINALIZATION
-        // ====================================================================
+        // 4. DAMAGE FINALIZATION (CHỐT HẠ SÁT THƯƠNG THUẦN TÚY)
         if (payload.damage_report || payload.hit_event) {
             let report = payload.damage_report || payload.hit_event;
             
             report.target_id = targetState.id;
-            
-            // Chốt chặn Tối Hậu: Bất chấp đạn chạm vào đâu, đóng mộc Headshot
             report.hit_bone = 8; 
             report.is_headshot = true;
-            
-            // Khớp Tọa độ va chạm vật lý với chuẩn tọa độ Tương lai (0.1s) từ M4
             report.hit_pos = { ...targetState.predicted_pos };
+            
             if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
 
-            // Đục xuyên Giáp/Mũ & Xóa giảm sát thương tầm xa
             if (report.distance_penalty !== undefined) report.distance_penalty = 0.0;
             if (report.armor_penetration !== undefined) report.armor_penetration = 1.0;
             if (report.ignore_armor !== undefined) report.ignore_armor = true; 
             if (report.penetration_ratio !== undefined) report.penetration_ratio = 1.0; 
 
-            // [ĐỒNG BỘ THỰC TẠI MÁY CHỦ - TIMESTAMP SYNC]
-            // Ở M4 chúng ta đã nén Ping để điểm hiển thị không bị văng lố.
-            // Ở đây (M8), chúng ta BẮT BUỘC phải trừ Ping khỏi client_timestamp.
-            // Máy chủ sẽ đối chiếu Timestamp này và công nhận: "Pha Headshot này 
-            // được bắn trong quá khứ lúc kẻ địch còn ở tọa độ đó, do đường truyền lag".
-            // Xóa bỏ 100% tỷ lệ lỗi Ghost Hit (Xịt đam).
-            if (report.client_timestamp !== undefined) {
-                report.client_timestamp -= (ping * 0.45);
-            }
+            // ĐÃ XÓA: Lệnh trừ client_timestamp. Giữ nguyên thời gian gốc của thiết bị.
         }
 
         return payload;
@@ -1105,12 +1067,10 @@ class MagicBulletCore {
 }
 
 // ============================================================================
-// BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.6 - FINAL)
-// Bản vá: Trích xuất Ping động, Xóa Node an toàn (Chống Null Reference Crash)
+// BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.7 - ZERO PING EDITION)
 // ============================================================================
 class MatrixDispatcher {
     
-    // [BẢN VÁ 4]: LỌC DỮ LIỆU AN TOÀN (ANTI-CRASH SANITIZER)
     sanitizeTelemetry(obj) {
         if (!obj || typeof obj !== 'object') return obj;
 
@@ -1122,8 +1082,6 @@ class MatrixDispatcher {
             const lowerKey = key.toLowerCase();
 
             if (blacklistedKeywords.some(keyword => lowerKey.includes(keyword))) {
-                // Dùng lệnh 'delete' để cắt đứt hoàn toàn Node khỏi bộ nhớ,
-                // thay vì gán null gây lỗi Null Reference Exception cho C++ Engine.
                 delete obj[key]; 
                 continue;
             }
@@ -1138,45 +1096,25 @@ class MatrixDispatcher {
     processPayload(payload) {
         if (!payload) return payload;
 
-        // [BẢN VÁ 3]: CẬP NHẬT PING ĐỘNG (DYNAMIC LATENCY TRACKER)
-        // Lắng nghe và trích xuất độ trễ mạng thực tế để M4 tính toán điểm rơi chuẩn xác
-        if (payload.ping !== undefined) {
-            _global.__OmniState.currentPing = payload.ping;
-        } else if (payload.network && payload.network.latency !== undefined) {
-            _global.__OmniState.currentPing = payload.network.latency;
-        }
+        // ĐÃ XÓA: Bộ thu thập độ trễ mạng (Dynamic Latency Tracker)
 
-        // BƯỚC 0: Tẩy rửa gói tin (Anti-Report)
         payload = this.sanitizeTelemetry(payload);
-
-        // BƯỚC 1: Cập nhật Trạng thái vũ khí
         payload = WeaponClassifier.processWeaponState(payload);
 
         if (_global.__OmniState.weaponProfile && _global.__OmniState.weaponProfile.Core !== "IGNORE") {
-            
-            // BƯỚC 2: Mắt Thần (Cần Ping động để tính toán thời gian)
             payload = TargetKinematics.processTargetState(payload);
-
-            // BƯỚC 3: Điều hướng Camera (Kèm Aim-Step và Y-Axis Breakaway)
             payload = CameraManipulator.execute(payload);
-
-            // BƯỚC 4: Trigger Check (Bóp cò tự động nếu cần)
             payload = TriggerCheck.evaluate(payload);
-
-            // BƯỚC 5: Đóng băng bệ phóng (ABS)
             payload = SelfKinematics.processSelfState(payload);
 
-            // BƯỚC 6: Triệt tiêu Vật lý thô (Chỉ xóa Recoil/Spread, không tính toán Raycast nữa)
             const core = _global.__OmniState.weaponProfile.Core;
             if (core === "SHOTGUN") payload = ShotgunCore.execute(payload);
             else if (core === "AUTO") payload = AutoCore.execute(payload);
             else if (core === "ONETAP") payload = OneTapCore.execute(payload);
 
-            // BƯỚC 7: Ma thuật Không gian (Gánh toàn bộ việc bẻ tia đạn và Hitbox)
             payload = MagicBulletCore.execute(payload);
         }
 
-        // Định tuyến đệ quy
         const rootKeys = ['data', 'events', 'payload', 'messages', 'vessels'];
         for (let i = 0; i < rootKeys.length; i++) {
             const key = rootKeys[i];
