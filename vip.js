@@ -329,9 +329,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V5.0 ABSOLUTE SNAP)
-// Tích hợp: Triệt tiêu Ma sát thân dưới (Zero Adhesion), Lực đẩy Y-Axis 100%
-// (Dịch chuyển tức thời bỏ qua bụng/chân), và Vùng Chết Lượng Tử.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V6.0 SNAPAIM SINGULARITY)
+// Tích hợp: Trigger-Edge Teleport (Dịch chuyển 0ms), FOV Clamp (Chống Spinbot),
+// Triệt tiêu Ma sát thân dưới (Zero Adhesion), và Vùng Chết Lượng Tử.
 // ============================================================================
 class CameraManipulator {
     
@@ -347,9 +347,8 @@ class CameraManipulator {
         const camState = _global.__OmniState.camera;
         const weaponState = _global.__OmniState.weapon;
 
-        // [GIẢI PHÁP 1]: TRIỆT TIÊU MA SÁT "ĐẦM LẦY" TẠI CAMERA
-        // Bất chấp M4 đã làm gì, ta cưỡng chế xóa bỏ Ma sát rê tâm (Adhesion) tại đây.
-        // Đảm bảo khi tâm đi ngang qua bụng/chân sẽ không bị Game Engine làm chậm lại.
+        // [ZERO FRICTION]: Triệt tiêu Ma sát "đầm lầy" tại Camera
+        // Tránh bị Game Engine làm chậm khi tâm lướt qua chân/bụng
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.adhesion = 0.0;
             payload.aim_assist.friction = 0.0;
@@ -364,6 +363,8 @@ class CameraManipulator {
         const isFiring = weaponState.isFiring || weaponState.triggerFired || payload.is_firing;
         const isScoping = payload.is_scoping || (payload.weapon && payload.weapon.is_scoping);
         
+        // [TRIGGER-EDGE DETECTION]: Nhận diện CHÍNH XÁC khung hình đầu tiên bóp cò
+        const justStartedFiring = isFiring && !camState.wasFiring;
         camState.wasFiring = isFiring;
 
         if (!isFiring && !isScoping) {
@@ -372,12 +373,11 @@ class CameraManipulator {
             return payload;
         }
 
-        // Lấy tọa độ Neo tĩnh lặng từ M5
         const origin = selfState.lastAnchor ? 
             { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
             { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
             
-        // Hướng thẳng vào Thực Tại Đồ Họa do M4 cấp
+        // Hướng thẳng vào Thực Tại Đồ Họa do M4 cấp (Lõi Sọ)
         const dest = targetState.pos; 
 
         const dx = dest.x - origin.x;
@@ -432,46 +432,53 @@ class CameraManipulator {
         }
 
         // ====================================================================
-        // 2. GIAO THỨC ĐIỀU HƯỚNG BỨT PHÁ (ABSOLUTE SNAP -> HOLD)
+        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA (SNAPAIM -> HOLD -> PID)
         // ====================================================================
         
         const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
+        const FOV_CLAMP = 45.0; // Giới hạn vẩy tâm: Chỉ Snapaim nếu địch nằm trong góc 45 độ trước mặt
 
         // PHA 1: VÙNG CHẾT LƯỢNG TỬ (TÂM ĐÃ Ở TRONG SỌ)
         if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
-            // TẮT TOÀN BỘ ĐỘNG CƠ KÉO. Trượt theo vận tốc ngang của địch.
+            // Động cơ nghỉ ngơi. Trượt êm ái theo vận tốc ngang của địch.
             outputYawStep = feedforwardYawStep + errorYaw; 
             outputPitchStep = feedforwardPitchStep + errorPitch;
             
             camState.integralYaw = 0;
             camState.integralPitch = 0;
-            
-            disableYawEMA = true;
-            disablePitchEMA = true;
+            disableYawEMA = true; disablePitchEMA = true;
         } 
-        // PHA 2: ABSOLUTE SNAP ENGINE (ĐỘNG CƠ BỨT PHÁ 100% THẮNG LỰC HÚT THÂN DƯỚI)
+        // PHA 2: SNAPAIM SINGULARITY (DỊCH CHUYỂN 0ms)
+        else if (justStartedFiring && Math.abs(errorYaw) <= FOV_CLAMP) {
+            // Chỉ kích hoạt ở ĐÚNG 1 KHUNG HÌNH (Tick) ĐẦU TIÊN KHI CHẠM NÚT BẮN.
+            // Nuốt chửng 100% khoảng cách cả trục X và trục Y ngay lập tức.
+            // Đưa tâm súng từ bất kỳ vị trí nào (trong góc 45 độ) đập thẳng vào Sọ.
+            outputYawStep = errorYaw;
+            outputPitchStep = errorPitch;
+            
+            camState.integralYaw = 0;
+            camState.integralPitch = 0;
+            disableYawEMA = true; disablePitchEMA = true;
+        }
+        // PHA 3: ĐỘNG CƠ BỨT PHÁ (XẢ ĐẠN LIÊN TỤC NHƯNG LỠ BỊ LỆCH TÂM)
         else if (isFiring) {
-            // [GIẢI PHÁP 2]: LỰC ĐẨY TUYỆT ĐỐI 100%
-            // Dù tâm súng của bạn đang kẹt ở gót chân hay háng kẻ địch, Trục Y sẽ 
-            // KHÔNG dùng 85% nữa. Nó dịch chuyển tức thời toàn bộ quãng đường (errorPitch).
-            // Tâm súng biến mất ở chân và xuất hiện ngay giữa trán địch trong 1 tick.
+            // Y-Axis: Lực đẩy Tuyệt đối 100% (Thắng mọi lực hút vào chân/háng)
             outputPitchStep = errorPitch; 
 
-            // Trục X (Lia ngang): Bơm cực đại PID + Quán tính địch
-            let Kp_yaw = 60.0; // Đẩy lên 60.0 để vẩy ngang gắt hơn
+            // X-Axis: PID siêu tốc. Tránh việc dịch chuyển 0ms liên tục gây rung giật màn hình
+            let Kp_yaw = 60.0; 
             let pidYaw = errorYaw * Kp_yaw;
             outputYawStep = (pidYaw * dt) + feedforwardYawStep;
 
-            disableYawEMA = true;
-            disablePitchEMA = true;
+            disableYawEMA = true; disablePitchEMA = true;
 
-            // Phanh động năng (Ngăn chặn văng quá Lõi Sọ)
+            // Phanh động năng trục X
             if (Math.abs(outputYawStep) > Math.abs(errorYaw) && (errorYaw * outputYawStep > 0)) {
                 outputYawStep = errorYaw;
                 camState.integralYaw = 0;
             }
         } 
-        // PHA 3: SMOOTH TRACKING (KHI CHỈ BẬT SCOPE, CHƯA BÓP CÒ)
+        // PHA 4: RÀ TÂM MƯỢT MÀ (CHƯA BÓP CÒ)
         else {
             let Kp_yaw = 25.0; 
             let Kp_pitch = 25.0;
@@ -505,7 +512,7 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        // Tắt bộ lọc (alpha = 1.0) khi bóp cò để thực hiện cú "Teleport" mượt mà không bóng mờ
+        // Tắt bộ lọc (alpha = 1.0) khi bóp cò để Snapaim 0ms không để lại bóng mờ (Ghosting)
         let alphaYaw = disableYawEMA ? 1.0 : 0.85;
         let alphaPitch = disablePitchEMA ? 1.0 : 0.85;
 
