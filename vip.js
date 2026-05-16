@@ -316,9 +316,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V8.0 ANTI-GRAVITY)
-// Tích hợp: Anti-Gravity Protocol (Chống chìm tâm không chiến x2.0), 
-// Multi-Frame Overdrive (80ms), Y-Axis Unchained, và Zero Friction.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V7.0 OVERDRIVE SNAPAIM)
+// Tích hợp: Multi-Frame Overdrive (Bứt phá đa khung hình 80ms), Y-Axis Unchained 
+// (Tháo xích trục dọc), Triệt tiêu Ma sát đầm lầy, và Vùng Chết Lượng Tử.
 // ============================================================================
 class CameraManipulator {
     
@@ -335,6 +335,7 @@ class CameraManipulator {
         const weaponState = _global.__OmniState.weapon;
 
         // [ZERO FRICTION]: Triệt tiêu Ma sát "đầm lầy" tại Camera
+        // Tránh bị Game Engine làm chậm khi tâm lướt qua chân/bụng
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.adhesion = 0.0;
             payload.aim_assist.friction = 0.0;
@@ -353,9 +354,10 @@ class CameraManipulator {
         // [MULTI-FRAME TRACKER]: Nhận diện và theo dõi Cửa sổ Thời gian bứt phá
         const justStartedFiring = isFiring && !camState.wasFiring;
         if (justStartedFiring) {
-            camState.fireStartTime = currentTime; 
+            camState.fireStartTime = currentTime; // Ghi nhận khoảnh khắc chạm cò
         }
         
+        // Tính toán thời gian đã xả đạn (mili-giây)
         const fireElapsed = isFiring ? (currentTime - (camState.fireStartTime || currentTime)) : 0;
         camState.wasFiring = isFiring;
 
@@ -396,11 +398,10 @@ class CameraManipulator {
         let disablePitchEMA = false;
 
         // ====================================================================
-        // 1. CHUYỂN ĐỔI VẬN TỐC & NHẬN DIỆN KHÔNG CHIẾN (ANTI-GRAVITY)
+        // 1. CHUYỂN ĐỔI VẬN TỐC THÀNH VẬN TỐC GÓC (FEEDFORWARD MATH)
         // ====================================================================
         let feedforwardYawStep = 0;
         let feedforwardPitchStep = 0;
-        let isEnemyAirborne = false; 
 
         if (targetState.velocity) {
             let futureX = dest.x + (targetState.velocity.x * 0.001);
@@ -420,26 +421,18 @@ class CameraManipulator {
 
             feedforwardYawStep = angularVelYaw * dt;
             feedforwardPitchStep = angularVelPitch * dt;
-
-            // [ANTI-GRAVITY PROTOCOL - BƯỚC 1]: Kiểm tra gia tốc trục dọc (Y)
-            // Nếu > 1.2 m/s nghĩa là kẻ địch đã rời mặt đất (Nhảy lên hoặc rơi xuống)
-            if (Math.abs(targetState.velocity.y) > 1.2) {
-                isEnemyAirborne = true;
-                // [ANTI-GRAVITY PROTOCOL - BƯỚC 2]: Khuếch đại đón lõng x2.0
-                // Bơm gấp đôi lực dự đoán dọc để Camera luôn hất đón đầu lên trên Lõi Sọ
-                feedforwardPitchStep *= 1.25; 
-            }
         }
 
         // ====================================================================
-        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA 
+        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA (OVERDRIVE SNAPAIM)
         // ====================================================================
         
         const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
-        const FOV_CLAMP = 45.0; 
+        const FOV_CLAMP = 45.0; // Giới hạn vẩy tâm ngang chống Spin-bot
 
         // PHA 1: VÙNG CHẾT LƯỢNG TỬ (TÂM ĐÃ Ở TRONG SỌ)
         if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
+            // Tắt kéo PID. Trượt mượt mà theo vận tốc địch.
             outputYawStep = feedforwardYawStep + errorYaw; 
             outputPitchStep = feedforwardPitchStep + errorPitch;
             
@@ -449,31 +442,30 @@ class CameraManipulator {
         } 
         // PHA 2: OVERDRIVE SNAPAIM (ĐỘNG CƠ BỨT PHÁ ĐA KHUNG HÌNH - 80ms)
         else if (isFiring && fireElapsed <= 80 && Math.abs(errorYaw) <= FOV_CLAMP) {
+            // [Y-AXIS UNCHAINED]: Chỉ cần địch trong tầm mắt ngang (Yaw <= 45 độ),
+            // dẫu bạn có đang nhìn xuống gót chân, trục dọc (Pitch) vẫn cho phép dịch chuyển 100%.
+            // [SUSTAINED TELEPORT]: Duy trì lực hút lượng tử này liên tục trong 80ms đầu tiên
+            // để nghiền nát sự giằng co (Frame-fight) của Engine game. Tâm súng không thể rớt!
             outputYawStep = errorYaw;
-            
-            // [ANTI-GRAVITY PROTOCOL - BƯỚC 3]: Tiêm lực đón đầu x2 vào cú Teleport
-            // Nếu địch đang nhảy, thay vì chỉ Teleport đến đầu hiện tại (errorPitch), 
-            // hệ thống sẽ Teleport vượt lên trên (cộng thêm feedforward) để đón đầu.
-            outputPitchStep = errorPitch + (isEnemyAirborne ? feedforwardPitchStep : 0);
+            outputPitchStep = errorPitch;
             
             camState.integralYaw = 0;
             camState.integralPitch = 0;
             disableYawEMA = true; disablePitchEMA = true;
         }
-        // PHA 3: ĐỘNG CƠ BỨT PHÁ DÀI HẠN & THÁO XÍCH KHÔNG CHIẾN
+        // PHA 3: ĐỘNG CƠ BỨT PHÁ DÀI HẠN (SẤY > 80ms HOẶC ĐỊCH LỆCH FOV)
         else if (isFiring) {
-            // Y-Axis: Giữ lực đẩy tuyệt đối 100%. Nếu địch nhảy, bơm luôn lực đón đầu x2.
-            // Bất chấp đã qua 80ms, Game Engine không bao giờ lôi được tâm xuống thân dưới.
-            outputPitchStep = errorPitch + (isEnemyAirborne ? feedforwardPitchStep : 0);
+            // Y-Axis: Vẫn giữ Lực đẩy Tuyệt đối 100% để thắng lực hút thân dưới
+            outputPitchStep = errorPitch; 
 
-            // X-Axis: PID siêu tốc
+            // X-Axis: Dùng PID tốc độ cao để lia ngang mượt mà, tránh rung giật màn hình
             let Kp_yaw = 60.0; 
             let pidYaw = errorYaw * Kp_yaw;
             outputYawStep = (pidYaw * dt) + feedforwardYawStep;
 
             disableYawEMA = true; disablePitchEMA = true;
 
-            // Phanh động năng
+            // Phanh động năng trục X
             if (Math.abs(outputYawStep) > Math.abs(errorYaw) && (errorYaw * outputYawStep > 0)) {
                 outputYawStep = errorYaw;
                 camState.integralYaw = 0;
@@ -513,6 +505,7 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
+        // Tắt làm mượt (alpha=1.0) khi bóp cò để Snapaim 0ms không để lại bóng mờ
         let alphaYaw = disableYawEMA ? 1.0 : 0.85;
         let alphaPitch = disablePitchEMA ? 1.0 : 0.85;
 
