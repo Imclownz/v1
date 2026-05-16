@@ -427,7 +427,7 @@ class CameraManipulator {
                 isEnemyAirborne = true;
                 // [ANTI-GRAVITY PROTOCOL - BƯỚC 2]: Khuếch đại đón lõng x2.0
                 // Bơm gấp đôi lực dự đoán dọc để Camera luôn hất đón đầu lên trên Lõi Sọ
-                feedforwardPitchStep *= 1.5; 
+                feedforwardPitchStep *= 1.25; 
             }
         }
 
