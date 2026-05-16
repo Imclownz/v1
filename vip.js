@@ -17,7 +17,7 @@ if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
         // Đã xóa bỏ currentPing
         weaponProfile: { Core: "IGNORE", RequireZeroVelocity: false },
         
-        target: { id: null, pos: null, predicted_pos: null, distance: 999.0 },
+        target: { id: null, pos: null, predicted_pos: null, distance: 99.0 },
         self: { pos: {x:0, y:0, z:0}, anchorPos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0}, isPerfectlyStill: false, anchoredFireOrigin: null },
         
         weapon: { isFiring: false, id: "", category: "", triggerFired: false }, 
@@ -144,7 +144,7 @@ class TargetKinematics {
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.friction = 0.0;
             payload.aim_assist.adhesion = 0.0;
-            payload.aim_assist.snap_weight = -999999.0;
+            payload.aim_assist.snap_weight = -999999999.0;
         }
 
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
@@ -153,7 +153,7 @@ class TargetKinematics {
         if (!selfState.anchorPos || selfState.anchorPos.x === 0) return payload; 
 
         let bestTarget = null;
-        let lowestThreatScore = 99999999.0;
+        let lowestThreatScore = 99999999999.0;
         const currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (_global.__OmniState.camera.prevYaw || 0.0);
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
@@ -168,7 +168,7 @@ class TargetKinematics {
                 
                 // BƯỚC A: KHUẾCH ĐẠI TỪ TÍNH LÕI SỌ
                 if (enemy.hitboxes.head) {
-                    if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 999999.0;
+                    if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 999999999.0;
                     if (enemy.hitboxes.head.friction !== undefined) enemy.hitboxes.head.friction = 1.0;
                     enemy.hitboxes.head.priority = "HIGHEST"; 
                 }
@@ -178,7 +178,7 @@ class TargetKinematics {
                 for (let p = 0; p < junkParts.length; p++) {
                     let part = junkParts[p];
                     if (enemy.hitboxes[part]) {
-                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -999999.0;
+                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -999999999.0;
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         enemy.hitboxes[part].priority = "IGNORE";
                     }
@@ -308,7 +308,7 @@ class TargetKinematics {
                 }
             }
         } else {
-            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 999999.0, velocity: {x:0, y:0, z:0} };
+            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 999999999.0, velocity: {x:0, y:0, z:0} };
         }
 
         return payload;
@@ -633,7 +633,7 @@ class TriggerCheck {
                 payload.weapon.is_firing = true;
                 
                 // Loại bỏ delay tích tụ của súng (Ví dụ: Charge Buster, súng sạc năng lượng)
-                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 999999.0;
+                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 999999999.0;
             }
             
             // Phát sóng tín hiệu (Broadcast Signal) cho các Lõi bên dưới
@@ -931,7 +931,7 @@ class OneTapCore {
             if (payload.weapon.recoil_y !== undefined) payload.weapon.recoil_y = 0.0;
             if (payload.weapon.recoil_x !== undefined) payload.weapon.recoil_x = 0.0;
             
-            // [ĐÃ XÓA BỎ]: Lệnh recoil_recovery = 999999.0 của súng bắn tỉa. 
+            // [ĐÃ XÓA BỎ]: Lệnh recoil_recovery = 999999999.0 của súng bắn tỉa. 
             // Trả lại sự mượt mà tự nhiên cho các pha sấy/vẩy liên tiếp của SVD/AC80.
 
             // Xóa mọi hình phạt di chuyển (Hỗ trợ Jump-shot và Run-and-gun hoàn hảo)
