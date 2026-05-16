@@ -119,10 +119,10 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - ZERO PING EDITION)
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - PURE PROXIMITY)
 // Tích hợp: Magnetic Inversion (Đảo ngược từ tính, giữ nguyên Khung xương),
 // Zero-Ping Hitscan (T = 0.1s Wind-up), và Bộ lọc Feedforward EMA.
-// ĐÃ XÓA BỎ HOÀN TOÀN TÍNH TOÁN BÙ TRỪ PING.
+// TỐI GIẢN PHA 2: Khóa mục tiêu thuần túy dựa trên Khoảng cách và FOV Tâm súng.
 // ============================================================================
 class TargetKinematics {
     
@@ -170,7 +170,6 @@ class TargetKinematics {
                 if (enemy.hitboxes.head) {
                     if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 9999.0;
                     if (enemy.hitboxes.head.friction !== undefined) enemy.hitboxes.head.friction = 1.0;
-                    // Ép mức độ ưu tiên cao nhất cho Đầu
                     enemy.hitboxes.head.priority = "HIGHEST"; 
                 }
 
@@ -179,8 +178,6 @@ class TargetKinematics {
                 for (let p = 0; p < junkParts.length; p++) {
                     let part = junkParts[p];
                     if (enemy.hitboxes[part]) {
-                        // Tước quyền hút tâm của Ngực và Tứ chi. 
-                        // Khi mất từ tính, Aim-Assist gốc sẽ trượt lên tìm Đầu.
                         if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         enemy.hitboxes[part].priority = "IGNORE";
@@ -188,7 +185,7 @@ class TargetKinematics {
                 }
             }
 
-            // --- MA TRẬN ĐÁNH GIÁ MỤC TIÊU ---
+            // --- MA TRẬN ĐÁNH GIÁ MỤC TIÊU (ĐÃ TỐI GIẢN) ---
             if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked) continue;
             if (enemy.team_id !== undefined && enemy.team_id === _global.__OmniState.team_id) continue;
             if (!enemy.pos) continue;
@@ -200,23 +197,17 @@ class TargetKinematics {
 
             if (distance3D > 300.0) continue;
 
+            // Điểm cơ sở hoàn toàn dựa vào khoảng cách vật lý
             let threatScore = distance3D; 
 
-            let angleToMe = Math.atan2(-dx, -dz) * (180.0 / Math.PI);
-            let enemyYaw = enemy.aim_yaw || enemy.yaw || 0.0;
-            let isLookingAtMe = Math.abs(this.normalizeAngle(enemyYaw - angleToMe)) < 30.0;
-            if (isLookingAtMe) threatScore -= 200.0; 
-
-            if (enemy.weapon && enemy.weapon.category) {
-                let cat = enemy.weapon.category.toUpperCase();
-                if (cat.includes("SNIPER") || cat.includes("SHOTGUN")) threatScore -= 100.0;
-            }
+            // Điểm trừ FOV: Ưu tiên tuyệt đối kẻ địch đang nằm gần tâm súng trên màn hình của bạn nhất
+            // Ngăn chặn hệ thống quay ngoắt 180 độ ra sau lưng chỉ vì kẻ đó đứng gần hơn 1 mét.
             let angleToEnemy = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let fovDiff = Math.abs(this.normalizeAngle(angleToEnemy - currentYaw));
             let fovPenalty = fovDiff * (distance3D < 10.0 ? 1.0 : 3.5);
-            const hpMissingBonus = ((enemy.max_hp || 200.0) - (enemy.hp || 200.0)) * 0.8; 
             
-            threatScore = threatScore + fovPenalty - hpMissingBonus;
+            // Chốt điểm: Không quan tâm lượng máu, vũ khí, hay hướng nhìn của kẻ thù nữa.
+            threatScore = threatScore + fovPenalty;
 
             if (threatScore < lowestThreatScore) {
                 lowestThreatScore = threatScore;
@@ -290,9 +281,7 @@ class TargetKinematics {
                     }
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
-                    // [XÓA BỎ HOÀN TOÀN PING BÙ TRỪ]
                     // Chỉ sử dụng đúng độ trễ hoạt ảnh khởi động của game (Wind-up).
-                    // Hằng số 0.1s (100ms) là mức Lead-time hoàn hảo để tâm súng bám sát đầu địch.
                     let timeToTarget = 0.10;
 
                     let accelMagXZ = Math.sqrt(ax*ax + az*az);
@@ -303,7 +292,7 @@ class TargetKinematics {
                     let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
                     let predY = targetAimPos.y + (vy * timeToTarget);
 
-                    // Trọng lực (Chỉ áp dụng để đoán độ Rơi của kẻ địch nhảy)
+                    // Trọng lực 
                     let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
                     if (isJumping) {
@@ -327,9 +316,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V7.0 OVERDRIVE SNAPAIM)
-// Tích hợp: Multi-Frame Overdrive (Bứt phá đa khung hình 80ms), Y-Axis Unchained 
-// (Tháo xích trục dọc), Triệt tiêu Ma sát đầm lầy, và Vùng Chết Lượng Tử.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V8.0 ANTI-GRAVITY)
+// Tích hợp: Anti-Gravity Protocol (Chống chìm tâm không chiến x2.0), 
+// Multi-Frame Overdrive (80ms), Y-Axis Unchained, và Zero Friction.
 // ============================================================================
 class CameraManipulator {
     
@@ -346,7 +335,6 @@ class CameraManipulator {
         const weaponState = _global.__OmniState.weapon;
 
         // [ZERO FRICTION]: Triệt tiêu Ma sát "đầm lầy" tại Camera
-        // Tránh bị Game Engine làm chậm khi tâm lướt qua chân/bụng
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.adhesion = 0.0;
             payload.aim_assist.friction = 0.0;
@@ -365,10 +353,9 @@ class CameraManipulator {
         // [MULTI-FRAME TRACKER]: Nhận diện và theo dõi Cửa sổ Thời gian bứt phá
         const justStartedFiring = isFiring && !camState.wasFiring;
         if (justStartedFiring) {
-            camState.fireStartTime = currentTime; // Ghi nhận khoảnh khắc chạm cò
+            camState.fireStartTime = currentTime; 
         }
         
-        // Tính toán thời gian đã xả đạn (mili-giây)
         const fireElapsed = isFiring ? (currentTime - (camState.fireStartTime || currentTime)) : 0;
         camState.wasFiring = isFiring;
 
@@ -409,10 +396,11 @@ class CameraManipulator {
         let disablePitchEMA = false;
 
         // ====================================================================
-        // 1. CHUYỂN ĐỔI VẬN TỐC THÀNH VẬN TỐC GÓC (FEEDFORWARD MATH)
+        // 1. CHUYỂN ĐỔI VẬN TỐC & NHẬN DIỆN KHÔNG CHIẾN (ANTI-GRAVITY)
         // ====================================================================
         let feedforwardYawStep = 0;
         let feedforwardPitchStep = 0;
+        let isEnemyAirborne = false; 
 
         if (targetState.velocity) {
             let futureX = dest.x + (targetState.velocity.x * 0.001);
@@ -432,18 +420,26 @@ class CameraManipulator {
 
             feedforwardYawStep = angularVelYaw * dt;
             feedforwardPitchStep = angularVelPitch * dt;
+
+            // [ANTI-GRAVITY PROTOCOL - BƯỚC 1]: Kiểm tra gia tốc trục dọc (Y)
+            // Nếu > 1.2 m/s nghĩa là kẻ địch đã rời mặt đất (Nhảy lên hoặc rơi xuống)
+            if (Math.abs(targetState.velocity.y) > 1.2) {
+                isEnemyAirborne = true;
+                // [ANTI-GRAVITY PROTOCOL - BƯỚC 2]: Khuếch đại đón lõng x2.0
+                // Bơm gấp đôi lực dự đoán dọc để Camera luôn hất đón đầu lên trên Lõi Sọ
+                feedforwardPitchStep *= 2.0; 
+            }
         }
 
         // ====================================================================
-        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA (OVERDRIVE SNAPAIM)
+        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA 
         // ====================================================================
         
         const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
-        const FOV_CLAMP = 45.0; // Giới hạn vẩy tâm ngang chống Spin-bot
+        const FOV_CLAMP = 45.0; 
 
         // PHA 1: VÙNG CHẾT LƯỢNG TỬ (TÂM ĐÃ Ở TRONG SỌ)
         if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
-            // Tắt kéo PID. Trượt mượt mà theo vận tốc địch.
             outputYawStep = feedforwardYawStep + errorYaw; 
             outputPitchStep = feedforwardPitchStep + errorPitch;
             
@@ -453,30 +449,31 @@ class CameraManipulator {
         } 
         // PHA 2: OVERDRIVE SNAPAIM (ĐỘNG CƠ BỨT PHÁ ĐA KHUNG HÌNH - 80ms)
         else if (isFiring && fireElapsed <= 80 && Math.abs(errorYaw) <= FOV_CLAMP) {
-            // [Y-AXIS UNCHAINED]: Chỉ cần địch trong tầm mắt ngang (Yaw <= 45 độ),
-            // dẫu bạn có đang nhìn xuống gót chân, trục dọc (Pitch) vẫn cho phép dịch chuyển 100%.
-            // [SUSTAINED TELEPORT]: Duy trì lực hút lượng tử này liên tục trong 80ms đầu tiên
-            // để nghiền nát sự giằng co (Frame-fight) của Engine game. Tâm súng không thể rớt!
             outputYawStep = errorYaw;
-            outputPitchStep = errorPitch;
+            
+            // [ANTI-GRAVITY PROTOCOL - BƯỚC 3]: Tiêm lực đón đầu x2 vào cú Teleport
+            // Nếu địch đang nhảy, thay vì chỉ Teleport đến đầu hiện tại (errorPitch), 
+            // hệ thống sẽ Teleport vượt lên trên (cộng thêm feedforward) để đón đầu.
+            outputPitchStep = errorPitch + (isEnemyAirborne ? feedforwardPitchStep : 0);
             
             camState.integralYaw = 0;
             camState.integralPitch = 0;
             disableYawEMA = true; disablePitchEMA = true;
         }
-        // PHA 3: ĐỘNG CƠ BỨT PHÁ DÀI HẠN (SẤY > 80ms HOẶC ĐỊCH LỆCH FOV)
+        // PHA 3: ĐỘNG CƠ BỨT PHÁ DÀI HẠN & THÁO XÍCH KHÔNG CHIẾN
         else if (isFiring) {
-            // Y-Axis: Vẫn giữ Lực đẩy Tuyệt đối 100% để thắng lực hút thân dưới
-            outputPitchStep = errorPitch; 
+            // Y-Axis: Giữ lực đẩy tuyệt đối 100%. Nếu địch nhảy, bơm luôn lực đón đầu x2.
+            // Bất chấp đã qua 80ms, Game Engine không bao giờ lôi được tâm xuống thân dưới.
+            outputPitchStep = errorPitch + (isEnemyAirborne ? feedforwardPitchStep : 0);
 
-            // X-Axis: Dùng PID tốc độ cao để lia ngang mượt mà, tránh rung giật màn hình
+            // X-Axis: PID siêu tốc
             let Kp_yaw = 60.0; 
             let pidYaw = errorYaw * Kp_yaw;
             outputYawStep = (pidYaw * dt) + feedforwardYawStep;
 
             disableYawEMA = true; disablePitchEMA = true;
 
-            // Phanh động năng trục X
+            // Phanh động năng
             if (Math.abs(outputYawStep) > Math.abs(errorYaw) && (errorYaw * outputYawStep > 0)) {
                 outputYawStep = errorYaw;
                 camState.integralYaw = 0;
@@ -516,7 +513,6 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        // Tắt làm mượt (alpha=1.0) khi bóp cò để Snapaim 0ms không để lại bóng mờ
         let alphaYaw = disableYawEMA ? 1.0 : 0.85;
         let alphaPitch = disablePitchEMA ? 1.0 : 0.85;
 
@@ -756,9 +752,9 @@ class SelfKinematics {
 }
 
 // ============================================================================
-// MODULE 2: SHOTGUN CORE (LÕI SÁT THƯƠNG CẬN CHIẾN - V2.3)
-// Nhiệm vụ: Triệt tiêu nảy nòng, gom toàn bộ chùm đạn thành 1 tia Laser duy nhất,
-// và xóa bỏ giới hạn giảm sát thương theo cự ly xa.
+// MODULE 2: SHOTGUN CORE (LÕI SÁT THƯƠNG CẬN CHIẾN - V8.0 BALANCED)
+// Nhiệm vụ: Triệt tiêu nảy nòng, gom toàn bộ chùm đạn thành 1 tia Laser duy nhất.
+// ĐÃ LOẠI BỎ: Xóa hình phạt cự ly (Trả lại Damage Falloff gốc của game để Legit).
 // ============================================================================
 class ShotgunCore {
     static execute(payload) {
@@ -816,16 +812,13 @@ class ShotgunCore {
         }
 
         // --------------------------------------------------------------------
-        // 3. XÓA BỎ GIỚI HẠN VẬT LÝ TẦM GẦN (POINT-BLANK OPTIMIZATION)
+        // 3. TỐI ƯU HÓA XUYÊN PHÁ (ARMOR PENETRATION)
         // --------------------------------------------------------------------
+        // [BẢN VÁ]: Đã trả lại cơ chế giảm sát thương theo khoảng cách (Distance Penalty) 
+        // của Game Engine để tránh bị cờ đỏ (Red Flag) khi dùng Shotgun bắn tầm xa.
         if (payload.damage_report) {
-            // Xóa bỏ hình phạt cự ly (Damage Falloff)
-            // Khẩu M1887 giờ đây bắn kẻ địch cách xa 60 mét vẫn gây sát thương như đang kề nòng vào ngực
-            if (payload.damage_report.distance_penalty !== undefined) {
-                payload.damage_report.distance_penalty = 0.0;
-            }
             
-            // Ép xuyên giáp tối đa cho từng mảnh đạn
+            // Ép xuyên giáp tối đa cho từng mảnh đạn khi nổ cận chiến
             if (payload.damage_report.armor_penetration !== undefined) {
                 payload.damage_report.armor_penetration = 1.0; // Tương đương 100% xuyên giáp
             }
@@ -1008,9 +1001,10 @@ class OneTapCore {
 }
 
 // ============================================================================
-// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V8.0 BALLISTIC DECOUPLING)
+// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V8.1 LEGIT RAYCAST)
 // Tích hợp: Triệt tiêu Quán tính đạn (Inertia Nullification), Tụ đạn Shotgun 
 // (Slug-Shot), Phân tách Đạn đạo (Silent Raycast), và Smart Anti-Overlap.
+// ĐÃ LOẠI BỎ: Xuyên tường / Xuyên vật cản (Ghost Penetration) để đảm bảo an toàn.
 // ============================================================================
 class MagicBulletCore {
     static execute(payload) {
@@ -1023,7 +1017,7 @@ class MagicBulletCore {
         // ====================================================================
         // 1. NGHỊCH ĐẢO SINH TỬ (MISS-TO-HIT INVERSION)
         // ====================================================================
-        // Bắt cóc gói tin báo trượt do lỗi Engine (đạn đập vào tường/tay), 
+        // Bắt cóc gói tin báo trượt do lỗi Engine (đạn đập vào tay/chân), 
         // luyện hóa thành Gói tin Trúng đích.
         if (payload.miss_event || (payload.bullet_event && payload.bullet_event.is_hit === false)) {
             if (payload.miss_event) {
@@ -1086,19 +1080,17 @@ class MagicBulletCore {
                 if (bullet.spread_angle !== undefined) bullet.spread_angle = 0.0;
                 if (bullet.deviation !== undefined) bullet.deviation = 0.0;
 
-                // [BẢN VÁ MỚI]: ĐÓNG BĂNG QUÁN TÍNH (BALLISTIC DECOUPLING)
+                // [BẢN VÁ V8.0]: ĐÓNG BĂNG QUÁN TÍNH (BALLISTIC DECOUPLING)
                 // Cắt đứt mọi liên kết động lượng giữa viên đạn, Camera và chuyển động cơ thể.
-                // Xóa bỏ vận tốc góc sinh ra từ cú vẩy Snapaim cực gắt của M7.
                 if (bullet.angular_velocity !== undefined) bullet.angular_velocity = 0.0;
-                // Xóa bỏ độ trôi và độ cong do gia tốc chạy/trượt của nhân vật tạo ra.
                 if (bullet.momentum_offset !== undefined) bullet.momentum_offset = 0.0;
                 if (bullet.drift !== undefined) bullet.drift = 0.0;
                 if (bullet.trajectory_curve !== undefined) bullet.trajectory_curve = 0.0;
                 if (bullet.velocity_inheritance !== undefined) bullet.velocity_inheritance = 0.0;
                 
-                // Tiêm đặc quyền xuyên vật cản tàng hình
-                if (bullet.collision_obstacle !== undefined) bullet.collision_obstacle = false;
-                if (bullet.is_penetrating !== undefined) bullet.is_penetrating = true;
+                // [ĐÃ GỠ BỎ]: collision_obstacle = false và is_penetrating = true.
+                // Viên đạn giờ đây không còn tính năng "bóng ma". 
+                // Nếu mục tiêu lấp ló sau tường, viên đạn găm vào phần tường sẽ bị chặn lại tự nhiên.
             }
         }
 
@@ -1119,6 +1111,7 @@ class MagicBulletCore {
             if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
 
             // Đục xuyên Giáp/Mũ & Xóa giảm sát thương tầm xa
+            // Tính năng Xuyên Giáp vẫn được giữ nguyên để đập nát Mũ 3/4 của kẻ địch
             if (report.distance_penalty !== undefined) report.distance_penalty = 0.0;
             if (report.armor_penetration !== undefined) report.armor_penetration = 1.0;
             if (report.ignore_armor !== undefined) report.ignore_armor = true; 
