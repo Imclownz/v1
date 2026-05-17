@@ -17,7 +17,7 @@ if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
         // Đã xóa bỏ currentPing
         weaponProfile: { Core: "IGNORE", RequireZeroVelocity: false },
         
-        target: { id: null, pos: null, predicted_pos: null, distance: 9999.0 },
+        target: { id: null, pos: null, predicted_pos: null, distance: 99.0 },
         self: { pos: {x:0, y:0, z:0}, anchorPos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0}, isPerfectlyStill: false, anchoredFireOrigin: null },
         
         weapon: { isFiring: false, id: "", category: "", triggerFired: false }, 
@@ -146,7 +146,7 @@ class TargetKinematics {
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.friction = 0.0;
             payload.aim_assist.adhesion = 0.0;
-            payload.aim_assist.snap_weight = -9999.0;
+            payload.aim_assist.snap_weight = -999999999.0;
         }
 
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
@@ -155,7 +155,7 @@ class TargetKinematics {
         if (!selfState.anchorPos || selfState.anchorPos.x === 0) return payload; 
 
         let bestTarget = null;
-        let lowestThreatScore = 999999.0;
+        let lowestThreatScore = 99999999999.0;
         const currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (_global.__OmniState.camera.prevYaw || 0.0);
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
@@ -170,7 +170,7 @@ class TargetKinematics {
                 
                 // BƯỚC A: KHUẾCH ĐẠI TỪ TÍNH LÕI SỌ
                 if (enemy.hitboxes.head) {
-                    if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 9999.0;
+                    if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 999999999.0;
                     if (enemy.hitboxes.head.friction !== undefined) enemy.hitboxes.head.friction = 1.0;
                     // Ép mức độ ưu tiên cao nhất cho Đầu
                     enemy.hitboxes.head.priority = "HIGHEST"; 
@@ -183,7 +183,7 @@ class TargetKinematics {
                     if (enemy.hitboxes[part]) {
                         // Tước quyền hút tâm của Ngực và Tứ chi. 
                         // Khi mất từ tính, Aim-Assist gốc sẽ trượt lên tìm Đầu.
-                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
+                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -999999999.0;
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         enemy.hitboxes[part].priority = "IGNORE";
                     }
@@ -321,7 +321,7 @@ class TargetKinematics {
                 }
             }
         } else {
-            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 9999.0, velocity: {x:0, y:0, z:0} };
+            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 999999999.0, velocity: {x:0, y:0, z:0} };
         }
 
         return payload;
@@ -646,7 +646,7 @@ class TriggerCheck {
                 payload.weapon.is_firing = true;
                 
                 // Loại bỏ delay tích tụ của súng (Ví dụ: Charge Buster, súng sạc năng lượng)
-                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 9999.0;
+                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 999999999.0;
             }
             
             // Phát sóng tín hiệu (Broadcast Signal) cho các Lõi bên dưới
@@ -949,7 +949,7 @@ class OneTapCore {
             // CHIẾN THUẬT SNIPER: Ép thời gian hồi tâm (Recoil Recovery) cực nhanh
             // Giúp màn hình không bị giật nảy lên sau khi bắn AWM/Woodpecker
             if (payload.weapon.recoil_recovery !== undefined) {
-                payload.weapon.recoil_recovery = 9999.0; 
+                payload.weapon.recoil_recovery = 999999999.0; 
             }
 
             // Xóa mọi hình phạt di chuyển (Đã được M5 bảo chứng tĩnh lặng)
