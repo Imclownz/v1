@@ -297,9 +297,10 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V7.0 OVERDRIVE SNAPAIM)
-// Tích hợp: Multi-Frame Overdrive (Bứt phá đa khung hình 80ms), Y-Axis Unchained 
-// (Tháo xích trục dọc), Triệt tiêu Ma sát đầm lầy, và Vùng Chết Lượng Tử.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V9.0 ABSOLUTE SYNC)
+// Tích hợp: Đảo mạch Không-Thời gian (Dynamic Time-Dest Switch),
+// Anti-Gravity Protocol (Chống chìm tâm không chiến x2.0), 
+// Multi-Frame Overdrive (80ms), Y-Axis Unchained, và Zero Friction.
 // ============================================================================
 class CameraManipulator {
     
@@ -316,14 +317,12 @@ class CameraManipulator {
         const weaponState = _global.__OmniState.weapon;
 
         // [ZERO FRICTION]: Triệt tiêu Ma sát "đầm lầy" tại Camera
-        // Tránh bị Game Engine làm chậm khi tâm lướt qua chân/bụng
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.adhesion = 0.0;
             payload.aim_assist.friction = 0.0;
         }
 
-        // Bỏ qua nếu mất mục tiêu
-        if (!targetState.id || !targetState.pos || payload.aim_yaw === undefined) {
+        if (!targetState.id || !targetState.pos || !targetState.predicted_pos || payload.aim_yaw === undefined) {
             camState.wasFiring = false;
             return payload;
         }
@@ -332,13 +331,12 @@ class CameraManipulator {
         const isScoping = payload.is_scoping || (payload.weapon && payload.weapon.is_scoping);
         const currentTime = Date.now();
         
-        // [MULTI-FRAME TRACKER]: Nhận diện và theo dõi Cửa sổ Thời gian bứt phá
+        // Theo dõi Cửa sổ Thời gian bứt phá
         const justStartedFiring = isFiring && !camState.wasFiring;
         if (justStartedFiring) {
-            camState.fireStartTime = currentTime; // Ghi nhận khoảnh khắc chạm cò
+            camState.fireStartTime = currentTime; 
         }
         
-        // Tính toán thời gian đã xả đạn (mili-giây)
         const fireElapsed = isFiring ? (currentTime - (camState.fireStartTime || currentTime)) : 0;
         camState.wasFiring = isFiring;
 
@@ -352,7 +350,13 @@ class CameraManipulator {
             { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
             { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
             
-        const dest = targetState.pos; 
+        // ====================================================================
+        // ĐẢO MẠCH KHÔNG-THỜI GIAN (DYNAMIC TIME-DEST SWITCH)
+        // ====================================================================
+        // Đột phá cốt lõi: Nếu đang sấy đạn, Camera nhìn vào cái bóng quá khứ (Backtracked)
+        // để đồng bộ hoàn hảo với Nòng súng (M5) và Tia đạn (M8).
+        // Nếu không sấy, Camera nhìn vào hiện tại để bảo đảm sự mượt mà cho khán giả.
+        const dest = isFiring ? targetState.predicted_pos : targetState.pos;
 
         const dx = dest.x - origin.x;
         const dy = dest.y - origin.y;
@@ -379,10 +383,11 @@ class CameraManipulator {
         let disablePitchEMA = false;
 
         // ====================================================================
-        // 1. CHUYỂN ĐỔI VẬN TỐC THÀNH VẬN TỐC GÓC (FEEDFORWARD MATH)
+        // 1. VẬN TỐC GÓC & NHẬN DIỆN KHÔNG CHIẾN (ANTI-GRAVITY X2.0)
         // ====================================================================
         let feedforwardYawStep = 0;
         let feedforwardPitchStep = 0;
+        let isEnemyAirborne = false; 
 
         if (targetState.velocity) {
             let futureX = dest.x + (targetState.velocity.x * 0.001);
@@ -402,18 +407,23 @@ class CameraManipulator {
 
             feedforwardYawStep = angularVelYaw * dt;
             feedforwardPitchStep = angularVelPitch * dt;
+
+            // Chống chìm tâm: Địch đang nhảy/rơi (Vận tốc Y > 1.2 m/s)
+            if (Math.abs(targetState.velocity.y) > 1.2) {
+                isEnemyAirborne = true;
+                // Bơm lực hất đón đầu x2.0 vào hệ thống
+                feedforwardPitchStep *= 2.0; 
+            }
         }
 
         // ====================================================================
-        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA (OVERDRIVE SNAPAIM)
+        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA 
         // ====================================================================
-        
         const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
-        const FOV_CLAMP = 45.0; // Giới hạn vẩy tâm ngang chống Spin-bot
+        const FOV_CLAMP = 45.0; 
 
-        // PHA 1: VÙNG CHẾT LƯỢNG TỬ (TÂM ĐÃ Ở TRONG SỌ)
+        // PHA 1: VÙNG CHẾT LƯỢNG TỬ
         if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
-            // Tắt kéo PID. Trượt mượt mà theo vận tốc địch.
             outputYawStep = feedforwardYawStep + errorYaw; 
             outputPitchStep = feedforwardPitchStep + errorPitch;
             
@@ -421,32 +431,26 @@ class CameraManipulator {
             camState.integralPitch = 0;
             disableYawEMA = true; disablePitchEMA = true;
         } 
-        // PHA 2: OVERDRIVE SNAPAIM (ĐỘNG CƠ BỨT PHÁ ĐA KHUNG HÌNH - 80ms)
+        // PHA 2: OVERDRIVE SNAPAIM (ĐỘNG CƠ BỨT PHÁ 80ms)
         else if (isFiring && fireElapsed <= 80 && Math.abs(errorYaw) <= FOV_CLAMP) {
-            // [Y-AXIS UNCHAINED]: Chỉ cần địch trong tầm mắt ngang (Yaw <= 45 độ),
-            // dẫu bạn có đang nhìn xuống gót chân, trục dọc (Pitch) vẫn cho phép dịch chuyển 100%.
-            // [SUSTAINED TELEPORT]: Duy trì lực hút lượng tử này liên tục trong 80ms đầu tiên
-            // để nghiền nát sự giằng co (Frame-fight) của Engine game. Tâm súng không thể rớt!
             outputYawStep = errorYaw;
-            outputPitchStep = errorPitch;
+            // Tiêm lực đón đầu Không chiến x2 nếu địch đang bay
+            outputPitchStep = errorPitch + (isEnemyAirborne ? feedforwardPitchStep : 0);
             
             camState.integralYaw = 0;
             camState.integralPitch = 0;
             disableYawEMA = true; disablePitchEMA = true;
         }
-        // PHA 3: ĐỘNG CƠ BỨT PHÁ DÀI HẠN (SẤY > 80ms HOẶC ĐỊCH LỆCH FOV)
+        // PHA 3: SẤY DÀI HẠN & THÁO XÍCH KHÔNG CHIẾN
         else if (isFiring) {
-            // Y-Axis: Vẫn giữ Lực đẩy Tuyệt đối 100% để thắng lực hút thân dưới
-            outputPitchStep = errorPitch; 
+            outputPitchStep = errorPitch + (isEnemyAirborne ? feedforwardPitchStep : 0);
 
-            // X-Axis: Dùng PID tốc độ cao để lia ngang mượt mà, tránh rung giật màn hình
             let Kp_yaw = 60.0; 
             let pidYaw = errorYaw * Kp_yaw;
             outputYawStep = (pidYaw * dt) + feedforwardYawStep;
 
             disableYawEMA = true; disablePitchEMA = true;
 
-            // Phanh động năng trục X
             if (Math.abs(outputYawStep) > Math.abs(errorYaw) && (errorYaw * outputYawStep > 0)) {
                 outputYawStep = errorYaw;
                 camState.integralYaw = 0;
@@ -486,7 +490,6 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        // Tắt làm mượt (alpha=1.0) khi bóp cò để Snapaim 0ms không để lại bóng mờ
         let alphaYaw = disableYawEMA ? 1.0 : 0.85;
         let alphaPitch = disablePitchEMA ? 1.0 : 0.85;
 
@@ -629,35 +632,32 @@ class TriggerCheck {
 }
 
 // ============================================================================
-// MODULE 5: SELF KINEMATICS (LÕI ĐỘNG HỌC BẢN THÂN - V8.0 MICRO-BRAKING)
-// Tích hợp: 1-Tick Stance Spoofing (Phanh Lượng Tử), Chronos Anchor 
-// (Neo Thời Không T-1), và CQC Origin Spoofing (Dịch chuyển nòng súng).
+// MODULE 5: SELF KINEMATICS (LÕI ĐỘNG HỌC BẢN THÂN - V9.0 ABSOLUTE BONE SYNC)
+// Tích hợp: Spine Forcing (Cưỡng chế Xương sống), Animation Lerp Nullification 
+// (Triệt tiêu Hoạt ảnh trễ), Dynamic Barrel Offset (Căn chỉnh Nòng-Sọ), 
+// Chronos Anchor, và Phanh Lượng Tử 1-Tick.
 // ============================================================================
 class SelfKinematics {
     static processSelfState(payload) {
         const state = _global.__OmniState.self;
         const targetState = _global.__OmniState.target;
         const weaponState = _global.__OmniState.weapon;
-        
-        // Nhận diện trạng thái bóp cò
+        const camState = _global.__OmniState.camera; // Nhúng Lõi Camera để đồng bộ
+
         const isFiring = weaponState.isFiring || weaponState.triggerFired || payload.is_firing;
 
-        // Khởi tạo bộ nhớ Lịch sử Không gian (Tracking History)
         if (!state.history) state.history = [];
         if (!state.lastAnchor) state.lastAnchor = null;
 
         // ====================================================================
-        // TRẠNG THÁI NGHỈ: LIÊN TỤC CẬP NHẬT TỌA ĐỘ (CHỐNG GIẬT LAG)
+        // TRẠNG THÁI NGHỈ: LIÊN TỤC CẬP NHẬT TỌA ĐỘ 
         // ====================================================================
-        // KHÔNG BAO GIỜ can thiệp vào pos khi đang di chuyển bình thường.
-        // Điều này đảm bảo Server Reconciliation không giật lùi nhân vật.
         if (payload.pos !== undefined) {
             state.history.unshift({ ...payload.pos });
             if (state.history.length > 5) state.history.pop(); 
         }
 
         if (!isFiring) {
-            // Liên tục lưu Anchor (Điểm neo súng) của frame hiện tại
             if (payload.anchorPos !== undefined) {
                 state.lastAnchor = { ...payload.anchorPos };
             }
@@ -665,61 +665,94 @@ class SelfKinematics {
         }
 
         // ====================================================================
-        // TRẠNG THÁI KHAI HỎA: KÍCH HOẠT ĐIỂM KỲ DỊ (SINGULARITY)
+        // 1. ABSOLUTE BONE SYNC & LERP NULLIFICATION (ĐỒNG BỘ XƯƠNG TỨC THỜI)
         // ====================================================================
-        
-        // 1. CHRONOS ANCHOR (NEO THỜI KHÔNG T-1)
-        // Khóa 'anchorPos' (Bệ phóng đạn) về tọa độ tĩnh lặng của mili-giây trước đó.
+        // Can thiệp trực tiếp vào mô hình 3D (Avatar/Character) của bản thân
+        let avatar = payload.avatar_state || payload.character || payload;
+
+        if (avatar) {
+            // A. Spine Forcing: Ép góc xoay cơ thể/xương sống khớp 100% với Camera
+            if (camState.emaYaw !== undefined) {
+                if (avatar.body_yaw !== undefined) avatar.body_yaw = camState.emaYaw;
+                if (avatar.torso_yaw !== undefined) avatar.torso_yaw = camState.emaYaw;
+                if (avatar.weapon_yaw !== undefined) avatar.weapon_yaw = camState.emaYaw;
+            }
+            
+            if (camState.emaPitch !== undefined) {
+                if (avatar.body_pitch !== undefined) avatar.body_pitch = camState.emaPitch;
+                if (avatar.torso_pitch !== undefined) avatar.torso_pitch = camState.emaPitch;
+                if (avatar.weapon_pitch !== undefined) avatar.weapon_pitch = camState.emaPitch;
+            }
+
+            // B. Lerp Nullification: Xóa sổ độ trễ xoay người (Animation Blending)
+            if (avatar.turn_speed !== undefined) avatar.turn_speed = 99999.0; 
+            if (avatar.turn_animation_time !== undefined) avatar.turn_animation_time = 0.0;
+            if (avatar.blend_weight !== undefined) avatar.blend_weight = 0.0;
+            if (avatar.ik_blend !== undefined) avatar.ik_blend = 1.0; // Ép Inverse Kinematics (IK) chạy tối đa
+        }
+
+        // C. Cưỡng chế Vector Súng (Trường hợp Engine dùng Vector thay vì Góc)
+        if (payload.weapon_forward_vector !== undefined && targetState.predicted_pos && state.lastAnchor) {
+            let dx = targetState.predicted_pos.x - state.lastAnchor.x;
+            let dy = targetState.predicted_pos.y - (state.lastAnchor.y + 1.5);
+            let dz = targetState.predicted_pos.z - state.lastAnchor.z;
+            let mag = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (mag > 0) {
+                payload.weapon_forward_vector = { x: dx/mag, y: dy/mag, z: dz/mag };
+            }
+        }
+
+        // ====================================================================
+        // 2. CHRONOS ANCHOR (NEO THỜI KHÔNG T-1)
+        // ====================================================================
         if (payload.anchorPos !== undefined && state.lastAnchor) {
             payload.anchorPos.x = state.lastAnchor.x;
             payload.anchorPos.y = state.lastAnchor.y;
             payload.anchorPos.z = state.lastAnchor.z;
         }
 
-        // 2. CQC ORIGIN SPOOFING (DỊCH CHUYỂN NÒNG SÚNG CẬN CHIẾN)
+        // ====================================================================
+        // 3. DYNAMIC BARREL OFFSET (CĂN CHỈNH ĐIỂM SINH ĐẠN)
+        // ====================================================================
         if (payload.fire_origin !== undefined) {
             if (targetState.id && targetState.distance < 3.0 && targetState.predicted_pos) {
-                // Dịch chuyển điểm sinh đạn vào thẳng Lõi Sọ kẻ thù!
+                // Cận chiến (CQC): Sinh đạn trực tiếp bên trong não địch
                 payload.fire_origin = {
                     x: targetState.predicted_pos.x,
                     y: targetState.predicted_pos.y,
                     z: targetState.predicted_pos.z - 0.1 
                 };
             } 
-            else if (state.lastAnchor) {
+            else if (state.lastAnchor && camState.emaYaw !== undefined && camState.emaPitch !== undefined) {
+                // Tầm xa: Dịch chuyển điểm sinh đạn ra đúng đỉnh của Nòng súng vật lý (Cách 0.8m)
+                // Áp dụng Toán học lượng giác không gian 3D để đồng bộ với Camera
+                let yawRad = camState.emaYaw * (Math.PI / 180.0);
+                let pitchRad = camState.emaPitch * (Math.PI / 180.0);
+                
+                let forwardX = Math.sin(yawRad) * Math.cos(pitchRad);
+                let forwardY = -Math.sin(pitchRad);
+                let forwardZ = Math.cos(yawRad) * Math.cos(pitchRad);
+
                 payload.fire_origin = {
-                    x: state.lastAnchor.x,
-                    y: state.lastAnchor.y + 1.5, 
-                    z: state.lastAnchor.z
+                    x: state.lastAnchor.x + (forwardX * 0.8),
+                    y: state.lastAnchor.y + 1.5 + (forwardY * 0.8), 
+                    z: state.lastAnchor.z + (forwardZ * 0.8)
                 };
             }
         }
 
-        // 3. ANCHOR ROOTING (ĐÓNG BĂNG RỄ SINH HỌC)
+        // ====================================================================
+        // 4. ANCHOR ROOTING & MICRO-BRAKING (PHANH LƯỢNG TỬ 1-TICK)
+        // ====================================================================
         if (payload.body_sway !== undefined) payload.body_sway = 0.0;
         
-        // ====================================================================
-        // 4. MICRO-BRAKING (PHANH LƯỢNG TỬ 1-TICK) - [BẢN VÁ TỐI THƯỢNG]
-        // ====================================================================
-        // Thay vì đóng băng vận tốc liên tục gây lỗi giật lùi, chúng ta CHỈ tước đoạt 
-        // vận tốc ở ĐÚNG KHUNG HÌNH DUY NHẤT mà viên đạn đầu tiên thoát nòng (triggerFired = true).
-        // Máy chủ sẽ ghi nhận pha nổ súng này diễn ra trong trạng thái "Đứng im tuyệt đối".
         if (weaponState.triggerFired) {
-            // Xóa sổ gia tốc và vận tốc di chuyển
-            if (payload.velocity !== undefined) {
-                payload.velocity = { x: 0.0, y: 0.0, z: 0.0 };
-            }
-            if (payload.acceleration !== undefined) {
-                payload.acceleration = { x: 0.0, y: 0.0, z: 0.0 };
-            }
-            
-            // Giả mạo trạng thái tĩnh lặng
+            // Giả mạo tĩnh lặng tuyệt đối đúng 1 Frame duy nhất khi viên đạn rời nòng
+            if (payload.velocity !== undefined) payload.velocity = { x: 0.0, y: 0.0, z: 0.0 };
+            if (payload.acceleration !== undefined) payload.acceleration = { x: 0.0, y: 0.0, z: 0.0 };
             if (payload.speed !== undefined) payload.speed = 0.0;
             if (payload.is_moving !== undefined) payload.is_moving = false;
         }
-        // Ở các khung hình tiếp theo (khi đè nút sấy đạn), triggerFired sẽ = false.
-        // Game Engine sẽ tự động bỏ qua khối lệnh trên, trả lại vận tốc thật cho gói tin.
-        // Nhân vật của bạn tiếp tục lướt đi trên màn hình mà không hề bị khựng lại!
 
         return payload;
     }
