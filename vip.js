@@ -121,10 +121,10 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - ZERO PING EDITION)
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - PURE PROXIMITY)
 // Tích hợp: Magnetic Inversion (Đảo ngược từ tính, giữ nguyên Khung xương),
 // Zero-Ping Hitscan (T = 0.1s Wind-up), và Bộ lọc Feedforward EMA.
-// ĐÃ XÓA BỎ HOÀN TOÀN TÍNH TOÁN BÙ TRỪ PING.
+// TỐI GIẢN PHA 2: Khóa mục tiêu thuần túy dựa trên Khoảng cách và FOV Tâm súng.
 // ============================================================================
 class TargetKinematics {
     
@@ -172,7 +172,6 @@ class TargetKinematics {
                 if (enemy.hitboxes.head) {
                     if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 9999.0;
                     if (enemy.hitboxes.head.friction !== undefined) enemy.hitboxes.head.friction = 1.0;
-                    // Ép mức độ ưu tiên cao nhất cho Đầu
                     enemy.hitboxes.head.priority = "HIGHEST"; 
                 }
 
@@ -181,8 +180,6 @@ class TargetKinematics {
                 for (let p = 0; p < junkParts.length; p++) {
                     let part = junkParts[p];
                     if (enemy.hitboxes[part]) {
-                        // Tước quyền hút tâm của Ngực và Tứ chi. 
-                        // Khi mất từ tính, Aim-Assist gốc sẽ trượt lên tìm Đầu.
                         if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         enemy.hitboxes[part].priority = "IGNORE";
@@ -190,7 +187,7 @@ class TargetKinematics {
                 }
             }
 
-            // --- MA TRẬN ĐÁNH GIÁ MỤC TIÊU ---
+            // --- MA TRẬN ĐÁNH GIÁ MỤC TIÊU (ĐÃ TỐI GIẢN) ---
             if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked) continue;
             if (enemy.team_id !== undefined && enemy.team_id === _global.__OmniState.team_id) continue;
             if (!enemy.pos) continue;
@@ -202,23 +199,17 @@ class TargetKinematics {
 
             if (distance3D > 300.0) continue;
 
+            // Điểm cơ sở hoàn toàn dựa vào khoảng cách vật lý
             let threatScore = distance3D; 
 
-            let angleToMe = Math.atan2(-dx, -dz) * (180.0 / Math.PI);
-            let enemyYaw = enemy.aim_yaw || enemy.yaw || 0.0;
-            let isLookingAtMe = Math.abs(this.normalizeAngle(enemyYaw - angleToMe)) < 30.0;
-            if (isLookingAtMe) threatScore -= 200.0; 
-
-            if (enemy.weapon && enemy.weapon.category) {
-                let cat = enemy.weapon.category.toUpperCase();
-                if (cat.includes("SNIPER") || cat.includes("SHOTGUN")) threatScore -= 100.0;
-            }
+            // Điểm trừ FOV: Ưu tiên tuyệt đối kẻ địch đang nằm gần tâm súng trên màn hình của bạn nhất
+            // Ngăn chặn hệ thống quay ngoắt 180 độ ra sau lưng chỉ vì kẻ đó đứng gần hơn 1 mét.
             let angleToEnemy = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let fovDiff = Math.abs(this.normalizeAngle(angleToEnemy - currentYaw));
             let fovPenalty = fovDiff * (distance3D < 10.0 ? 1.0 : 3.5);
-            const hpMissingBonus = ((enemy.max_hp || 200.0) - (enemy.hp || 200.0)) * 0.8; 
             
-            threatScore = threatScore + fovPenalty - hpMissingBonus;
+            // Chốt điểm: Không quan tâm lượng máu, vũ khí, hay hướng nhìn của kẻ thù nữa.
+            threatScore = threatScore + fovPenalty;
 
             if (threatScore < lowestThreatScore) {
                 lowestThreatScore = threatScore;
@@ -292,9 +283,7 @@ class TargetKinematics {
                     }
                     trackData.lastVelocity = { x: vx, y: vy, z: vz };
 
-                    // [XÓA BỎ HOÀN TOÀN PING BÙ TRỪ]
                     // Chỉ sử dụng đúng độ trễ hoạt ảnh khởi động của game (Wind-up).
-                    // Hằng số 0.1s (100ms) là mức Lead-time hoàn hảo để tâm súng bám sát đầu địch.
                     let timeToTarget = 0.10;
 
                     let accelMagXZ = Math.sqrt(ax*ax + az*az);
@@ -305,7 +294,7 @@ class TargetKinematics {
                     let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
                     let predY = targetAimPos.y + (vy * timeToTarget);
 
-                    // Trọng lực (Chỉ áp dụng để đoán độ Rơi của kẻ địch nhảy)
+                    // Trọng lực 
                     let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                     let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
                     if (isJumping) {
@@ -1012,9 +1001,10 @@ class OneTapCore {
 }
 
 // ============================================================================
-// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V8.0 BALLISTIC DECOUPLING)
+// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V8.1 LEGIT RAYCAST)
 // Tích hợp: Triệt tiêu Quán tính đạn (Inertia Nullification), Tụ đạn Shotgun 
 // (Slug-Shot), Phân tách Đạn đạo (Silent Raycast), và Smart Anti-Overlap.
+// ĐÃ LOẠI BỎ: Xuyên tường / Xuyên vật cản (Ghost Penetration) để đảm bảo an toàn.
 // ============================================================================
 class MagicBulletCore {
     static execute(payload) {
@@ -1027,7 +1017,7 @@ class MagicBulletCore {
         // ====================================================================
         // 1. NGHỊCH ĐẢO SINH TỬ (MISS-TO-HIT INVERSION)
         // ====================================================================
-        // Bắt cóc gói tin báo trượt do lỗi Engine (đạn đập vào tường/tay), 
+        // Bắt cóc gói tin báo trượt do lỗi Engine (đạn đập vào tay/chân), 
         // luyện hóa thành Gói tin Trúng đích.
         if (payload.miss_event || (payload.bullet_event && payload.bullet_event.is_hit === false)) {
             if (payload.miss_event) {
@@ -1090,19 +1080,17 @@ class MagicBulletCore {
                 if (bullet.spread_angle !== undefined) bullet.spread_angle = 0.0;
                 if (bullet.deviation !== undefined) bullet.deviation = 0.0;
 
-                // [BẢN VÁ MỚI]: ĐÓNG BĂNG QUÁN TÍNH (BALLISTIC DECOUPLING)
+                // [BẢN VÁ V8.0]: ĐÓNG BĂNG QUÁN TÍNH (BALLISTIC DECOUPLING)
                 // Cắt đứt mọi liên kết động lượng giữa viên đạn, Camera và chuyển động cơ thể.
-                // Xóa bỏ vận tốc góc sinh ra từ cú vẩy Snapaim cực gắt của M7.
                 if (bullet.angular_velocity !== undefined) bullet.angular_velocity = 0.0;
-                // Xóa bỏ độ trôi và độ cong do gia tốc chạy/trượt của nhân vật tạo ra.
                 if (bullet.momentum_offset !== undefined) bullet.momentum_offset = 0.0;
                 if (bullet.drift !== undefined) bullet.drift = 0.0;
                 if (bullet.trajectory_curve !== undefined) bullet.trajectory_curve = 0.0;
                 if (bullet.velocity_inheritance !== undefined) bullet.velocity_inheritance = 0.0;
                 
-                // Tiêm đặc quyền xuyên vật cản tàng hình
-                if (bullet.collision_obstacle !== undefined) bullet.collision_obstacle = false;
-                if (bullet.is_penetrating !== undefined) bullet.is_penetrating = true;
+                // [ĐÃ GỠ BỎ]: collision_obstacle = false và is_penetrating = true.
+                // Viên đạn giờ đây không còn tính năng "bóng ma". 
+                // Nếu mục tiêu lấp ló sau tường, viên đạn găm vào phần tường sẽ bị chặn lại tự nhiên.
             }
         }
 
@@ -1123,6 +1111,7 @@ class MagicBulletCore {
             if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
 
             // Đục xuyên Giáp/Mũ & Xóa giảm sát thương tầm xa
+            // Tính năng Xuyên Giáp vẫn được giữ nguyên để đập nát Mũ 3/4 của kẻ địch
             if (report.distance_penalty !== undefined) report.distance_penalty = 0.0;
             if (report.armor_penetration !== undefined) report.armor_penetration = 1.0;
             if (report.ignore_armor !== undefined) report.ignore_armor = true; 
