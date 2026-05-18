@@ -17,7 +17,7 @@ if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
         // Đã xóa bỏ currentPing
         weaponProfile: { Core: "IGNORE", RequireZeroVelocity: false },
         
-        target: { id: null, pos: null, predicted_pos: null, distance: 99.0 },
+        target: { id: null, pos: null, predicted_pos: null, distance: 999.0 },
         self: { pos: {x:0, y:0, z:0}, anchorPos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0}, isPerfectlyStill: false, anchoredFireOrigin: null },
         
         weapon: { isFiring: false, id: "", category: "", triggerFired: false }, 
