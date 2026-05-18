@@ -119,10 +119,10 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - V10.0 ABSOLUTE PRESENT)
-// Tích hợp: Magnetic Inversion, Pure Proximity (Tối giản Pha 2).
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - V11.0 ZENITH APEX)
+// Tích hợp: Khóa Đỉnh Sọ (Zenith Lock), Magnetic Inversion, Pure Proximity.
 // ĐÃ XÓA BỎ HOÀN TOÀN: Lịch sử tọa độ, Backtracking, Dự đoán Tương lai và Vận tốc.
-// Chân lý duy nhất: Tọa độ Hiện Tại Tuyệt Đối.
+// Chân lý duy nhất: Tọa độ Chóp Mũ Hiện Tại.
 // ============================================================================
 class TargetKinematics {
     
@@ -211,7 +211,7 @@ class TargetKinematics {
         }
 
         // ====================================================================
-        // 3. ABSOLUTE PRESENT EXTRACTION (TRÍCH XUẤT HIỆN TẠI TUYỆT ĐỐI)
+        // 3. ABSOLUTE PRESENT & ZENITH EXTRACTION (TRÍCH XUẤT ĐỈNH SỌ)
         // ====================================================================
         if (bestTarget) {
             const targetState = _global.__OmniState.target;
@@ -219,14 +219,27 @@ class TargetKinematics {
             targetState.id = bestTarget.id;
             targetState.distance = bestTarget.distance;
             
-            // Bắt lấy tọa độ duy nhất của Lõi Sọ tại mili-giây này
-            let headCenter = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
+            // Bắt lấy tọa độ gốc của Cổ/Cằm
+            let baseHead = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
 
-            // ĐỒNG NHẤT KHÔNG - THỜI GIAN
-            // Ép cả Đồ họa (pos) và Vật lý Đạn đạo (predicted_pos) chĩa chung vào 1 điểm.
-            // Bất kể là Camera M7 hay Tia đạn M8, mục tiêu chỉ có một!
-            targetState.pos = { ...headCenter };
-            targetState.predicted_pos = { ...headCenter };
+            // [GIAO THỨC ZENITH]: Tịnh tiến mục tiêu lên Chóp Mũ
+            // Offset 0.18 mét tương đương 18cm, đủ để nhấc bổng tâm súng ra khỏi ngực
+            let zenithYOffset = 0.18; 
+            
+            // Càng gần, góc chúi (Pitch) càng gắt, ta có thể bơm thêm lực nhấc bổng để bù trừ
+            if (bestTarget.distance < 5.0) {
+                zenithYOffset = 0.22; // Cận chiến nhấc cao 22cm
+            }
+
+            let zenithPos = {
+                x: baseHead.x,
+                y: baseHead.y + zenithYOffset,
+                z: baseHead.z
+            };
+
+            // ĐỒNG NHẤT KHÔNG GIAN VÀO ĐỈNH CHÓP
+            targetState.pos = { ...zenithPos };
+            targetState.predicted_pos = { ...zenithPos };
             
             // Xóa sổ động năng (Không cần tính toán vận tốc nữa)
             targetState.velocity = { x: 0, y: 0, z: 0 };
@@ -243,10 +256,10 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V10.0 ABSOLUTE MAGNET)
-// Tích hợp: Nam Châm Vĩnh Cửu (100% Teleport every frame), Zero Friction.
-// ĐÃ XÓA BỎ: Feedforward, Đảo mạch Không-Thời gian, và Phân chia 4 Pha.
-// Hoạt động thuần túy dựa trên Hiện Tại Tuyệt Đối.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V11.0 ZENITH MAGNET)
+// Tích hợp: TPP Pivot Offset (Giải mã nghịch lý góc nhìn TPP), Tiền Triệt Tiêu 
+// Nảy Nòng (Pre-emptive Recoil Subtraction), và Nam Châm Vĩnh Cửu 100%.
+// ĐỒNG BỘ: Hoạt động trơn tru với Lõi Zenith của M4.
 // ============================================================================
 class CameraManipulator {
     
@@ -286,19 +299,34 @@ class CameraManipulator {
             return payload;
         }
 
-        const origin = selfState.lastAnchor ? 
-            { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
-            { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
+        // ====================================================================
+        // 1. TPP PIVOT OFFSET (TOÁN HỌC KHÔNG GIAN TPP)
+        // ====================================================================
+        // KHÔNG dùng tâm cơ thể làm gốc nữa. Dùng Toán học lượng giác để dựng lại 
+        // chính xác tọa độ 3D của Camera đang lơ lửng phía sau lưng nhân vật.
+        let baseOrigin = selfState.lastAnchor ? selfState.lastAnchor : selfState.anchorPos;
+        let currentYawRad = payload.aim_yaw * (Math.PI / 180.0);
+
+        // Giả lập Camera lùi sau 1.2m, Lệch phải vai 0.4m, Cao 1.8m
+        let rightX = Math.cos(currentYawRad) * 0.4;
+        let rightZ = -Math.sin(currentYawRad) * 0.4;
+        let backX = -Math.sin(currentYawRad) * 1.2;
+        let backZ = -Math.cos(currentYawRad) * 1.2;
+
+        const tppOrigin = {
+            x: baseOrigin.x + rightX + backX,
+            y: baseOrigin.y + 1.8, 
+            z: baseOrigin.z + rightZ + backZ
+        };
             
         // ====================================================================
-        // CHÂN LÝ HIỆN TẠI (ABSOLUTE PRESENT DESTINATION)
+        // CHÂN LÝ HIỆN TẠI (ZENITH APEX DESTINATION)
         // ====================================================================
-        // Không còn quá khứ hay tương lai. Mọi ánh nhìn đều chĩa thẳng vào Lõi Sọ hiện tại.
-        const dest = targetState.pos;
+        const dest = targetState.pos; // Điểm chóp sọ từ M4
 
-        const dx = dest.x - origin.x;
-        const dy = dest.y - origin.y;
-        const dz = dest.z - origin.z;
+        const dx = dest.x - tppOrigin.x;
+        const dy = dest.y - tppOrigin.y;
+        const dz = dest.z - tppOrigin.z;
         const distXZ = Math.sqrt(dx * dx + dz * dz);
 
         let trueYaw = this.normalizeAngle(Math.atan2(dx, dz) * (180.0 / Math.PI));
@@ -319,22 +347,29 @@ class CameraManipulator {
         let disableEMA = false;
 
         // ====================================================================
-        // GIAO THỨC NAM CHÂM VĨNH CỬU (PERMANENT MAGNET LOCK-ON)
+        // 2. TIỀN TRIỆT TIÊU NẢY NÒNG VÀ KHÓA NAM CHÂM
         // ====================================================================
+        
+        // Bắt lấy xung lực nảy màn hình nội bộ do Engine tạo ra khi nổ súng
+        let internalRecoilPitch = 0.0;
+        let internalRecoilYaw = 0.0;
+        if (payload.weapon) {
+            internalRecoilPitch = payload.weapon.recoil_y || payload.weapon.dynamic_recoil_pitch || 0.0;
+            internalRecoilYaw = payload.weapon.recoil_x || payload.weapon.dynamic_recoil_yaw || 0.0;
+        }
+
         if (isFiring) {
-            // [BÓP CÒ LÀ DÍNH]: Không có giới hạn thời gian (80ms), không có Vùng chết.
-            // Bơm 100% lực đẩy vào cả 2 trục Không gian bất chấp kẻ địch di chuyển thế nào.
-            outputYawStep = errorYaw;
-            outputPitchStep = errorPitch;
+            // [BÓP CÒ LÀ DÍNH]: Teleport 100% kết hợp Đảo ngược Xung lực.
+            // Game nảy màn hình lên bao nhiêu, ta trừ đi bấy nhiêu để đóng băng tuyệt đối.
+            outputYawStep = errorYaw - internalRecoilYaw;
+            outputPitchStep = errorPitch - internalRecoilPitch;
             
-            // Xả sạch động năng tồn dư
             camState.integralYaw = 0;
             camState.integralPitch = 0;
-            disableEMA = true; // Tắt hoàn toàn độ trễ mượt để Snapaim đạt tốc độ ánh sáng
+            disableEMA = true; 
         } 
         else {
-            // [RÀ TÂM MƯỢT MÀ]: Khi chỉ bật ống ngắm (Scope) nhưng chưa bắn.
-            // Giữ lại thuật toán PID cơ bản để rà tâm nhìn giống người thật đang vuốt màn hình.
+            // [RÀ TÂM MƯỢT MÀ]: Không nổ súng, giữ PID mượt
             let Kp_yaw = 25.0; 
             let Kp_pitch = 25.0;
             let dynamicKd_yaw = 0.2 + (8.0 / (Math.abs(errorYaw) + 0.5));
@@ -352,7 +387,6 @@ class CameraManipulator {
             outputYawStep = pidYaw * dt;
             outputPitchStep = pidPitch * dt;
             
-            // Chống văng tâm dọc quá đà
             if (Math.abs(outputPitchStep) > Math.abs(errorPitch)) outputPitchStep = errorPitch;
         }
 
@@ -360,7 +394,7 @@ class CameraManipulator {
         camState.prevErrorPitch = errorPitch;
 
         // ====================================================================
-        // KÍNH LỌC EMA TẦN SỐ CAO 
+        // 3. KÍNH LỌC EMA TẦN SỐ CAO 
         // ====================================================================
         if (camState.emaYaw === undefined) camState.emaYaw = currentYaw;
         if (camState.emaPitch === undefined) camState.emaPitch = currentPitch;
@@ -368,8 +402,6 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        // Nếu đang bắn (disableEMA = true), hệ số alpha = 1.0 (Không lọc, chốt tọa độ thô).
-        // Nếu không bắn, alpha = 0.85 (Lọc mượt đồ họa).
         let alpha = disableEMA ? 1.0 : 0.85;
 
         camState.emaYaw = this.normalizeAngle((rawNewYaw * alpha) + (camState.emaYaw * (1.0 - alpha)));
