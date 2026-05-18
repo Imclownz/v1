@@ -890,6 +890,125 @@ class OneTapCore {
 }
 
 // ============================================================================
+// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V10.0 ABSOLUTE HITSCAN)
+// Tích hợp: Zero-Time Raycast (Đạn đạo tức thời), Tụ đạn Shotgun (Slug-Shot), 
+// Phân tách Đạn đạo, và Smart Anti-Overlap.
+// ĐÃ XÓA BỎ: Tính toán Bù trừ Vận tốc và Xuyên tường (Ghost Penetration).
+// ĐỒNG BỘ: Bắn thẳng vào không gian Hiện Tại Tuyệt Đối.
+// ============================================================================
+class MagicBulletCore {
+    static execute(payload) {
+        const targetState = _global.__OmniState.target;
+        const selfState = _global.__OmniState.self;
+
+        // Bỏ qua nếu M4 chưa cung cấp tọa độ của Hiện Tại Tuyệt Đối
+        if (!targetState || !targetState.id || !targetState.pos) return payload;
+
+        // ====================================================================
+        // 1. NGHỊCH ĐẢO SINH TỬ (MISS-TO-HIT INVERSION)
+        // ====================================================================
+        if (payload.miss_event || (payload.bullet_event && payload.bullet_event.is_hit === false)) {
+            if (payload.miss_event) {
+                payload.hit_event = { ...payload.miss_event }; 
+                delete payload.miss_event; 
+            }
+            if (payload.bullet_event) {
+                payload.bullet_event.is_hit = true;
+            }
+            if (!payload.hit_event) payload.hit_event = {};
+            payload.hit_event.target_id = targetState.id;
+        }
+
+        // ====================================================================
+        // 2. SMART ANTI-OVERLAP (THANH TRỪNG CHỌN LỌC)
+        // ====================================================================
+        if (payload.players && Array.isArray(payload.players)) {
+            for (let i = 0; i < payload.players.length; i++) {
+                let enemy = payload.players[i];
+                if (enemy.id !== targetState.id && enemy.hitboxes) {
+                    const bodyParts = ['head', 'chest', 'pelvis', 'legs', 'arms'];
+                    for (let p = 0; p < bodyParts.length; p++) {
+                        if (enemy.hitboxes[bodyParts[p]]) {
+                            enemy.hitboxes[bodyParts[p]].radius = 0.01; 
+                        }
+                    }
+                }
+            }
+        }
+
+        // ====================================================================
+        // 3. ZERO-TIME VECTOR (ĐƯỜNG ĐẠN HIỆN TẠI)
+        // ====================================================================
+        let perfectDir = null;
+        // Điểm sinh đạn giờ đây cực kỳ chuẩn xác vì đã được M5 dời ra nòng súng
+        let origin = payload.fire_origin || selfState.lastAnchor || selfState.anchorPos;
+        
+        if (origin && targetState.pos) {
+            // Đích đến là Cái Đầu Hiện Tại. Không cần bù trừ, không cần lùi thời gian.
+            let dest = { ...targetState.pos }; 
+            
+            let dx = dest.x - origin.x;
+            let dy = dest.y - (payload.fire_origin ? origin.y : origin.y + 1.5); 
+            let dz = dest.z - origin.z;
+            
+            const mag = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (mag > 0) perfectDir = { x: dx/mag, y: dy/mag, z: dz/mag };
+        }
+
+        // ====================================================================
+        // 4. SLUG-SHOT & INERTIA NULLIFICATION (ĐÓNG BĂNG QUÁN TÍNH TỐI ĐA)
+        // ====================================================================
+        if (perfectDir && payload.bullet_events && Array.isArray(payload.bullet_events)) {
+            for (let i = 0; i < payload.bullet_events.length; i++) {
+                let bullet = payload.bullet_events[i];
+                
+                // Gán Vector Lượng giác tuyệt đối
+                bullet.ray_dir = { ...perfectDir };
+                bullet.target_id = targetState.id;
+                
+                // Triệt tiêu sai số ngẫu nhiên của vũ khí
+                if (bullet.spread_angle !== undefined) bullet.spread_angle = 0.0;
+                if (bullet.deviation !== undefined) bullet.deviation = 0.0;
+
+                // [CẮT ĐỨT QUÁN TÍNH ENGINE]
+                // Ngăn chặn Game Engine bóp méo đường đạn thẳng tắp của chúng ta.
+                if (bullet.angular_velocity !== undefined) bullet.angular_velocity = 0.0;
+                if (bullet.momentum_offset !== undefined) bullet.momentum_offset = 0.0;
+                if (bullet.drift !== undefined) bullet.drift = 0.0;
+                if (bullet.trajectory_curve !== undefined) bullet.trajectory_curve = 0.0;
+                if (bullet.velocity_inheritance !== undefined) bullet.velocity_inheritance = 0.0;
+                
+                // [ĐÃ GỠ BỎ TÍNH NĂNG BÓNG MA/XUYÊN TƯỜNG ĐỂ AN TOÀN]
+                // Đạn sẽ tuân thủ vật cản vật lý của map, nhưng chạm vào thịt là Headshot.
+            }
+        }
+
+        // ====================================================================
+        // 5. DAMAGE FINALIZATION (CHỐT HẠ SÁT THƯƠNG THUẦN TÚY)
+        // ====================================================================
+        if (payload.damage_report || payload.hit_event) {
+            let report = payload.damage_report || payload.hit_event;
+            
+            report.target_id = targetState.id;
+            report.hit_bone = 8; 
+            report.is_headshot = true;
+            
+            // Ép Tọa độ va chạm (hit_pos) trùng khít với Không gian Hiện Tại
+            report.hit_pos = { ...targetState.pos };
+            if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
+
+            // Đục xuyên Giáp/Mũ & Xóa giảm sát thương tầm xa
+            if (report.distance_penalty !== undefined) report.distance_penalty = 0.0;
+            if (report.armor_penetration !== undefined) report.armor_penetration = 1.0;
+            if (report.ignore_armor !== undefined) report.ignore_armor = true; 
+            if (report.penetration_ratio !== undefined) report.penetration_ratio = 1.0; 
+        }
+
+        return payload;
+    }
+}
+
+// ============================================================================
 // BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.7 - ZERO PING EDITION)
 // ============================================================================
 class MatrixDispatcher {
