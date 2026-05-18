@@ -224,11 +224,11 @@ class TargetKinematics {
 
             // [GIAO THỨC ZENITH]: Tịnh tiến mục tiêu lên Chóp Mũ
             // Offset 0.18 mét tương đương 18cm, đủ để nhấc bổng tâm súng ra khỏi ngực
-            let zenithYOffset = 0.18; 
+            let zenithYOffset = 0.1; 
             
             // Càng gần, góc chúi (Pitch) càng gắt, ta có thể bơm thêm lực nhấc bổng để bù trừ
             if (bestTarget.distance < 5.0) {
-                zenithYOffset = 0.22; // Cận chiến nhấc cao 22cm
+                zenithYOffset = 0.2; // Cận chiến nhấc cao 22cm
             }
 
             let zenithPos = {
