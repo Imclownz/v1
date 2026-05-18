@@ -17,7 +17,7 @@ if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
         // Đã xóa bỏ currentPing
         weaponProfile: { Core: "IGNORE", RequireZeroVelocity: false },
         
-        target: { id: null, pos: null, predicted_pos: null, distance: 999.0 },
+        target: { id: null, pos: null, predicted_pos: null, distance: 9999.0 },
         self: { pos: {x:0, y:0, z:0}, anchorPos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0}, isPerfectlyStill: false, anchoredFireOrigin: null },
         
         weapon: { isFiring: false, id: "", category: "", triggerFired: false }, 
@@ -33,10 +33,13 @@ if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
 }
 
 // ============================================================================
-// MODULE 1: WEAPON CLASSIFIER (LÕI NHẬN DIỆN VŨ KHÍ - V8.0 MARKSMAN EXCLUSIVE)
-// Nhiệm vụ: Phân tích siêu dữ liệu súng. ĐÃ LOẠI BỎ SNIPER (AWM, M82B, KAR98).
-// Nhóm ONETAP giờ đây chỉ phục vụ súng lục nặng (DE, M500) và súng trường 
-// thiện xạ (Woodpecker, SVD, AC80, SKS).
+// VỎ BỌC CÁC MODULE (SẼ ĐƯỢC ĐỔ CODE VÀO CÁC BƯỚC TIẾP THEO)
+// LƯU Ý: Không xóa các class rỗng này, chúng giữ vai trò định hình scope.
+// ============================================================================
+// ============================================================================
+// MODULE 1: WEAPON CLASSIFIER (LÕI NHẬN DIỆN VŨ KHÍ)
+// Nhiệm vụ: Phân tích siêu dữ liệu súng, quyết định kích hoạt Lõi Sát Thương nào
+// và thiết lập cờ vận tốc (RequireZeroVelocity) cho TriggerBot.
 // ============================================================================
 class WeaponClassifier {
     
@@ -64,14 +67,14 @@ class WeaponClassifier {
             profile.Core = "SHOTGUN";
         } 
         
-        // 2. NHÓM THIỆN XẠ / ONE-TAP (CHỈ SÚNG LỤC NẶNG & SÚNG TRƯỜNG BÁN TỰ ĐỘNG)
-        // [BẢN VÁ]: Đã xóa bỏ các từ khóa SNIPER, AWM, M82B, KAR98.
-        else if (identifier.includes("DESERT_EAGLE") || identifier.includes("M500") || 
-                 identifier.includes("WOODPECKER") || identifier.includes("SVD") || 
-                 identifier.includes("AC80") || identifier.includes("SKS")) {
+        // 2. NHÓM ONE-TAP / SNIPER (Kích hoạt Module 6: TriggerBot)
+        else if (identifier.includes("SNIPER") || identifier.includes("PISTOL") || 
+                 identifier.includes("DESERT_EAGLE") || identifier.includes("WOODPECKER") || 
+                 identifier.includes("SVD") || identifier.includes("AC80") || 
+                 identifier.includes("AWM") || identifier.includes("M82B") || identifier.includes("KAR98")) {
             profile.Core = "ONETAP";
-            // Vẫn giữ cờ yêu cầu đóng băng vận tốc (Neo thời không 1-Tick ở M5) 
-            // để đảm bảo phát đạn DE/Woodpecker bay chuẩn 100%.
+            // Kích hoạt cờ này để báo cho M5 biết: Bắt buộc phải đóng băng vận tốc
+            // trước khi cho phép M6 tự động bóp cò.
             profile.RequireZeroVelocity = true; 
         } 
         
@@ -84,10 +87,8 @@ class WeaponClassifier {
             profile.Core = "AUTO";
         }
 
-        // LƯU Ý MỚI: 
-        // Bất kỳ vũ khí nào mang mã AWM, KAR98, M82B, v.v. giờ đây sẽ không khớp 
-        // với bất kỳ điều kiện nào ở trên. Nó sẽ tự động trả về "IGNORE".
-        // Game Engine sẽ tự xử lý hoàn toàn cơ chế bắn tỉa, không còn xung đột!
+        // Lưu ý: Nếu cầm Lựu Đạn, Đao, Machete, Keo, biến identifier sẽ không khớp
+        // với bất kỳ từ khóa nào ở trên -> Trả về "IGNORE" (Bỏ qua can thiệp).
         return profile;
     }
 
@@ -95,6 +96,7 @@ class WeaponClassifier {
         const weaponState = _global.__OmniState.weapon;
 
         // Trích xuất và đồng bộ trạng thái bóp cò
+        // (Free Fire có thể gửi cờ is_firing ở ngoài root hoặc bên trong object weapon)
         if (payload.is_firing !== undefined) {
             weaponState.isFiring = payload.is_firing;
         }
@@ -119,10 +121,10 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - V11.0 ZENITH APEX)
-// Tích hợp: Khóa Đỉnh Sọ (Zenith Lock), Magnetic Inversion, Pure Proximity.
-// ĐÃ XÓA BỎ HOÀN TOÀN: Lịch sử tọa độ, Backtracking, Dự đoán Tương lai và Vận tốc.
-// Chân lý duy nhất: Tọa độ Chóp Mũ Hiện Tại.
+// MODULE 4: TARGET KINEMATICS (LÕI ĐỘNG HỌC MỤC TIÊU - ZERO PING EDITION)
+// Tích hợp: Magnetic Inversion (Đảo ngược từ tính, giữ nguyên Khung xương),
+// Zero-Ping Hitscan (T = 0.1s Wind-up), và Bộ lọc Feedforward EMA.
+// ĐÃ XÓA BỎ HOÀN TOÀN TÍNH TOÁN BÙ TRỪ PING.
 // ============================================================================
 class TargetKinematics {
     
@@ -144,7 +146,7 @@ class TargetKinematics {
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.friction = 0.0;
             payload.aim_assist.adhesion = 0.0;
-            payload.aim_assist.snap_weight = -999999.0;
+            payload.aim_assist.snap_weight = -9999.0;
         }
 
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
@@ -153,7 +155,7 @@ class TargetKinematics {
         if (!selfState.anchorPos || selfState.anchorPos.x === 0) return payload; 
 
         let bestTarget = null;
-        let lowestThreatScore = 99999999.0;
+        let lowestThreatScore = 999999.0;
         const currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (_global.__OmniState.camera.prevYaw || 0.0);
         if (payload.aim_yaw !== undefined) _global.__OmniState.camera.prevYaw = payload.aim_yaw;
 
@@ -163,27 +165,32 @@ class TargetKinematics {
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
             
+            // Giữ nguyên tính toàn vẹn của Khung xương (Skeleton Integrity) để chống Ban.
             if (enemy.hitboxes) {
-                // KHUẾCH ĐẠI TỪ TÍNH LÕI SỌ
+                
+                // BƯỚC A: KHUẾCH ĐẠI TỪ TÍNH LÕI SỌ
                 if (enemy.hitboxes.head) {
-                    if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 999999.0;
+                    if (enemy.hitboxes.head.snap_weight !== undefined) enemy.hitboxes.head.snap_weight = 9999.0;
                     if (enemy.hitboxes.head.friction !== undefined) enemy.hitboxes.head.friction = 1.0;
+                    // Ép mức độ ưu tiên cao nhất cho Đầu
                     enemy.hitboxes.head.priority = "HIGHEST"; 
                 }
 
-                // BÓP NÁT TỪ TÍNH THÂN DƯỚI
+                // BƯỚC B: BÓP NÁT TỪ TÍNH CỦA NGỰC VÀ CÁC CHI
                 const junkParts = ['chest', 'spine', 'pelvis', 'legs', 'arms', 'left_arm', 'right_arm', 'left_leg', 'right_leg'];
                 for (let p = 0; p < junkParts.length; p++) {
                     let part = junkParts[p];
                     if (enemy.hitboxes[part]) {
-                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -999999.0;
+                        // Tước quyền hút tâm của Ngực và Tứ chi. 
+                        // Khi mất từ tính, Aim-Assist gốc sẽ trượt lên tìm Đầu.
+                        if (enemy.hitboxes[part].snap_weight !== undefined) enemy.hitboxes[part].snap_weight = -9999.0;
                         if (enemy.hitboxes[part].friction !== undefined) enemy.hitboxes[part].friction = 0.0;
                         enemy.hitboxes[part].priority = "IGNORE";
                     }
                 }
             }
 
-            // --- MA TRẬN ĐÁNH GIÁ MỤC TIÊU (PURE PROXIMITY & FOV) ---
+            // --- MA TRẬN ĐÁNH GIÁ MỤC TIÊU ---
             if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked) continue;
             if (enemy.team_id !== undefined && enemy.team_id === _global.__OmniState.team_id) continue;
             if (!enemy.pos) continue;
@@ -197,11 +204,21 @@ class TargetKinematics {
 
             let threatScore = distance3D; 
 
+            let angleToMe = Math.atan2(-dx, -dz) * (180.0 / Math.PI);
+            let enemyYaw = enemy.aim_yaw || enemy.yaw || 0.0;
+            let isLookingAtMe = Math.abs(this.normalizeAngle(enemyYaw - angleToMe)) < 30.0;
+            if (isLookingAtMe) threatScore -= 200.0; 
+
+            if (enemy.weapon && enemy.weapon.category) {
+                let cat = enemy.weapon.category.toUpperCase();
+                if (cat.includes("SNIPER") || cat.includes("SHOTGUN")) threatScore -= 100.0;
+            }
             let angleToEnemy = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let fovDiff = Math.abs(this.normalizeAngle(angleToEnemy - currentYaw));
             let fovPenalty = fovDiff * (distance3D < 10.0 ? 1.0 : 3.5);
+            const hpMissingBonus = ((enemy.max_hp || 200.0) - (enemy.hp || 200.0)) * 0.8; 
             
-            threatScore = threatScore + fovPenalty;
+            threatScore = threatScore + fovPenalty - hpMissingBonus;
 
             if (threatScore < lowestThreatScore) {
                 lowestThreatScore = threatScore;
@@ -211,44 +228,100 @@ class TargetKinematics {
         }
 
         // ====================================================================
-        // 3. ABSOLUTE PRESENT & ZENITH EXTRACTION (TRÍCH XUẤT ĐỈNH SỌ)
+        // 3. ZERO-PING PREDICTION ENGINE (ĐỘNG CƠ DỰ ĐOÁN XÓA LỖI VĂNG TÂM)
         // ====================================================================
         if (bestTarget) {
             const targetState = _global.__OmniState.target;
+            const tracker = _global.__OmniState.tracker;
+            const currentTime = Date.now();
 
             targetState.id = bestTarget.id;
             targetState.distance = bestTarget.distance;
             
-            // Bắt lấy tọa độ gốc của Cổ/Cằm
-            let baseHead = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
+            // Lấy chính xác tâm của Lõi Sọ làm gốc nội suy đồ họa
+            let headCenter = bestTarget.hitboxes?.head?.pos || { x: bestTarget.pos.x, y: bestTarget.pos.y + 1.5, z: bestTarget.pos.z };
+            let targetAimPos = headCenter;
 
-            // [GIAO THỨC ZENITH]: Tịnh tiến mục tiêu lên Chóp Mũ
-            // Offset 0.18 mét tương đương 18cm, đủ để nhấc bổng tâm súng ra khỏi ngực
-            let zenithYOffset = 0.1; 
-            
-            // Càng gần, góc chúi (Pitch) càng gắt, ta có thể bơm thêm lực nhấc bổng để bù trừ
-            if (bestTarget.distance < 5.0) {
-                zenithYOffset = 0.2; // Cận chiến nhấc cao 22cm
+            // EXPORT 1: Thực tại Đồ họa (Tọa độ Head chuẩn)
+            targetState.pos = { ...targetAimPos };
+
+            if (!tracker[bestTarget.id]) {
+                tracker[bestTarget.id] = { 
+                    history: [], 
+                    velocity: {x:0, y:0, z:0},
+                    lastVelocity: {x:0, y:0, z:0} 
+                };
+                targetState.predicted_pos = { ...targetAimPos }; 
+                targetState.velocity = {x:0, y:0, z:0};
+            } 
+            else {
+                let trackData = tracker[bestTarget.id];
+                
+                trackData.history.unshift({ pos: { ...targetAimPos }, time: currentTime });
+                if (trackData.history.length > 10) trackData.history.pop();
+
+                let prevFrame = trackData.history[1] || trackData.history[0];
+                let dt = (currentTime - prevFrame.time) / 1000.0;
+                
+                if (dt > 0.0 && dt < 0.2) { 
+                    // --------------------------------------------------------
+                    // A. BỘ LỌC VẬN TỐC MƯỢT (FEEDFORWARD SOURCE)
+                    // --------------------------------------------------------
+                    let raw_vx = (targetAimPos.x - prevFrame.pos.x) / dt;
+                    let raw_vy = (targetAimPos.y - prevFrame.pos.y) / dt;
+                    let raw_vz = (targetAimPos.z - prevFrame.pos.z) / dt;
+
+                    let alphaV = 0.5; // Bộ lọc mượt 50%
+                    let vx = (raw_vx * alphaV) + (trackData.velocity.x * (1.0 - alphaV));
+                    let vy = (raw_vy * alphaV) + (trackData.velocity.y * (1.0 - alphaV));
+                    let vz = (raw_vz * alphaV) + (trackData.velocity.z * (1.0 - alphaV));
+                    
+                    trackData.velocity = { x: vx, y: vy, z: vz };
+                    
+                    // EXPORT 2: Vận tốc cho M7
+                    targetState.velocity = { x: vx, y: vy, z: vz };
+
+                    // --------------------------------------------------------
+                    // B. GIA TỐC & HẰNG SỐ THỜI GIAN (ZERO-PING HITSCAN)
+                    // --------------------------------------------------------
+                    let ax = 0, ay = 0, az = 0;
+                    if (trackData.lastVelocity) {
+                        ax = (vx - trackData.lastVelocity.x) / dt;
+                        ay = (vy - trackData.lastVelocity.y) / dt;
+                        az = (vz - trackData.lastVelocity.z) / dt;
+                    }
+                    trackData.lastVelocity = { x: vx, y: vy, z: vz };
+
+                    // [XÓA BỎ HOÀN TOÀN PING BÙ TRỪ]
+                    // Chỉ sử dụng đúng độ trễ hoạt ảnh khởi động của game (Wind-up).
+                    // Hằng số 0.1s (100ms) là mức Lead-time hoàn hảo để tâm súng bám sát đầu địch.
+                    let timeToTarget = 0.10;
+
+                    let accelMagXZ = Math.sqrt(ax*ax + az*az);
+                    let strafeDampener = (accelMagXZ > 40.0) ? 0.2 : ((accelMagXZ > 15.0) ? 0.6 : 1.0);
+
+                    // Toán học Không gian Tương lai Cận Chiến
+                    let predX = targetAimPos.x + (vx * timeToTarget) + (0.5 * ax * timeToTarget * timeToTarget * strafeDampener);
+                    let predZ = targetAimPos.z + (vz * timeToTarget) + (0.5 * az * timeToTarget * timeToTarget * strafeDampener);
+                    let predY = targetAimPos.y + (vy * timeToTarget);
+
+                    // Trọng lực (Chỉ áp dụng để đoán độ Rơi của kẻ địch nhảy)
+                    let speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
+                    let isJumping = Math.abs(vy) > 1.2 && speed <= 12.0; 
+                    if (isJumping) {
+                        predY -= 0.5 * 9.81 * (timeToTarget * timeToTarget);
+                    }
+
+                    // EXPORT 3: Thực tại Tương lai (Cho M8 bẻ góc đạn đạo)
+                    targetState.predicted_pos = { x: predX, y: predY, z: predZ };
+                    
+                } else {
+                    targetState.predicted_pos = { ...targetAimPos };
+                    targetState.velocity = {x:0, y:0, z:0};
+                }
             }
-
-            let zenithPos = {
-                x: baseHead.x,
-                y: baseHead.y + zenithYOffset,
-                z: baseHead.z
-            };
-
-            // ĐỒNG NHẤT KHÔNG GIAN VÀO ĐỈNH CHÓP
-            targetState.pos = { ...zenithPos };
-            targetState.predicted_pos = { ...zenithPos };
-            
-            // Xóa sổ động năng (Không cần tính toán vận tốc nữa)
-            targetState.velocity = { x: 0, y: 0, z: 0 };
-            
         } else {
-            // Reset khi mất mục tiêu
-            _global.__OmniState.target = { 
-                id: null, pos: null, predicted_pos: null, distance: 999999.0, velocity: {x:0, y:0, z:0} 
-            };
+            _global.__OmniState.target = { id: null, pos: null, predicted_pos: null, distance: 9999.0, velocity: {x:0, y:0, z:0} };
         }
 
         return payload;
@@ -256,10 +329,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V11.0 ZENITH MAGNET)
-// Tích hợp: TPP Pivot Offset (Giải mã nghịch lý góc nhìn TPP), Tiền Triệt Tiêu 
-// Nảy Nòng (Pre-emptive Recoil Subtraction), và Nam Châm Vĩnh Cửu 100%.
-// ĐỒNG BỘ: Hoạt động trơn tru với Lõi Zenith của M4.
+// MODULE 7: CAMERA MANIPULATOR (LÕI ĐIỀU HƯỚNG - V7.0 OVERDRIVE SNAPAIM)
+// Tích hợp: Multi-Frame Overdrive (Bứt phá đa khung hình 80ms), Y-Axis Unchained 
+// (Tháo xích trục dọc), Triệt tiêu Ma sát đầm lầy, và Vùng Chết Lượng Tử.
 // ============================================================================
 class CameraManipulator {
     
@@ -276,12 +348,13 @@ class CameraManipulator {
         const weaponState = _global.__OmniState.weapon;
 
         // [ZERO FRICTION]: Triệt tiêu Ma sát "đầm lầy" tại Camera
+        // Tránh bị Game Engine làm chậm khi tâm lướt qua chân/bụng
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.adhesion = 0.0;
             payload.aim_assist.friction = 0.0;
         }
 
-        // Bỏ qua nếu mất mục tiêu (Dữ liệu Hiện tại từ M4 là bắt buộc)
+        // Bỏ qua nếu mất mục tiêu
         if (!targetState.id || !targetState.pos || payload.aim_yaw === undefined) {
             camState.wasFiring = false;
             return payload;
@@ -291,6 +364,14 @@ class CameraManipulator {
         const isScoping = payload.is_scoping || (payload.weapon && payload.weapon.is_scoping);
         const currentTime = Date.now();
         
+        // [MULTI-FRAME TRACKER]: Nhận diện và theo dõi Cửa sổ Thời gian bứt phá
+        const justStartedFiring = isFiring && !camState.wasFiring;
+        if (justStartedFiring) {
+            camState.fireStartTime = currentTime; // Ghi nhận khoảnh khắc chạm cò
+        }
+        
+        // Tính toán thời gian đã xả đạn (mili-giây)
+        const fireElapsed = isFiring ? (currentTime - (camState.fireStartTime || currentTime)) : 0;
         camState.wasFiring = isFiring;
 
         if (!isFiring && !isScoping) {
@@ -299,34 +380,15 @@ class CameraManipulator {
             return payload;
         }
 
-        // ====================================================================
-        // 1. TPP PIVOT OFFSET (TOÁN HỌC KHÔNG GIAN TPP)
-        // ====================================================================
-        // KHÔNG dùng tâm cơ thể làm gốc nữa. Dùng Toán học lượng giác để dựng lại 
-        // chính xác tọa độ 3D của Camera đang lơ lửng phía sau lưng nhân vật.
-        let baseOrigin = selfState.lastAnchor ? selfState.lastAnchor : selfState.anchorPos;
-        let currentYawRad = payload.aim_yaw * (Math.PI / 180.0);
-
-        // Giả lập Camera lùi sau 1.2m, Lệch phải vai 0.4m, Cao 1.8m
-        let rightX = Math.cos(currentYawRad) * 0.4;
-        let rightZ = -Math.sin(currentYawRad) * 0.4;
-        let backX = -Math.sin(currentYawRad) * 1.2;
-        let backZ = -Math.cos(currentYawRad) * 1.2;
-
-        const tppOrigin = {
-            x: baseOrigin.x + rightX + backX,
-            y: baseOrigin.y + 1.8, 
-            z: baseOrigin.z + rightZ + backZ
-        };
+        const origin = selfState.lastAnchor ? 
+            { x: selfState.lastAnchor.x, y: selfState.lastAnchor.y + 1.5, z: selfState.lastAnchor.z } : 
+            { x: selfState.anchorPos.x, y: selfState.anchorPos.y + 1.5, z: selfState.anchorPos.z };
             
-        // ====================================================================
-        // CHÂN LÝ HIỆN TẠI (ZENITH APEX DESTINATION)
-        // ====================================================================
-        const dest = targetState.pos; // Điểm chóp sọ từ M4
+        const dest = targetState.pos; 
 
-        const dx = dest.x - tppOrigin.x;
-        const dy = dest.y - tppOrigin.y;
-        const dz = dest.z - tppOrigin.z;
+        const dx = dest.x - origin.x;
+        const dy = dest.y - origin.y;
+        const dz = dest.z - origin.z;
         const distXZ = Math.sqrt(dx * dx + dz * dz);
 
         let trueYaw = this.normalizeAngle(Math.atan2(dx, dz) * (180.0 / Math.PI));
@@ -344,32 +406,86 @@ class CameraManipulator {
 
         let outputYawStep = 0;
         let outputPitchStep = 0;
-        let disableEMA = false;
+        
+        let disableYawEMA = false;
+        let disablePitchEMA = false;
 
         // ====================================================================
-        // 2. TIỀN TRIỆT TIÊU NẢY NÒNG VÀ KHÓA NAM CHÂM
+        // 1. CHUYỂN ĐỔI VẬN TỐC THÀNH VẬN TỐC GÓC (FEEDFORWARD MATH)
         // ====================================================================
-        
-        // Bắt lấy xung lực nảy màn hình nội bộ do Engine tạo ra khi nổ súng
-        let internalRecoilPitch = 0.0;
-        let internalRecoilYaw = 0.0;
-        if (payload.weapon) {
-            internalRecoilPitch = payload.weapon.recoil_y || payload.weapon.dynamic_recoil_pitch || 0.0;
-            internalRecoilYaw = payload.weapon.recoil_x || payload.weapon.dynamic_recoil_yaw || 0.0;
+        let feedforwardYawStep = 0;
+        let feedforwardPitchStep = 0;
+
+        if (targetState.velocity) {
+            let futureX = dest.x + (targetState.velocity.x * 0.001);
+            let futureY = dest.y + (targetState.velocity.y * 0.001);
+            let futureZ = dest.z + (targetState.velocity.z * 0.001);
+            
+            let futureDx = futureX - origin.x;
+            let futureDy = futureY - origin.y;
+            let futureDz = futureZ - origin.z;
+            let futureDistXZ = Math.sqrt(futureDx*futureDx + futureDz*futureDz);
+
+            let futureYaw = this.normalizeAngle(Math.atan2(futureDx, futureDz) * (180.0 / Math.PI));
+            let futurePitch = this.normalizeAngle(Math.atan2(-futureDy, futureDistXZ) * (180.0 / Math.PI));
+
+            let angularVelYaw = this.normalizeAngle(futureYaw - trueYaw) / 0.001;
+            let angularVelPitch = this.normalizeAngle(futurePitch - truePitch) / 0.001;
+
+            feedforwardYawStep = angularVelYaw * dt;
+            feedforwardPitchStep = angularVelPitch * dt;
         }
 
-        if (isFiring) {
-            // [BÓP CÒ LÀ DÍNH]: Teleport 100% kết hợp Đảo ngược Xung lực.
-            // Game nảy màn hình lên bao nhiêu, ta trừ đi bấy nhiêu để đóng băng tuyệt đối.
-            outputYawStep = errorYaw - internalRecoilYaw;
-            outputPitchStep = errorPitch - internalRecoilPitch;
+        // ====================================================================
+        // 2. GIAO THỨC ĐIỀU HƯỚNG 4 PHA (OVERDRIVE SNAPAIM)
+        // ====================================================================
+        
+        const dynamicDeadzone = isFiring ? 0.8 : 0.35; 
+        const FOV_CLAMP = 45.0; // Giới hạn vẩy tâm ngang chống Spin-bot
+
+        // PHA 1: VÙNG CHẾT LƯỢNG TỬ (TÂM ĐÃ Ở TRONG SỌ)
+        if (Math.abs(errorYaw) <= dynamicDeadzone && Math.abs(errorPitch) <= dynamicDeadzone) {
+            // Tắt kéo PID. Trượt mượt mà theo vận tốc địch.
+            outputYawStep = feedforwardYawStep + errorYaw; 
+            outputPitchStep = feedforwardPitchStep + errorPitch;
             
             camState.integralYaw = 0;
             camState.integralPitch = 0;
-            disableEMA = true; 
+            disableYawEMA = true; disablePitchEMA = true;
         } 
+        // PHA 2: OVERDRIVE SNAPAIM (ĐỘNG CƠ BỨT PHÁ ĐA KHUNG HÌNH - 80ms)
+        else if (isFiring && fireElapsed <= 80 && Math.abs(errorYaw) <= FOV_CLAMP) {
+            // [Y-AXIS UNCHAINED]: Chỉ cần địch trong tầm mắt ngang (Yaw <= 45 độ),
+            // dẫu bạn có đang nhìn xuống gót chân, trục dọc (Pitch) vẫn cho phép dịch chuyển 100%.
+            // [SUSTAINED TELEPORT]: Duy trì lực hút lượng tử này liên tục trong 80ms đầu tiên
+            // để nghiền nát sự giằng co (Frame-fight) của Engine game. Tâm súng không thể rớt!
+            outputYawStep = errorYaw;
+            outputPitchStep = errorPitch;
+            
+            camState.integralYaw = 0;
+            camState.integralPitch = 0;
+            disableYawEMA = true; disablePitchEMA = true;
+        }
+        // PHA 3: ĐỘNG CƠ BỨT PHÁ DÀI HẠN (SẤY > 80ms HOẶC ĐỊCH LỆCH FOV)
+        else if (isFiring) {
+            // Y-Axis: Vẫn giữ Lực đẩy Tuyệt đối 100% để thắng lực hút thân dưới
+            outputPitchStep = errorPitch; 
+
+            // X-Axis: Dùng PID tốc độ cao để lia ngang mượt mà, tránh rung giật màn hình
+            let Kp_yaw = 60.0; 
+            let pidYaw = errorYaw * Kp_yaw;
+            outputYawStep = (pidYaw * dt) + feedforwardYawStep;
+
+            disableYawEMA = true; disablePitchEMA = true;
+
+            // Phanh động năng trục X
+            if (Math.abs(outputYawStep) > Math.abs(errorYaw) && (errorYaw * outputYawStep > 0)) {
+                outputYawStep = errorYaw;
+                camState.integralYaw = 0;
+            }
+        } 
+        // PHA 4: RÀ TÂM MƯỢT MÀ (CHỈ BẬT SCOPE, CHƯA BÓP CÒ)
         else {
-            // [RÀ TÂM MƯỢT MÀ]: Không nổ súng, giữ PID mượt
             let Kp_yaw = 25.0; 
             let Kp_pitch = 25.0;
             let dynamicKd_yaw = 0.2 + (8.0 / (Math.abs(errorYaw) + 0.5));
@@ -384,8 +500,8 @@ class CameraManipulator {
             let pidYaw = (errorYaw * Kp_yaw) + (camState.integralYaw * 0.01) + (derivYaw * dynamicKd_yaw);
             let pidPitch = (errorPitch * Kp_pitch) + (camState.integralPitch * 0.01) + (derivPitch * dynamicKd_pitch);
 
-            outputYawStep = pidYaw * dt;
-            outputPitchStep = pidPitch * dt;
+            outputYawStep = (pidYaw * dt) + feedforwardYawStep;
+            outputPitchStep = (pidPitch * dt) + feedforwardPitchStep;
             
             if (Math.abs(outputPitchStep) > Math.abs(errorPitch)) outputPitchStep = errorPitch;
         }
@@ -394,7 +510,7 @@ class CameraManipulator {
         camState.prevErrorPitch = errorPitch;
 
         // ====================================================================
-        // 3. KÍNH LỌC EMA TẦN SỐ CAO 
+        // 3. KÍNH LỌC EMA TẦN SỐ CAO
         // ====================================================================
         if (camState.emaYaw === undefined) camState.emaYaw = currentYaw;
         if (camState.emaPitch === undefined) camState.emaPitch = currentPitch;
@@ -402,10 +518,12 @@ class CameraManipulator {
         let rawNewYaw = currentYaw + outputYawStep;
         let rawNewPitch = currentPitch + outputPitchStep;
 
-        let alpha = disableEMA ? 1.0 : 0.85;
+        // Tắt làm mượt (alpha=1.0) khi bóp cò để Snapaim 0ms không để lại bóng mờ
+        let alphaYaw = disableYawEMA ? 1.0 : 0.85;
+        let alphaPitch = disablePitchEMA ? 1.0 : 0.85;
 
-        camState.emaYaw = this.normalizeAngle((rawNewYaw * alpha) + (camState.emaYaw * (1.0 - alpha)));
-        camState.emaPitch = this.normalizeAngle((rawNewPitch * alpha) + (camState.emaPitch * (1.0 - alpha)));
+        camState.emaYaw = this.normalizeAngle((rawNewYaw * alphaYaw) + (camState.emaYaw * (1.0 - alphaYaw)));
+        camState.emaPitch = this.normalizeAngle((rawNewPitch * alphaPitch) + (camState.emaPitch * (1.0 - alphaPitch)));
 
         payload.aim_yaw = camState.emaYaw;
         payload.aim_pitch = camState.emaPitch;
@@ -528,7 +646,7 @@ class TriggerCheck {
                 payload.weapon.is_firing = true;
                 
                 // Loại bỏ delay tích tụ của súng (Ví dụ: Charge Buster, súng sạc năng lượng)
-                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 999999.0;
+                if (payload.weapon.charge_time !== undefined) payload.weapon.charge_time = 9999.0;
             }
             
             // Phát sóng tín hiệu (Broadcast Signal) cho các Lõi bên dưới
@@ -543,32 +661,35 @@ class TriggerCheck {
 }
 
 // ============================================================================
-// MODULE 5: SELF KINEMATICS (LÕI ĐỘNG HỌC BẢN THÂN - V10.0 ABSOLUTE BONE SYNC)
-// Tích hợp: Spine Forcing (Cưỡng chế Xương sống Hiện tại), Lerp Nullification 
-// (Triệt tiêu độ trễ Hoạt ảnh 100%), Dynamic Barrel Offset, và Phanh Lượng Tử.
-// ĐỒNG BỘ: Hoàn toàn hướng về tọa độ Hiện Tại Tuyệt Đối của Lõi Sọ.
+// MODULE 5: SELF KINEMATICS (LÕI ĐỘNG HỌC BẢN THÂN - V8.0 MICRO-BRAKING)
+// Tích hợp: 1-Tick Stance Spoofing (Phanh Lượng Tử), Chronos Anchor 
+// (Neo Thời Không T-1), và CQC Origin Spoofing (Dịch chuyển nòng súng).
 // ============================================================================
 class SelfKinematics {
     static processSelfState(payload) {
         const state = _global.__OmniState.self;
         const targetState = _global.__OmniState.target;
         const weaponState = _global.__OmniState.weapon;
-        const camState = _global.__OmniState.camera;
-
+        
+        // Nhận diện trạng thái bóp cò
         const isFiring = weaponState.isFiring || weaponState.triggerFired || payload.is_firing;
 
+        // Khởi tạo bộ nhớ Lịch sử Không gian (Tracking History)
         if (!state.history) state.history = [];
         if (!state.lastAnchor) state.lastAnchor = null;
 
         // ====================================================================
         // TRẠNG THÁI NGHỈ: LIÊN TỤC CẬP NHẬT TỌA ĐỘ (CHỐNG GIẬT LAG)
         // ====================================================================
+        // KHÔNG BAO GIỜ can thiệp vào pos khi đang di chuyển bình thường.
+        // Điều này đảm bảo Server Reconciliation không giật lùi nhân vật.
         if (payload.pos !== undefined) {
             state.history.unshift({ ...payload.pos });
             if (state.history.length > 5) state.history.pop(); 
         }
 
         if (!isFiring) {
+            // Liên tục lưu Anchor (Điểm neo súng) của frame hiện tại
             if (payload.anchorPos !== undefined) {
                 state.lastAnchor = { ...payload.anchorPos };
             }
@@ -576,94 +697,61 @@ class SelfKinematics {
         }
 
         // ====================================================================
-        // 1. ABSOLUTE BONE SYNC & LERP NULLIFICATION (ĐỒNG BỘ XƯƠNG TỨC THỜI)
+        // TRẠNG THÁI KHAI HỎA: KÍCH HOẠT ĐIỂM KỲ DỊ (SINGULARITY)
         // ====================================================================
-        // Bắt cóc mô hình 3D: Ép toàn bộ khung xương quay theo Camera (M7)
-        let avatar = payload.avatar_state || payload.character || payload;
-
-        if (avatar) {
-            // A. Spine Forcing: Chèn thẳng góc quay của M7 vào cơ thể
-            if (camState.emaYaw !== undefined) {
-                if (avatar.body_yaw !== undefined) avatar.body_yaw = camState.emaYaw;
-                if (avatar.torso_yaw !== undefined) avatar.torso_yaw = camState.emaYaw;
-                if (avatar.weapon_yaw !== undefined) avatar.weapon_yaw = camState.emaYaw;
-            }
-            
-            if (camState.emaPitch !== undefined) {
-                if (avatar.body_pitch !== undefined) avatar.body_pitch = camState.emaPitch;
-                if (avatar.torso_pitch !== undefined) avatar.torso_pitch = camState.emaPitch;
-                if (avatar.weapon_pitch !== undefined) avatar.weapon_pitch = camState.emaPitch;
-            }
-
-            // B. Lerp Nullification: Xóa sạch hiệu ứng chuyển cảnh mềm (Blending)
-            // Teleport tư thế ngay lập tức trong 0 mili-giây
-            if (avatar.turn_speed !== undefined) avatar.turn_speed = 99999.0; 
-            if (avatar.turn_animation_time !== undefined) avatar.turn_animation_time = 0.0;
-            if (avatar.blend_weight !== undefined) avatar.blend_weight = 0.0;
-            if (avatar.ik_blend !== undefined) avatar.ik_blend = 1.0; 
-        }
-
-        // C. Cưỡng chế Vector Súng đâm thẳng vào Hiện Tại
-        if (payload.weapon_forward_vector !== undefined && targetState.pos && state.lastAnchor) {
-            let dx = targetState.pos.x - state.lastAnchor.x;
-            let dy = targetState.pos.y - (state.lastAnchor.y + 1.5);
-            let dz = targetState.pos.z - state.lastAnchor.z;
-            let mag = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            if (mag > 0) {
-                payload.weapon_forward_vector = { x: dx/mag, y: dy/mag, z: dz/mag };
-            }
-        }
-
-        // ====================================================================
-        // 2. CHRONOS ANCHOR (NEO VỊ TRÍ)
-        // ====================================================================
+        
+        // 1. CHRONOS ANCHOR (NEO THỜI KHÔNG T-1)
+        // Khóa 'anchorPos' (Bệ phóng đạn) về tọa độ tĩnh lặng của mili-giây trước đó.
         if (payload.anchorPos !== undefined && state.lastAnchor) {
             payload.anchorPos.x = state.lastAnchor.x;
             payload.anchorPos.y = state.lastAnchor.y;
             payload.anchorPos.z = state.lastAnchor.z;
         }
 
-        // ====================================================================
-        // 3. DYNAMIC BARREL OFFSET (CĂN CHỈNH ĐIỂM SINH ĐẠN THEO HIỆN TẠI)
-        // ====================================================================
+        // 2. CQC ORIGIN SPOOFING (DỊCH CHUYỂN NÒNG SÚNG CẬN CHIẾN)
         if (payload.fire_origin !== undefined) {
-            if (targetState.id && targetState.distance < 3.0 && targetState.pos) {
-                // Cận chiến: Nhét nòng súng vào thẳng Sọ não hiện tại của địch
+            if (targetState.id && targetState.distance < 3.0 && targetState.predicted_pos) {
+                // Dịch chuyển điểm sinh đạn vào thẳng Lõi Sọ kẻ thù!
                 payload.fire_origin = {
-                    x: targetState.pos.x,
-                    y: targetState.pos.y,
-                    z: targetState.pos.z - 0.1 
+                    x: targetState.predicted_pos.x,
+                    y: targetState.predicted_pos.y,
+                    z: targetState.predicted_pos.z - 0.1 
                 };
             } 
-            else if (state.lastAnchor && camState.emaYaw !== undefined && camState.emaPitch !== undefined) {
-                // Tầm xa: Tịnh tiến điểm sinh đạn ra khỏi cơ thể 0.8 mét theo trục Camera
-                let yawRad = camState.emaYaw * (Math.PI / 180.0);
-                let pitchRad = camState.emaPitch * (Math.PI / 180.0);
-                
-                let forwardX = Math.sin(yawRad) * Math.cos(pitchRad);
-                let forwardY = -Math.sin(pitchRad);
-                let forwardZ = Math.cos(yawRad) * Math.cos(pitchRad);
-
+            else if (state.lastAnchor) {
                 payload.fire_origin = {
-                    x: state.lastAnchor.x + (forwardX * 0.8),
-                    y: state.lastAnchor.y + 1.5 + (forwardY * 0.8), 
-                    z: state.lastAnchor.z + (forwardZ * 0.8)
+                    x: state.lastAnchor.x,
+                    y: state.lastAnchor.y + 1.5, 
+                    z: state.lastAnchor.z
                 };
             }
         }
 
-        // ====================================================================
-        // 4. MICRO-BRAKING (PHANH LƯỢNG TỬ ĐÓNG BĂNG ĐỘNG NĂNG)
-        // ====================================================================
+        // 3. ANCHOR ROOTING (ĐÓNG BĂNG RỄ SINH HỌC)
         if (payload.body_sway !== undefined) payload.body_sway = 0.0;
         
-        // Triệt tiêu vận tốc truyền vào đạn ở chu kỳ bóp cò đầu tiên
+        // ====================================================================
+        // 4. MICRO-BRAKING (PHANH LƯỢNG TỬ 1-TICK) - [BẢN VÁ TỐI THƯỢNG]
+        // ====================================================================
+        // Thay vì đóng băng vận tốc liên tục gây lỗi giật lùi, chúng ta CHỈ tước đoạt 
+        // vận tốc ở ĐÚNG KHUNG HÌNH DUY NHẤT mà viên đạn đầu tiên thoát nòng (triggerFired = true).
+        // Máy chủ sẽ ghi nhận pha nổ súng này diễn ra trong trạng thái "Đứng im tuyệt đối".
         if (weaponState.triggerFired) {
-            if (payload.velocity !== undefined) payload.velocity = { x: 0.0, y: 0.0, z: 0.0 };
-            if (payload.acceleration !== undefined) payload.acceleration = { x: 0.0, y: 0.0, z: 0.0 };
+            // Xóa sổ gia tốc và vận tốc di chuyển
+            if (payload.velocity !== undefined) {
+                payload.velocity = { x: 0.0, y: 0.0, z: 0.0 };
+            }
+            if (payload.acceleration !== undefined) {
+                payload.acceleration = { x: 0.0, y: 0.0, z: 0.0 };
+            }
+            
+            // Giả mạo trạng thái tĩnh lặng
             if (payload.speed !== undefined) payload.speed = 0.0;
             if (payload.is_moving !== undefined) payload.is_moving = false;
         }
+        // Ở các khung hình tiếp theo (khi đè nút sấy đạn), triggerFired sẽ = false.
+        // Game Engine sẽ tự động bỏ qua khối lệnh trên, trả lại vận tốc thật cho gói tin.
+        // Nhân vật của bạn tiếp tục lướt đi trên màn hình mà không hề bị khựng lại!
 
         return payload;
     }
@@ -837,9 +925,9 @@ class AutoCore {
 }
 
 // ============================================================================
-// MODULE 6: ONE-TAP CORE (LÕI SÁT THƯƠNG THIỆN XẠ - V8.0 MARKSMAN BLADE)
-// Nhiệm vụ: Tối giản hóa, xóa bỏ logic rườm rà của súng bắn tỉa (AWM/M82B).
-// Ép xung tuyệt đối cho súng lục nặng (DE) và súng trường thiện xạ (Woodpecker, SVD).
+// MODULE 6: ONE-TAP CORE (LÕI SÁT THƯƠNG ĐIỂM - V2.3)
+// Nhiệm vụ: Triệt tiêu sai số đạn đơn, ép hồi tâm tức thì và tối ưu hóa
+// phát bắn tử thần. (Nhiệm vụ tự bóp cò đã được giao cho TriggerCheck).
 // ============================================================================
 class OneTapCore {
     static execute(payload) {
@@ -847,31 +935,33 @@ class OneTapCore {
         const selfState = _global.__OmniState.self;
 
         // --------------------------------------------------------------------
-        // 1. TRIỆT TIÊU SAI SỐ VẬT LÝ (ABSOLUTE ZERO SPREAD & RECOIL)
+        // 1. TRIỆT TIÊU SAI SỐ VẬT LÝ SÚNG NGẮM/SÚNG LỤC
         // --------------------------------------------------------------------
         if (payload.weapon) {
-            // Ép độ chính xác tuyệt đối (Không nở tâm dù xả đạn liên tục)
+            // Ép độ chính xác tuyệt đối cho viên đạn (Không nở tâm dù đang di chuyển)
             if (payload.weapon.base_spread !== undefined) payload.weapon.base_spread = 0.0;
             if (payload.weapon.dynamic_spread !== undefined) payload.weapon.dynamic_spread = 0.0;
-            if (payload.weapon.max_spread !== undefined) payload.weapon.max_spread = 0.0;
             
             // Xóa nảy nòng (Recoil)
             if (payload.weapon.recoil_y !== undefined) payload.weapon.recoil_y = 0.0;
             if (payload.weapon.recoil_x !== undefined) payload.weapon.recoil_x = 0.0;
             
-            // [ĐÃ XÓA BỎ]: Lệnh recoil_recovery = 9999.0 của súng bắn tỉa. 
-            // Trả lại sự mượt mà tự nhiên cho các pha sấy/vẩy liên tiếp của SVD/AC80.
+            // CHIẾN THUẬT SNIPER: Ép thời gian hồi tâm (Recoil Recovery) cực nhanh
+            // Giúp màn hình không bị giật nảy lên sau khi bắn AWM/Woodpecker
+            if (payload.weapon.recoil_recovery !== undefined) {
+                payload.weapon.recoil_recovery = 9999.0; 
+            }
 
-            // Xóa mọi hình phạt di chuyển (Hỗ trợ Jump-shot và Run-and-gun hoàn hảo)
+            // Xóa mọi hình phạt di chuyển (Đã được M5 bảo chứng tĩnh lặng)
             if (payload.weapon.inaccuracy_move !== undefined) payload.weapon.inaccuracy_move = 0.0;
             if (payload.weapon.inaccuracy_jump !== undefined) payload.weapon.inaccuracy_jump = 0.0;
-            if (payload.weapon.inaccuracy_crouch !== undefined) payload.weapon.inaccuracy_crouch = 0.0;
         }
 
         // --------------------------------------------------------------------
-        // 2. KHÓA TIA ĐẠN (MARKSMAN RAYCAST OVERRIDE)
+        // 2. KHÓA TIA ĐẠN (RAYCAST OVERRIDE FOR SNIPER)
         // --------------------------------------------------------------------
-        // Cưỡng chế viên đạn găm thẳng vào lõi sọ dẫu M7 (Camera) có lỡ vẩy lệch vài pixel
+        // Ngay cả khi M7 (Camera) xoay chưa đến tâm hoàn hảo tuyệt đối, 
+        // dòng code này sẽ bẻ cong vật lý của tia đạn để găm thẳng vào sọ.
         if (payload.bullet_events && Array.isArray(payload.bullet_events)) {
             
             if (targetState.id && targetState.predicted_pos && selfState.anchorPos) {
@@ -890,14 +980,14 @@ class OneTapCore {
                     if (bullet.ray_dir) {
                         bullet.ray_dir = { ...perfectDir };
                     }
-                    // Gắn nhãn ID mục tiêu để Module 8 (Magic Bullet) biến hóa sát thương
+                    // Gắn nhãn ID mục tiêu để Module 8 biến hóa sát thương
                     bullet.target_id = targetState.id;
                 }
             }
         }
 
         // --------------------------------------------------------------------
-        // 3. THIẾT LẬP SÁT THƯƠNG TỬ THẦN (CROSS-MAP LETHALITY)
+        // 3. THIẾT LẬP SÁT THƯƠNG TỬ THẦN (ONE-SHOT KILL)
         // --------------------------------------------------------------------
         if (payload.damage_report) {
             // Ép Headshot tuyệt đối (Mã xương: 8)
@@ -909,7 +999,7 @@ class OneTapCore {
                 payload.damage_report.armor_penetration = 1.0;
             }
             
-            // Xóa bỏ khoảng cách giảm sát thương (Damage Falloff)
+            // Xóa bỏ khoảng cách giảm sát thương
             // Điều này cực kỳ kinh hoàng vì nó biến khẩu lục Desert Eagle 
             // có thể bắn xa ngang ngửa AWM mà không mất đi 1 giọt sát thương nào.
             if (payload.damage_report.distance_penalty !== undefined) {
@@ -922,23 +1012,23 @@ class OneTapCore {
 }
 
 // ============================================================================
-// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V10.0 ABSOLUTE HITSCAN)
-// Tích hợp: Zero-Time Raycast (Đạn đạo tức thời), Tụ đạn Shotgun (Slug-Shot), 
-// Phân tách Đạn đạo, và Smart Anti-Overlap.
-// ĐÃ XÓA BỎ: Tính toán Bù trừ Vận tốc và Xuyên tường (Ghost Penetration).
-// ĐỒNG BỘ: Bắn thẳng vào không gian Hiện Tại Tuyệt Đối.
+// MODULE 8: MAGIC BULLET CORE (LÕI ĐẠN MA THUẬT - V8.0 BALLISTIC DECOUPLING)
+// Tích hợp: Triệt tiêu Quán tính đạn (Inertia Nullification), Tụ đạn Shotgun 
+// (Slug-Shot), Phân tách Đạn đạo (Silent Raycast), và Smart Anti-Overlap.
 // ============================================================================
 class MagicBulletCore {
     static execute(payload) {
         const targetState = _global.__OmniState.target;
         const selfState = _global.__OmniState.self;
 
-        // Bỏ qua nếu M4 chưa cung cấp tọa độ của Hiện Tại Tuyệt Đối
-        if (!targetState || !targetState.id || !targetState.pos) return payload;
+        // Bỏ qua nếu M4 chưa cung cấp tọa độ tĩnh của điểm kỳ dị
+        if (!targetState || !targetState.id || !targetState.predicted_pos) return payload;
 
         // ====================================================================
         // 1. NGHỊCH ĐẢO SINH TỬ (MISS-TO-HIT INVERSION)
         // ====================================================================
+        // Bắt cóc gói tin báo trượt do lỗi Engine (đạn đập vào tường/tay), 
+        // luyện hóa thành Gói tin Trúng đích.
         if (payload.miss_event || (payload.bullet_event && payload.bullet_event.is_hit === false)) {
             if (payload.miss_event) {
                 payload.hit_event = { ...payload.miss_event }; 
@@ -954,6 +1044,8 @@ class MagicBulletCore {
         // ====================================================================
         // 2. SMART ANTI-OVERLAP (THANH TRỪNG CHỌN LỌC)
         // ====================================================================
+        // CHỈ thu nhỏ Hitbox của những kẻ địch KHÔNG PHẢI là mục tiêu hiện tại.
+        // Giữ nguyên Khung xương mục tiêu chính để Aim-Assist gốc kéo tâm mượt mà.
         if (payload.players && Array.isArray(payload.players)) {
             for (let i = 0; i < payload.players.length; i++) {
                 let enemy = payload.players[i];
@@ -969,49 +1061,48 @@ class MagicBulletCore {
         }
 
         // ====================================================================
-        // 3. ZERO-TIME VECTOR (ĐƯỜNG ĐẠN HIỆN TẠI)
+        // 3. TÍNH TOÁN VECTOR HỘI TỤ (SINGULARITY VECTOR)
         // ====================================================================
         let perfectDir = null;
-        // Điểm sinh đạn giờ đây cực kỳ chuẩn xác vì đã được M5 dời ra nòng súng
+        
         let origin = payload.fire_origin || selfState.lastAnchor || selfState.anchorPos;
         
-        if (origin && targetState.pos) {
-            // Đích đến là Cái Đầu Hiện Tại. Không cần bù trừ, không cần lùi thời gian.
-            let dest = { ...targetState.pos }; 
-            
-            let dx = dest.x - origin.x;
-            let dy = dest.y - (payload.fire_origin ? origin.y : origin.y + 1.5); 
-            let dz = dest.z - origin.z;
-            
+        if (origin) {
+            let dx = targetState.predicted_pos.x - origin.x;
+            let dy = targetState.predicted_pos.y - (payload.fire_origin ? origin.y : origin.y + 1.5); 
+            let dz = targetState.predicted_pos.z - origin.z;
             const mag = Math.sqrt(dx*dx + dy*dy + dz*dz);
             if (mag > 0) perfectDir = { x: dx/mag, y: dy/mag, z: dz/mag };
         }
 
         // ====================================================================
-        // 4. SLUG-SHOT & INERTIA NULLIFICATION (ĐÓNG BĂNG QUÁN TÍNH TỐI ĐA)
+        // 4. SLUG-SHOT & INERTIA NULLIFICATION (ĐÓNG BĂNG QUÁN TÍNH ĐẠN)
         // ====================================================================
         if (perfectDir && payload.bullet_events && Array.isArray(payload.bullet_events)) {
             for (let i = 0; i < payload.bullet_events.length; i++) {
                 let bullet = payload.bullet_events[i];
                 
-                // Gán Vector Lượng giác tuyệt đối
+                // [TỤ ĐẠN SHOTGUN & BẺ CONG VECTOR]
                 bullet.ray_dir = { ...perfectDir };
                 bullet.target_id = targetState.id;
                 
-                // Triệt tiêu sai số ngẫu nhiên của vũ khí
+                // Triệt tiêu góc lệch ngẫu nhiên của vũ khí
                 if (bullet.spread_angle !== undefined) bullet.spread_angle = 0.0;
                 if (bullet.deviation !== undefined) bullet.deviation = 0.0;
 
-                // [CẮT ĐỨT QUÁN TÍNH ENGINE]
-                // Ngăn chặn Game Engine bóp méo đường đạn thẳng tắp của chúng ta.
+                // [BẢN VÁ MỚI]: ĐÓNG BĂNG QUÁN TÍNH (BALLISTIC DECOUPLING)
+                // Cắt đứt mọi liên kết động lượng giữa viên đạn, Camera và chuyển động cơ thể.
+                // Xóa bỏ vận tốc góc sinh ra từ cú vẩy Snapaim cực gắt của M7.
                 if (bullet.angular_velocity !== undefined) bullet.angular_velocity = 0.0;
+                // Xóa bỏ độ trôi và độ cong do gia tốc chạy/trượt của nhân vật tạo ra.
                 if (bullet.momentum_offset !== undefined) bullet.momentum_offset = 0.0;
                 if (bullet.drift !== undefined) bullet.drift = 0.0;
                 if (bullet.trajectory_curve !== undefined) bullet.trajectory_curve = 0.0;
                 if (bullet.velocity_inheritance !== undefined) bullet.velocity_inheritance = 0.0;
                 
-                // [ĐÃ GỠ BỎ TÍNH NĂNG BÓNG MA/XUYÊN TƯỜNG ĐỂ AN TOÀN]
-                // Đạn sẽ tuân thủ vật cản vật lý của map, nhưng chạm vào thịt là Headshot.
+                // Tiêm đặc quyền xuyên vật cản tàng hình
+                if (bullet.collision_obstacle !== undefined) bullet.collision_obstacle = false;
+                if (bullet.is_penetrating !== undefined) bullet.is_penetrating = true;
             }
         }
 
@@ -1022,11 +1113,13 @@ class MagicBulletCore {
             let report = payload.damage_report || payload.hit_event;
             
             report.target_id = targetState.id;
+            
+            // Chốt chặn Tối Hậu: Bất chấp đạn chạm vào đâu, đóng mộc Headshot
             report.hit_bone = 8; 
             report.is_headshot = true;
             
-            // Ép Tọa độ va chạm (hit_pos) trùng khít với Không gian Hiện Tại
-            report.hit_pos = { ...targetState.pos };
+            // Ép Tọa độ va chạm vật lý (hit_pos) trùng khít với 0.1s Tương lai của M4.
+            report.hit_pos = { ...targetState.predicted_pos };
             if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
 
             // Đục xuyên Giáp/Mũ & Xóa giảm sát thương tầm xa
@@ -1034,6 +1127,8 @@ class MagicBulletCore {
             if (report.armor_penetration !== undefined) report.armor_penetration = 1.0;
             if (report.ignore_armor !== undefined) report.ignore_armor = true; 
             if (report.penetration_ratio !== undefined) report.penetration_ratio = 1.0; 
+
+            // [ZERO-PING ARCHITECTURE]: Không can thiệp Timestamp để bảo vệ tài khoản
         }
 
         return payload;
