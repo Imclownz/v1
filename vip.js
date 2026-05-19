@@ -1,8 +1,8 @@
 /**
  * ==============================================================================
- * PROJECT: OMNI-MATRIX V2.3 (PERFECT PIPELINE ARCHITECTURE - FINAL VERSION)
+ * PROJECT: OMNI-MATRIX V2.3 (PERFECT PIPELINE ARCHITECTURE)
  * Pipeline: Sanitizer -> M1(Gun) -> M4(Eyes) -> M7(Camera) -> TriggerCheck -> M5(Stance) -> M2/3/6(Physics) -> M8(Magic)
- * Status: Full system deployed with minimal adjustments as requested.
+ * Status: Framework initialized. Modules pending deployment.
  * ==============================================================================
  */
 
@@ -14,9 +14,10 @@ const _global = typeof globalThis !== 'undefined' ? globalThis : (typeof window 
 if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
     _global.__OmniState = {
         version: "MATRIX_V2.3",
+        // Đã xóa bỏ currentPing
         weaponProfile: { Core: "IGNORE", RequireZeroVelocity: false },
         
-        target: { id: null, pos: null, predicted_pos: null, distance: 999.0 },
+        target: { id: null, pos: null, predicted_pos: null, distance: 9999.0 },
         self: { pos: {x:0, y:0, z:0}, anchorPos: {x:0, y:0, z:0}, vel: {x:0, y:0, z:0}, isPerfectlyStill: false, anchoredFireOrigin: null },
         
         weapon: { isFiring: false, id: "", category: "", triggerFired: false }, 
@@ -32,10 +33,17 @@ if (!_global.__OmniState || _global.__OmniState.version !== "MATRIX_V2.3") {
 }
 
 // ============================================================================
-// MODULE 1: WEAPON CLASSIFIER (ĐÃ ĐƠN GIẢN HÓA - KHÔNG CÒN SNIPER-SPECIFIC)
+// VỎ BỌC CÁC MODULE (SẼ ĐƯỢC ĐỔ CODE VÀO CÁC BƯỚC TIẾP THEO)
+// LƯU Ý: Không xóa các class rỗng này, chúng giữ vai trò định hình scope.
+// ============================================================================
+// ============================================================================
+// MODULE 1: WEAPON CLASSIFIER (LÕI NHẬN DIỆN VŨ KHÍ)
+// Nhiệm vụ: Phân tích siêu dữ liệu súng, quyết định kích hoạt Lõi Sát Thương nào
+// và thiết lập cờ vận tốc (RequireZeroVelocity) cho TriggerBot.
 // ============================================================================
 class WeaponClassifier {
     
+    // Thuật toán nhận diện dựa trên ID, Tên và Danh mục (Category)
     static classify(weaponData) {
         let profile = { 
             Core: "IGNORE", 
@@ -44,26 +52,33 @@ class WeaponClassifier {
         
         if (!weaponData) return profile;
 
+        // Ép kiểu về Chuỗi IN HOA để chống lỗi phân biệt hoa/thường từ Server
         const id = (weaponData.id || "").toString().toUpperCase();
         const name = (weaponData.name || "").toString().toUpperCase();
         const category = (weaponData.category || "").toString().toUpperCase();
 
+        // Gộp chung thành một chuỗi nhận dạng để quét bằng từ khóa
         const identifier = `${id}_${name}_${category}`;
 
-        // 1. SHOTGUN
+        // 1. NHÓM SHOTGUN (Kích hoạt Module 2: Gom tia Laser)
         if (identifier.includes("SHOTGUN") || identifier.includes("M1887") || 
             identifier.includes("M1014") || identifier.includes("SPAS") || 
             identifier.includes("MAG-7") || identifier.includes("TROGON") || identifier.includes("CHARGE")) {
             profile.Core = "SHOTGUN";
         } 
-        // 2. ONETAP / PRECISION (đơn giản hóa, không còn RequireZeroVelocity riêng cho sniper)
+        
+        // 2. NHÓM ONE-TAP / SNIPER (Kích hoạt Module 6: TriggerBot)
         else if (identifier.includes("SNIPER") || identifier.includes("PISTOL") || 
                  identifier.includes("DESERT_EAGLE") || identifier.includes("WOODPECKER") || 
                  identifier.includes("SVD") || identifier.includes("AC80") || 
                  identifier.includes("AWM") || identifier.includes("M82B") || identifier.includes("KAR98")) {
             profile.Core = "ONETAP";
+            // Kích hoạt cờ này để báo cho M5 biết: Bắt buộc phải đóng băng vận tốc
+            // trước khi cho phép M6 tự động bóp cò.
+            profile.RequireZeroVelocity = true; 
         } 
-        // 3. AUTO
+        
+        // 3. NHÓM AUTO / SMG / AR (Kích hoạt Module 3: Khóa chặt luồng đạn)
         else if (identifier.includes("SMG") || identifier.includes("AR") || 
                  identifier.includes("MACHINE") || identifier.includes("LMG") || 
                  identifier.includes("MP40") || identifier.includes("UMP") || 
@@ -72,12 +87,16 @@ class WeaponClassifier {
             profile.Core = "AUTO";
         }
 
+        // Lưu ý: Nếu cầm Lựu Đạn, Đao, Machete, Keo, biến identifier sẽ không khớp
+        // với bất kỳ từ khóa nào ở trên -> Trả về "IGNORE" (Bỏ qua can thiệp).
         return profile;
     }
 
     static processWeaponState(payload) {
         const weaponState = _global.__OmniState.weapon;
 
+        // Trích xuất và đồng bộ trạng thái bóp cò
+        // (Free Fire có thể gửi cờ is_firing ở ngoài root hoặc bên trong object weapon)
         if (payload.is_firing !== undefined) {
             weaponState.isFiring = payload.is_firing;
         }
@@ -87,9 +106,12 @@ class WeaponClassifier {
                 weaponState.isFiring = payload.weapon.is_firing;
             }
             
+            // Nếu có sự thay đổi vũ khí (đổi súng), cập nhật ngay Profile mới
             if (payload.weapon.id !== undefined && payload.weapon.id !== weaponState.id) {
                 weaponState.id = payload.weapon.id;
                 weaponState.category = payload.weapon.category || "";
+                
+                // Chạy thuật toán phân loại và lưu Profile vào Bộ nhớ Tổng
                 _global.__OmniState.weaponProfile = this.classify(payload.weapon);
             }
         }
@@ -127,7 +149,7 @@ class TargetKinematics {
         if (payload.aim_assist !== undefined) {
             payload.aim_assist.friction = 0.0;
             payload.aim_assist.adhesion = 0.0;
-            payload.aim_assist.snap_weight = -999999.0;
+            payload.aim_assist.snap_weight = -9999.0;
         }
 
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
@@ -154,7 +176,7 @@ class TargetKinematics {
             if (enemy.hitboxes) {
                 // ===== HEAD BOOST (CỰC MẠNH KHI BẮN) =====
                 if (enemy.hitboxes.head) {
-                    let headBoost = 999999.0;           // Mặc định rất mạnh
+                    let headBoost = 9999.0;           // Mặc định rất mạnh
                     if (isFiring) {
                         headBoost = 99999.0;          // Siêu mạnh khi đang bắn → native lock vào đầu
                     }
@@ -176,7 +198,7 @@ class TargetKinematics {
                 for (let p = 0; p < junkParts.length; p++) {
                     const part = junkParts[p];
                     if (enemy.hitboxes[part]) {
-                        let bodySuppress = -999999.0;
+                        let bodySuppress = -9999.0;
                         if (isFiring) bodySuppress = -99999.0; // Ép mạnh hơn khi bắn
                         
                         if (enemy.hitboxes[part].snap_weight !== undefined) {
@@ -317,7 +339,7 @@ class TargetKinematics {
             }
         } else {
             _global.__OmniState.target = { 
-                id: null, pos: null, predicted_pos: null, distance: 999999.0, 
+                id: null, pos: null, predicted_pos: null, distance: 9999.0, 
                 velocity: {x:0, y:0, z:0}, isFiringMode: false 
             };
         }
@@ -551,7 +573,7 @@ class TriggerCheck {
         // Lấy dữ liệu từ M4 V3.0
         const tracker = _global.__OmniState.tracker[targetState.id] || {};
         const isFiringMode = targetState.isFiringMode || false; // Từ M4
-        const distance = targetState.distance || 999999;
+        const distance = targetState.distance || 9999;
 
         // ====================================================================
         // 3. HITCHANCE & HEAD-LOCK VIABILITY ENGINE (Tính xác suất dính đầu)
@@ -622,7 +644,7 @@ class TriggerCheck {
                 
                 // Xử lý súng charge (Charge Buster, etc.)
                 if (payload.weapon.charge_time !== undefined) {
-                    payload.weapon.charge_time = 999999.0; // Bỏ delay
+                    payload.weapon.charge_time = 9999.0; // Bỏ delay
                 }
             }
 
@@ -1003,7 +1025,7 @@ class OneTapCore {
 
             // Ép hồi tâm cực nhanh (không giật nảy màn hình sau mỗi phát)
             if (payload.weapon.recoil_recovery !== undefined) {
-                payload.weapon.recoil_recovery = 999999.0;
+                payload.weapon.recoil_recovery = 9999.0;
             }
 
             // Xóa mọi inaccuracy (di chuyển, nhảy, scope)
@@ -1086,7 +1108,13 @@ class OneTapCore {
 }
 
 // ============================================================================
-// MODULE 8: MAGIC BULLET CORE V9.0 (ĐÃ BỎ HOÀN TOÀN XUYÊN TƯỜNG)
+// MODULE 8: MAGIC BULLET CORE V9.0 (BALLISTIC DECOUPLING + 0.2s NATIVE LOCK HIJACKER)
+// Tích hợp: 
+// - Full Miss-to-Hit Inversion trong 0.2s window
+// - Smart Anti-Overlap + Skeleton Integrity
+// - Singularity Vector + Perfect Fire Origin
+// - Advanced Ballistic Decoupling (triệt tiêu mọi quán tính)
+// - Damage Finalization tối thượng + Critical Window Boost
 // ============================================================================
 class MagicBulletCore {
     static execute(payload) {
@@ -1095,13 +1123,17 @@ class MagicBulletCore {
         const weaponState = _global.__OmniState.weapon;
         const camState = _global.__OmniState.camera || {};
 
+        // Kiểm tra critical 0.2s native lock window
         const isCriticalWindow = weaponState.isFiring && camState.fireStartTime 
             ? (Date.now() - camState.fireStartTime) <= 220 
             : false;
 
+        // Bỏ qua nếu chưa có mục tiêu hợp lệ
         if (!targetState || !targetState.id || !targetState.predicted_pos) return payload;
 
-        // 1. MISS-TO-HIT INVERSION
+        // ====================================================================
+        // 1. NGHỊCH ĐẢO SINH TỬ (MISS-TO-HIT INVERSION) - SIÊU MẠNH TRONG 0.2s
+        // ====================================================================
         if (payload.miss_event || (payload.bullet_event && payload.bullet_event.is_hit === false)) {
             if (payload.miss_event) {
                 payload.hit_event = { ...payload.miss_event };
@@ -1114,7 +1146,9 @@ class MagicBulletCore {
             payload.hit_event.target_id = targetState.id;
         }
 
-        // 2. SMART ANTI-OVERLAP
+        // ====================================================================
+        // 2. SMART ANTI-OVERLAP V2 (CHỈ ẢNH HƯỞNG KẺ KHÁC)
+        // ====================================================================
         if (payload.players && Array.isArray(payload.players)) {
             for (let i = 0; i < payload.players.length; i++) {
                 let enemy = payload.players[i];
@@ -1129,7 +1163,9 @@ class MagicBulletCore {
             }
         }
 
-        // 3. SINGULARITY VECTOR + PERFECT ORIGIN
+        // ====================================================================
+        // 3. SINGULARITY VECTOR + PERFECT ORIGIN (NÒNG SÚNG + TIA ĐẠN)
+        // ====================================================================
         let perfectDir = null;
         let origin = payload.fire_origin || selfState.lastAnchor || selfState.anchorPos;
         
@@ -1141,17 +1177,22 @@ class MagicBulletCore {
             if (mag > 0) perfectDir = { x: dx/mag, y: dy/mag, z: dz/mag };
         }
 
-        // 4. BALLISTIC DECOUPLING (không xuyên tường)
+        // ====================================================================
+        // 4. BALLISTIC DECOUPLING V2 (ĐÓNG BĂNG QUÁN TÍNH HOÀN TOÀN)
+        // ====================================================================
         if (perfectDir && payload.bullet_events && Array.isArray(payload.bullet_events)) {
             for (let i = 0; i < payload.bullet_events.length; i++) {
                 let bullet = payload.bullet_events[i];
                 
+                // Ép ray_dir + target_id
                 bullet.ray_dir = { ...perfectDir };
                 bullet.target_id = targetState.id;
                 
+                // Triệt tiêu mọi sai số vũ khí
                 if (bullet.spread_angle !== undefined) bullet.spread_angle = 0.0;
                 if (bullet.deviation !== undefined) bullet.deviation = 0.0;
 
+                // Decoupling toàn diện (Free Fire fields)
                 if (bullet.angular_velocity !== undefined) bullet.angular_velocity = 0.0;
                 if (bullet.momentum_offset !== undefined) bullet.momentum_offset = 0.0;
                 if (bullet.drift !== undefined) bullet.drift = 0.0;
@@ -1159,24 +1200,41 @@ class MagicBulletCore {
                 if (bullet.velocity_inheritance !== undefined) bullet.velocity_inheritance = 0.0;
                 if (bullet.gravity_influence !== undefined) bullet.gravity_influence = 0.0;
                 if (bullet.wind_effect !== undefined) bullet.wind_effect = 0.0;
+
+                // Xuyên vật cản + penetration max
+                if (bullet.collision_obstacle !== undefined) bullet.collision_obstacle = false;
+                if (bullet.is_penetrating !== undefined) bullet.is_penetrating = true;
+
+                // Bonus trong critical window
+                if (isCriticalWindow) {
+                    if (bullet.penetration_power !== undefined) bullet.penetration_power = 9999.0;
+                }
             }
         }
 
-        // 5. DAMAGE FINALIZATION (HEADSHOT TỐI ĐA - KHÔNG XUYÊN TƯỜNG)
+        // ====================================================================
+        // 5. DAMAGE FINALIZATION + HEADSHOT FORCE (TỐI HẬU)
+        // ====================================================================
         if (payload.damage_report || payload.hit_event) {
             let report = payload.damage_report || payload.hit_event;
             
             report.target_id = targetState.id;
+            
+            // Ép headshot tuyệt đối
             report.hit_bone = 8; 
             report.is_headshot = true;
             
+            // Hit position = predicted head
             report.hit_pos = { ...targetState.predicted_pos };
             if (report.ray_dir && perfectDir) report.ray_dir = { ...perfectDir };
 
+            // Xóa giảm sát thương + max penetration
             if (report.distance_penalty !== undefined) report.distance_penalty = 0.0;
             if (report.armor_penetration !== undefined) report.armor_penetration = 1.0;
             if (report.ignore_armor !== undefined) report.ignore_armor = true; 
+            if (report.penetration_ratio !== undefined) report.penetration_ratio = 1.0;
 
+            // Critical window bonus (tăng sát thương nhẹ)
             if (isCriticalWindow && report.damage_multiplier !== undefined) {
                 report.damage_multiplier = 1.15;
             }
@@ -1187,7 +1245,7 @@ class MagicBulletCore {
 }
 
 // ============================================================================
-// BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.7)
+// BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.7 - ZERO PING EDITION)
 // ============================================================================
 class MatrixDispatcher {
     
@@ -1215,6 +1273,8 @@ class MatrixDispatcher {
 
     processPayload(payload) {
         if (!payload) return payload;
+
+        // ĐÃ XÓA: Bộ thu thập độ trễ mạng (Dynamic Latency Tracker)
 
         payload = this.sanitizeTelemetry(payload);
         payload = WeaponClassifier.processWeaponState(payload);
