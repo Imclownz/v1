@@ -161,6 +161,13 @@ class TargetKinematics {
 
         const isFiring = weaponState.isFiring || weaponState.triggerFired || payload.is_firing || false;
         const currentTime = Date.now();
+        if (!isFiring) {
+            if (!camState.lastKineTime) camState.lastKineTime = 0;
+            if (currentTime - camState.lastKineTime < 15) {
+                return payload; // Bỏ qua nhịp này, giữ nguyên tọa độ cũ để tiết kiệm CPU
+            }
+            camState.lastKineTime = currentTime;
+        }
         
         // Cửa sổ thời gian 0.2s (200ms)
         const fireElapsed = isFiring && camState.fireStartTime 
@@ -1051,58 +1058,28 @@ class MagicBulletCore {
 }
 
 // ============================================================================
-// BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.8)
+// BỘ ĐIỀU PHỐI TỔNG (MATRIX DISPATCHER V2.8 - ZERO STUTTER)
 // Nhiệm vụ: Đệ quy Payload, tiệt trùng Telemetry và vận hành tuần tự các Module
 // ============================================================================
 class MatrixDispatcher {
     
+    // [FIX 1]: ZERO-GC SANITIZER (Tiệt trùng không xả rác bộ nhớ)
     sanitizeTelemetry(obj) {
         if (!obj || typeof obj !== 'object') return obj;
-
-        const blacklistedKeywords = ['report', 'hackkill', 'cheat', 'telemetry', 'exception', 'T_31_', 'T_33_', 'T_34_'];
-        const keys = Object.keys(obj);
-        
-        for (let i = 0; i < keys.length; i++) {
-            const key = keys[i];
-            const lowerKey = key.toLowerCase();
-
-            if (blacklistedKeywords.some(keyword => lowerKey.includes(keyword))) {
-                delete obj[key]; 
-                continue;
-            }
-
-            if (obj[key] && typeof obj[key] === 'object') {
-                obj[key] = this.sanitizeTelemetry(obj[key]);
+        // Chỉ quét các key khả nghi rõ ràng, không dùng Object.keys() bừa bãi
+        if (obj.eventName || obj.cmd || obj.type) {
+            const str = JSON.stringify(obj).toLowerCase();
+            if (str.includes('report') || str.includes('hackkill') || str.includes('telemetry')) {
+                return {}; // Vô hiệu hóa gói tin báo cáo
             }
         }
         return obj;
     }
 
     processPayload(payload) {
-        if (!payload) return payload;
+        if (!payload || typeof payload !== 'object') return payload;
 
-        // Tiệt trùng dữ liệu báo cáo máy chủ
-        payload = this.sanitizeTelemetry(payload);
-        
-        // --- CHẠY MODULE 1 ---
-        payload = WeaponClassifier.execute(payload);
-
-        // --- CÁC MODULE TIẾP THEO (M4, M7, M5...) SẼ ĐƯỢC CHÈN VÀO ĐÂY SAU ---
-        if (_global.__OmniState.weaponProfile && _global.__OmniState.weaponProfile.Core !== "IGNORE") {
-            payload = TargetKinematics.execute(payload);
-            payload = CameraManipulator.execute(payload);
-            payload = TriggerCheck.execute(payload);
-            payload = SelfKinematics.execute(payload);
-
-            const core = _global.__OmniState.weaponProfile.Core;
-            if (core === "SHOTGUN") payload = ShotgunCore.execute(payload);
-            else if (core === "AUTO") payload = AutoCore.execute(payload);
-            else if (core === "ONETAP") payload = OneTapCore.execute(payload);
-
-            payload = MagicBulletCore.execute(payload);
-        }
-
-        // Đệ quy tìm kiếm sâu các nhánh dữ liệu để xử lý toàn diện
+        // Đệ quy tìm kiếm sâu các nhánh dữ liệu (Làm trước để lấy đúng gốc data)
         const rootKeys = ['data', 'events', 'payload', 'messages', 'vessels'];
         for (let i = 0; i < rootKeys.length; i++) {
             const key = rootKeys[i];
@@ -1115,6 +1092,35 @@ class MatrixDispatcher {
                     payload[key] = this.processPayload(payload[key]);
                 }
             }
+        }
+
+        // ====================================================================
+        // [FIX 2]: FAST BYPASS GATE (LƯỚI LỌC SIÊU TỐC CỨU FPS)
+        // Nếu gói tin không chứa dữ liệu cần thiết (chỉ là xoay màn hình), 
+        // TRẢ VỀ NGAY LẬP TỨC! Không tính toán toán học nặng.
+        // ====================================================================
+        const hasActionableData = payload.players || payload.weapon || payload.bullet_events || payload.damage_report || payload.camera || payload.aim_pitch !== undefined;
+        
+        if (!hasActionableData) {
+            return payload; // Khách VIP đi thẳng, miễn kiểm tra!
+        }
+
+        // --- NẾU LỌT QUA LƯỚI, MỚI BẮT ĐẦU XỬ LÝ ---
+        payload = this.sanitizeTelemetry(payload);
+        payload = WeaponClassifier.execute(payload);
+
+        if (_global.__OmniState.weaponProfile && _global.__OmniState.weaponProfile.Core !== "IGNORE") {
+            payload = TargetKinematics.execute(payload);
+            payload = CameraManipulator.execute(payload);
+            payload = TriggerCheck.execute(payload);
+            payload = SelfKinematics.execute(payload);
+
+            const core = _global.__OmniState.weaponProfile.Core;
+            if (core === "SHOTGUN") payload = ShotgunCore.execute(payload);
+            else if (core === "AUTO") payload = AutoCore.execute(payload);
+            else if (core === "ONETAP") payload = OneTapCore.execute(payload);
+
+            payload = MagicBulletCore.execute(payload);
         }
 
         return payload;
