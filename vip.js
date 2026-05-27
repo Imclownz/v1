@@ -99,16 +99,15 @@ class WeaponClassifier {
 }
 
 // ============================================================================
-// MODULE 4: TARGET KINEMATICS V20.0 – SPLIT-TRACKING & CQC BYPASS
-// Nhiệm vụ: Ly khai tọa độ Camera (Không dự đoán) và Tọa độ Đạn (Dự đoán).
-//           Hủy diệt từ tính vùng bụng ở cự ly <2m. Tracking theo Delta Xương Đầu.
+// MODULE 4: TARGET KINEMATICS V21.0 – HITBOX ANNIHILATION & BONE DELTA
+// Nhiệm vụ: Xóa sổ 100% thể tích và ma sát của thân dưới, biến kẻ địch 
+//           thành "Chỉ có Đầu". Tách biệt tọa độ Camera và Đạn.
 // ============================================================================
 class TargetKinematics {
     
-    // --- HẰNG SỐ VẬT LÝ ENGINE ---
-    static ASPECT_RATIO = 1.77;       // Tỉ lệ màn hình 16:9
-    static MAX_HUMAN_SPEED = 8.5;     // Kẹp vận tốc trần chống vọt tâm do lag
-    static HEAD_RADIUS = 0.16;        // Bán kính sọ để tính toán Quét Mép (Edge Scan)
+    static ASPECT_RATIO = 1.77;       
+    static MAX_HUMAN_SPEED = 8.5;     
+    static HEAD_RADIUS = 0.16;        
 
     static normalizeAngle(angle) {
         while (angle > 180.0) angle -= 360.0;
@@ -131,11 +130,8 @@ class TargetKinematics {
         if (payload.anchorPos !== undefined) selfState.anchorPos = { ...payload.anchorPos };
         if (payload.velocity !== undefined) selfState.vel = { ...payload.velocity };
 
-        // Tước quyền Aim-Assist mặc định của Game để không bị tranh giành lực hút
         if (payload.aim_assist !== undefined) {
-            payload.aim_assist.friction = 0.0; 
-            payload.aim_assist.adhesion = 0.0; 
-            payload.aim_assist.snap_weight = -99999.0;
+            payload.aim_assist.friction = 0.0; payload.aim_assist.adhesion = 0.0; payload.aim_assist.snap_weight = -99999.0;
         }
 
         if (!payload || !payload.players || !Array.isArray(payload.players)) return payload;
@@ -159,7 +155,7 @@ class TargetKinematics {
         let lowestFov = 99999.0;
 
         // ====================================================================
-        // 1. DYNAMIC W2S FOV & CQC FRICTION KILL (GIẢI QUYẾT KẸT TÂM DƯỚI ĐẤT/BỤNG)
+        // 1. DYNAMIC FOV & TOTAL HITBOX ANNIHILATION (KHAI TỬ THÂN DƯỚI)
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             const enemy = payload.players[i];
@@ -173,7 +169,6 @@ class TargetKinematics {
             const distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
             if (distance3D > 280.0) continue; 
 
-            // Cầu FOV cực đại 180 độ ở cận chiến để cứu những pha tâm để dưới chân
             let dynamicFovLimit = distance3D < 3.5 ? 180.0 : (distance3D > 20.0 ? 12.0 : 45.0 - distance3D);
 
             let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
@@ -186,18 +181,23 @@ class TargetKinematics {
 
             if (fov2D > dynamicFovLimit) continue;
 
-            // [GIẢI QUYẾT VẤN ĐỀ 3 & 5]: CQC FRICTION KILL (Hủy diệt từ tính Thân dưới)
+            // --- VŨ KHÍ TỐI THƯỢNG: XÓA SỔ THỂ TÍCH VẬT LÝ ---
             if (enemy.hitboxes) {
-                // Nếu địch ở quá gần (<2.0m), xóa sổ mọi lực hút vào ngực, bụng, tay chân.
-                // Ép Camera phải trượt qua vùng "chân không" này để phi thẳng lên Đầu.
-                let junkBones = distance3D < 2.0 
-                    ? ['chest', 'spine1', 'spine', 'pelvis', 'legs', 'arms', 'neck'] 
-                    : ['pelvis', 'legs', 'arms', 'bone_Hips_Dummy'];
-                
-                for (let p = 0; p < junkBones.length; p++) {
-                    if (enemy.hitboxes[junkBones[p]]) {
-                        enemy.hitboxes[junkBones[p]].snap_weight = -999999.0;
-                        enemy.hitboxes[junkBones[p]].priority = "IGNORE";
+                const allBones = Object.keys(enemy.hitboxes);
+                for (let b = 0; b < allBones.length; b++) {
+                    let boneName = allBones[b].toLowerCase();
+                    // Nếu không phải là Đầu hoặc Cổ -> Biến thành không khí
+                    if (!boneName.includes('head') && !boneName.includes('neck')) {
+                        enemy.hitboxes[allBones[b]].snap_weight = -999999.0;
+                        enemy.hitboxes[allBones[b]].priority = "IGNORE";
+                        enemy.hitboxes[allBones[b]].radius = 0.0001; // Bóp nát bán kính xương
+                        enemy.hitboxes[allBones[b]].magnetism = 0.0; // Triệt tiêu nam châm hút
+                        enemy.hitboxes[allBones[b]].adhesion = 0.0;
+                        enemy.hitboxes[allBones[b]].friction = 0.0;  // Xóa ma sát làm chậm tâm
+                    } else {
+                        // Ép toàn bộ từ tính của Game tập trung vào sọ
+                        enemy.hitboxes[allBones[b]].snap_weight = 999999.0;
+                        enemy.hitboxes[allBones[b]].magnetism = 1.0; 
                     }
                 }
             }
@@ -210,9 +210,6 @@ class TargetKinematics {
             }
         }
 
-        // ====================================================================
-        // 2. BONE DELTA TRACKING & ANIMATION LOCK (GIẢI QUYẾT ĐỊCH NHẢY/LÁCH)
-        // ====================================================================
         const targetState = state.target;
 
         if (bestTarget) {
@@ -223,8 +220,6 @@ class TargetKinematics {
             targetState.currentFov2D = bestTarget.fov2D;
 
             let headPos = { ...bestTarget.pos };
-            let silentAimPos = { ...bestTarget.pos };
-
             if (bestTarget.hitboxes) {
                 if (bestTarget.hitboxes.head?.pos) {
                     headPos = bestTarget.hitboxes.head.pos;
@@ -233,16 +228,6 @@ class TargetKinematics {
                     headPos = bestTarget.hitboxes.neck.pos;
                     targetState.currentBoneHash = boneMap.NECK;
                 }
-                
-                // Mặc định Camera ngắm ngực (Silent Aim)
-                if (bestTarget.hitboxes.spine1?.pos) silentAimPos = bestTarget.hitboxes.spine1.pos;
-                else if (bestTarget.hitboxes.spine?.pos) silentAimPos = bestTarget.hitboxes.spine.pos;
-                else silentAimPos = headPos; 
-            }
-
-            // [GIẢI QUYẾT VẤN ĐỀ 3 CẬN CHIẾN]: Ép Camera ngắm đầu nếu địch < 2.5m
-            if (bestTarget.distance < 2.5) {
-                silentAimPos = { ...headPos };
             }
 
             targetState.pos = { ...headPos };
@@ -254,7 +239,6 @@ class TargetKinematics {
             let prevFrame = trackData.history[1] || trackData.history[0];
             let dt = Math.min(Math.max((currentTime - prevFrame.time) / 1000.0, 0.001), 0.033);
 
-            // Đo lường vận tốc dựa trên BONE DELTA (Độ dịch chuyển riêng của cái Đầu)
             let raw_vx = (headPos.x - prevFrame.pos.x) / dt;
             let raw_vy = (headPos.y - prevFrame.pos.y) / dt;
             let raw_vz = (headPos.z - prevFrame.pos.z) / dt;
@@ -265,21 +249,13 @@ class TargetKinematics {
                 raw_vx *= ratio; raw_vy *= ratio; raw_vz *= ratio;
             }
             
-            let signX_old = Math.sign(trackData.velocity.x), signX_new = Math.sign(raw_vx);
-            let signZ_old = Math.sign(trackData.velocity.z), signZ_new = Math.sign(raw_vz);
-            
-            let alphaX = (signX_old !== signX_new && Math.abs(raw_vx) > 1.5) ? 0.98 : 0.75;
-            let alphaZ = (signZ_old !== signZ_new && Math.abs(raw_vz) > 1.5) ? 0.98 : 0.75;
+            let alphaX = (Math.sign(trackData.velocity.x) !== Math.sign(raw_vx) && Math.abs(raw_vx) > 1.5) ? 0.98 : 0.75;
+            let alphaZ = (Math.sign(trackData.velocity.z) !== Math.sign(raw_vz) && Math.abs(raw_vz) > 1.5) ? 0.98 : 0.75;
 
             trackData.velocity.x = (raw_vx * alphaX) + (trackData.velocity.x * (1 - alphaX));
             trackData.velocity.y = (raw_vy * 0.85) + (trackData.velocity.y * 0.15);
             trackData.velocity.z = (raw_vz * alphaZ) + (trackData.velocity.z * (1 - alphaZ));
             
-            targetState.velocity = { ...trackData.velocity };
-
-            // ====================================================================
-            // 3. MULTI-POINT EDGE SCANNING (ĐÓN LÕNG MÉP SỌ)
-            // ====================================================================
             let edgeOffsetX = 0, edgeOffsetZ = 0;
             let speedXZ = Math.sqrt(trackData.velocity.x**2 + trackData.velocity.z**2);
             
@@ -290,27 +266,17 @@ class TargetKinematics {
                 edgeOffsetZ = dirZ * this.HEAD_RADIUS;
             }
 
-            // ====================================================================
-            // 4. SPLIT-TRACKING ARCHITECTURE (KHẮC PHỤC VỌT TÂM TẦM XA)
-            // ====================================================================
-            
-            // [A. TỌA ĐỘ CHO MAGIC BULLET - M8]: Đạn cần đón lõng tương lai
-            let bullet_t = 0.025; // 25ms lead aim
-            if (bestTarget.distance > 20.0) bullet_t = 0.010; // Giảm thiểu nội suy tầm xa
+            let bullet_t = bestTarget.distance > 20.0 ? 0.010 : 0.025; 
 
+            // Đạn đoán tương lai
             targetState.predicted_pos = { 
                 x: headPos.x + (trackData.velocity.x * bullet_t) + edgeOffsetX, 
-                y: headPos.y, // Khóa chết trục Y theo Animation (Chống Bunny Hop)
+                y: headPos.y, // Khóa chết trục Y 
                 z: headPos.z + (trackData.velocity.z * bullet_t) + edgeOffsetZ 
             };
 
-            // [B. TỌA ĐỘ CHO CAMERA - M7]: Màn hình tuyệt đối KHÔNG ĐƯỢC DỰ ĐOÁN
-            // Đây là chìa khóa chống lại việc tâm súng bị văng lố qua đầu địch khi bắn AR/SMG
-            targetState.silent_predicted_pos = {
-                x: silentAimPos.x,
-                y: silentAimPos.y, 
-                z: silentAimPos.z 
-            };
+            // Camera ngắm thẳng Đầu thực tại (Không dùng Silent Aim Ngực nữa)
+            targetState.silent_predicted_pos = { x: headPos.x, y: headPos.y, z: headPos.z };
 
         } else {
             targetState.id = null; targetState.predicted_pos = null; targetState.silent_predicted_pos = null;
@@ -321,9 +287,9 @@ class TargetKinematics {
 }
 
 // ============================================================================
-// MODULE 7: CAMERA MANIPULATOR V20.0 – ABS BRAKING & BEZIER CURVE SWEEP
-// Nhiệm vụ: Vẩy tâm theo đường cong né vùng ngực, Phanh ABS chống vọt tâm,
-//           Mở khóa vẩy tâm (Spray Transfer) và Dịch chuyển 2 pha.
+// MODULE 7: CAMERA MANIPULATOR V21.0 – ANTI-GRAVITY THRUST & ABS BRAKING
+// Nhiệm vụ: Bơm lực hút tịnh tiến đẩy Camera thẳng lên đầu, Khuếch đại lực 
+//           vuốt tay của người chơi lên 3 lần, Phanh ABS đóng băng khi chạm sọ.
 // ============================================================================
 class CameraManipulator {
     
@@ -339,7 +305,6 @@ class CameraManipulator {
         const weaponState = state.weapon;
         const camState = state.camera;
 
-        // Reset trạng thái nếu ngừng bắn hoặc mất mục tiêu
         if (!targetState.id || !weaponState.isFiring || !targetState.predicted_pos) {
             camState.warpPhase = 0; 
             camState.smoothDragY = 0;
@@ -351,9 +316,6 @@ class CameraManipulator {
         if (!camState.fireStartTime) camState.fireStartTime = Date.now();
         const fireDuration = Date.now() - camState.fireStartTime;
 
-        // ==========================================================
-        // 1. TRACKING ĐÀ VUỐT (CHUẨN BỊ CHO PHANH ABS)
-        // ==========================================================
         let rawDragY = 0, rawDragX = 0;
         if (payload.touch_delta) {
             rawDragX = payload.touch_delta.x || 0;
@@ -366,20 +328,12 @@ class CameraManipulator {
         camState.smoothDragY = (rawDragY * 0.6) + ((camState.smoothDragY || 0) * 0.4);
         camState.smoothDragX = (rawDragX * 0.6) + ((camState.smoothDragX || 0) * 0.4);
 
-        // ==========================================================
-        // 2. DYNAMIC IGNORANCE & SPRAY TRANSFER (CHUYỂN MỤC TIÊU)
-        // ==========================================================
         let isSwipingHard = (Math.abs(rawDragX) > 3.0 || Math.abs(rawDragY) > 3.0);
         
-        // Mở khóa Camera sau 150ms nếu vuốt mạnh để vẩy sang kẻ địch khác
         if (fireDuration > 150 && isSwipingHard) {
-            if (payload.touch_delta) {
-                payload.touch_delta.x *= 0.7; // Dampening
-                payload.touch_delta.y *= 0.7;
-            }
+            if (payload.touch_delta) { payload.touch_delta.x *= 0.7; payload.touch_delta.y *= 0.7; }
             return payload; 
         } else {
-            // Đang trong pha Khóa cứng -> Tước mọi quyền vuốt
             if (payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
             if (payload.input_drag) payload.input_drag = { x: 0, y: 0 };
             if (payload.joystick_delta) payload.joystick_delta = { x: 0, y: 0 }; 
@@ -390,15 +344,7 @@ class CameraManipulator {
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
         let origin = payload.fire_origin || state.self.anchorPos;
         
-        // ==========================================================
-        // 3. NHẬN ĐIỂM NGẮM TỪ M4 (TỌA ĐỘ KHÔNG DỰ ĐOÁN)
-        // ==========================================================
-        // M4 đã Split-Tracking: Camera chỉ ngắm vào thực tại, Đạn mới đoán tương lai.
-        const useSilentAim = targetState.currentFov2D > 15.0 || targetState.distance < 6.0;
-        let dest = (useSilentAim && targetState.silent_predicted_pos) 
-                   ? targetState.silent_predicted_pos 
-                   : targetState.predicted_pos;       
-
+        let dest = targetState.silent_predicted_pos; // Trực tiếp trỏ vào Đầu, không qua Ngực
         let dx = dest.x - origin.x, dy = dest.y - origin.y, dz = dest.z - origin.z;
         let distXZ = Math.sqrt(dx * dx + dz * dz) || 0.0001;
 
@@ -408,52 +354,51 @@ class CameraManipulator {
         let rawErrorPitch = this.normalizeAngle(targetPitch - currentPitch);
         let rawErrorYaw = this.normalizeAngle(targetYaw - currentYaw);
 
-        // ==========================================================
-        // 4. BÉZIER CURVE SWEEP (GIẢI QUYẾT TÂM Ở GÓC XẤU)
-        // ==========================================================
-        // Nếu tâm đang ở dưới chân/bụng (lệch > 12 độ), nếu kéo thẳng lên sẽ bị khựng
-        // do ma sát của Ngực. Ta tạo đường cong lượn ra ngoài vùng ma sát!
         let curveYawOffset = 0;
         if (Math.abs(rawErrorPitch) > 12.0) {
-            // Toán học Bezier: Tính % quãng đường (Progress)
-            let progress = Math.min(Math.abs(rawErrorPitch) / 50.0, 1.0);
-            let curveFactor = Math.sin(progress * Math.PI); // Đường cong hình Sin (Lưỡi liềm)
-            
-            let curveDir = rawErrorYaw >= 0 ? 1 : -1; // Vòng ra ngoài theo hướng đang lệch
-            curveYawOffset = curveFactor * 15.0 * curveDir; // Bẻ cong tối đa 15 độ
+            let progress = Math.min(Math.abs(rawErrorPitch) / 45.0, 1.0);
+            let curveFactor = Math.sin(progress * Math.PI); 
+            let curveDir = rawErrorYaw >= 0 ? 1 : -1; 
+            curveYawOffset = curveFactor * 12.0 * curveDir; 
         }
         let curvedTargetYaw = targetYaw + curveYawOffset;
 
-        // ==========================================================
-        // 5. PHANH ABS CẢM ỨNG & COUNTER-INERTIA (CHỐNG VỌT TÂM)
-        // ==========================================================
         let recoilY = payload.weapon ? (payload.weapon.recoil_y || payload.weapon.recoil_accumulation || 0.0) : 0.0;
         let recoilX = payload.weapon ? (payload.weapon.recoil_x || 0.0) : 0.0;
 
-        let inertiaOffsetY = 0, inertiaOffsetX = 0;
+        // ==========================================================
+        // 5. ANTI-GRAVITY THRUST & ASYMMETRIC DRAG (BƠM LỰC ĐẨY TÂM)
+        // ==========================================================
+        let thrustPitch = 0;
+        let thrustYaw = 0;
 
-        if (targetState.distance > 10.0) {
-            if (Math.abs(rawErrorPitch) < 3.5) {
-                // [PHANH ABS KÍCH HOẠT]: Tâm vừa chạm vào khu vực đầu (Sai số < 3.5 độ)
-                // Đóng băng đà vuốt bằng cách bơm bù trừ âm GẤP 2.5 LẦN lực vuốt của bạn
-                inertiaOffsetY = camState.smoothDragY * 2.5; 
+        if (Math.abs(rawErrorPitch) > 3.0) {
+            // [A. Lực hút vô hình]: Tự động kéo tâm lên đầu 15% mỗi frame (bất chấp người chơi không vuốt)
+            thrustPitch = rawErrorPitch * 0.15; 
+            
+            // [B. Khuếch đại lực tay Bất đối xứng]: 
+            if (Math.sign(camState.smoothDragY) === Math.sign(rawErrorPitch)) {
+                // Người chơi đang vuốt tay HƯỚNG VỀ PHÍA ĐẦU -> Nhân 3.5 lần lực vuốt để Tốc biến lên sọ
+                thrustPitch += (camState.smoothDragY * 3.5); 
             } else {
-                // Đang trong quá trình vẩy lên -> Chỉ bù trừ nhẹ 1.2 lần Input Buffer
-                inertiaOffsetY = camState.smoothDragY * 1.2;
+                // Người chơi vuốt NGƯỢC HƯỚNG (VD: tâm đang ở bụng, lại cố vuốt xuống đất) -> Triệt tiêu 90% lực
+                thrustPitch += (camState.smoothDragY * 0.1); 
             }
-            inertiaOffsetX = camState.smoothDragX * 1.2;
+        } else {
+            // [C. PHANH ABS KHI CHẠM SỌ]: Tâm đã vào rìa đầu (Sai số < 3.0 độ)
+            // Đóng băng đà vuốt bằng cách bơm bù trừ âm GẤP 2.5 LẦN lực vuốt dư thừa
+            thrustPitch = rawErrorPitch; // Gắn chết vào mục tiêu
+            thrustPitch -= (camState.smoothDragY * 2.5); // Phản lực hãm phanh
         }
 
-        let idealPitch = targetPitch - recoilY - inertiaOffsetY;
-        let idealYaw = curvedTargetYaw - recoilX - inertiaOffsetX;
+        // Áp dụng lực đẩy và trừ độ giật súng
+        let idealPitch = currentPitch + thrustPitch - recoilY;
+        let idealYaw = curvedTargetYaw - recoilX;
 
         let errorPitch = this.normalizeAngle(idealPitch - currentPitch);
         let errorYaw = this.normalizeAngle(idealYaw - currentYaw);
         let totalError = Math.sqrt(errorPitch*errorPitch + errorYaw*errorYaw);
 
-        // ==========================================================
-        // 6. TWO-PHASE WARP (DỊCH CHUYỂN 2 PHA AN TOÀN)
-        // ==========================================================
         let nextPitch, nextYaw;
         if (camState.warpPhase === undefined) camState.warpPhase = 0;
 
@@ -473,9 +418,6 @@ class CameraManipulator {
             nextYaw = idealYaw;
         }
 
-        // ==========================================================
-        // 7. ABSOLUTE ZERO DEADZONE
-        // ==========================================================
         let finalErrorPitch = this.normalizeAngle(nextPitch - currentPitch);
         let finalErrorYaw = this.normalizeAngle(nextYaw - currentYaw);
 
@@ -493,9 +435,6 @@ class CameraManipulator {
             payload.aim_yaw = nextYaw;
         }
 
-        // ==========================================================
-        // 8. CONSTRAINT BREAKER
-        // ==========================================================
         if (payload.camera_constraints) {
             payload.camera_constraints.max_pitch_speed = 99999.0;
             payload.camera_constraints.max_yaw_speed = 99999.0;
