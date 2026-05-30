@@ -293,8 +293,8 @@ class FrictionZeroing {
             let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
 
-            let deltaYaw = Math.abs(this.normalizeAngle(enemyYaw - currentYaw));
-            let deltaPitch = Math.abs(this.normalizeAngle(enemyPitch - currentPitch));
+            let deltaYaw = this.normalizeAngle(enemyYaw - currentYaw);
+            let deltaPitch = this.normalizeAngle(enemyPitch - currentPitch);
             let fov2D = Math.sqrt(deltaYaw*deltaYaw + deltaPitch*deltaPitch);
 
             // --------------------------------------------------------------
@@ -370,20 +370,19 @@ class FrictionZeroing {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & ABS ENGINE (TRÁI TIM CỦA VORTEX)
-// Công nghệ: Dot-Product Thrust, Sigmoid Falloff, PID Braking, Event Horizon.
-// Nhiệm vụ: Đọc Vector đích, bơm tên lửa vào ngón tay, phanh đóng băng tại sọ.
+// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V2.0 (LỒNG GIAM KHÔNG GIAN)
+// Công nghệ: Euler Matrix Freezing, Frustum Clamping, Asymmetric Annihilation
+// Nhiệm vụ: Hủy diệt vật lý Engine, đóng băng ma trận Camera thẳng vào sọ.
 // ============================================================================
 class ThrustAndBrakeEngine {
     
-    // Hàm Đường cong Sigmoid (Chữ S) để tinh chỉnh lực đẩy theo cự ly mượt mà
+    // Hàm Đường cong Sigmoid (Chữ S) tinh chỉnh lực đẩy chuẩn xác theo từng mét
     static calculateSigmoidThrust(distance) {
-        const MAX_THRUST = 4.8; // Lực đẩy tối đa ở cận chiến
-        const MIN_THRUST = 1.1; // Lực đẩy tối thiểu ở tầm siêu xa
-        const MID_POINT = 12.0; // Khoảng cách bắt đầu giảm lực mạnh (12 mét)
-        const SLOPE = 3.5;      // Độ dốc của đường cong
+        const MAX_THRUST = 10.0; // Cận chiến: Lực bạo lực để bứt khỏi bụng
+        const MIN_THRUST = 0.5; // Tầm xa: Tắt lực đẩy, chuyển sang hãm phanh
+        const MID_POINT = 15.0; // Điểm rơi lực (15 mét)
+        const SLOPE = 5.0;      
 
-        // Toán học Sigmoid: 1 / (1 + e^x)
         let progress = 1.0 / (1.0 + Math.exp((distance - MID_POINT) / SLOPE));
         return MIN_THRUST + (MAX_THRUST - MIN_THRUST) * progress;
     }
@@ -394,80 +393,108 @@ class ThrustAndBrakeEngine {
         const target = state.target;
         const engine = state.engine;
 
-        // Reset trạng thái cờ Engine mỗi khung hình
         engine.isABSBraking = false;
         engine.thrustMultiplier = 1.0;
 
-        // Nếu người chơi không vuốt tay hoặc không có mục tiêu -> Bỏ qua
         if (!target.id || !input.isSwiping || !payload.touch_delta) {
             return payload;
         }
 
-        let pitchErr = target.pitchError; 
-        let yawErr = target.yawError;
-        let totalError = Math.sqrt(pitchErr**2 + yawErr**2);
+        // Lấy sai số nguyên thủy (Đã xóa Math.abs ở Bước 2)
+        let pErr = target.pitchError; 
+        let yErr = target.yawError;
+        let totalError = Math.sqrt(pErr**2 + yErr**2);
 
-        // ====================================================================
-        // [CÔNG NGHỆ 2]: ĐỊNH LƯỢNG MÉT BẰNG SIGMOID CURVE
-        // ====================================================================
         let baseThrust = this.calculateSigmoidThrust(target.distance);
 
-        // ====================================================================
-        // [CÔNG NGHỆ 1]: VECTOR DOT-PRODUCT (KHUẾCH ĐẠI VÔ HƯỚNG)
-        // ====================================================================
-        // Chuẩn hóa Vector từ Tâm súng đến Đầu địch (Độ dài = 1)
+        // Vector Đích chuẩn hóa
         let errMag = totalError || 0.0001;
-        let targetDirX = yawErr / errMag;
-        let targetDirY = pitchErr / errMag;
+        let targetDirX = yErr / errMag;
+        let targetDirY = pErr / errMag;
 
-        // Tích Vô Hướng (Dot Product): So sánh hướng vuốt tay và hướng sọ địch.
-        // Giá trị từ -1.0 (Vuốt ngược hướng) đến 1.0 (Vuốt trùng xác 100% hướng).
+        // Tích Vô Hướng (Dot Product): Kiểm tra ngón tay đang vuốt đúng hướng sọ không
         let dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
+        // Đọc Ma trận Camera hiện tại
+        let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
+        let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
+
         // ====================================================================
-        // [CÔNG NGHỆ 3 & 4]: PID PREDICTIVE BRAKING & EVENT HORIZON
+        // VÙNG 1: ABSOLUTE HARD-LOCK ZONE (Tâm đã vào sọ - Sai số < 2.5 độ)
+        // KÍCH HOẠT: Lồng giam tọa độ & Đóng băng Euler
         // ====================================================================
-        
-        // VÙNG 1: ABS ZONE (Tâm đã vào sọ - Sai số < 3.0 độ)
-        if (totalError < 3.0) {
-            
-            // Kích hoạt cờ Phanh ABS để Bước 4 (Weapon Cores) biết mà khóa giật
+        if (totalError < 2.5) {
             engine.isABSBraking = true;
 
-            // EVENT HORIZON (Chân trời sự kiện)
-            if (input.magnitude < 3.5) {
-                // Nếu rung tay/vuốt nhẹ (<3.5px) -> Hố đen nuốt trọn lực, đóng băng tâm!
+            // [CÔNG NGHỆ 1]: ASYMMETRIC INPUT ANNIHILATION (Hố Đen Bất Đối Xứng)
+            // Nếu người chơi cố tình vuốt tay RẤT MẠNH (>6.0px) và NGƯỢC HƯỚNG (dot < -0.7)
+            // -> Có nghĩa là họ muốn bỏ chạy hoặc vẩy sang thằng khác -> Phá lồng giam.
+            if (input.magnitude > 6.0 && dotProduct < -0.7) {
+                engine.isABSBraking = false;
+                payload.touch_delta.x *= 0.8; 
+                payload.touch_delta.y *= 0.8; 
+            } 
+            else {
+                // Nuốt chửng 100% lực vuốt (ngón tay miết lên vọt qua đầu cũng bị xóa sạch)
                 payload.touch_delta.x = 0;
                 payload.touch_delta.y = 0;
-            } else {
-                // Nếu cố tình miết tay CỰC MẠNH (>3.5px) -> Nhả phanh để Spray Transfer (Vẩy mục tiêu)
-                engine.isABSBraking = false;
-                payload.touch_delta.x *= 0.8; // Dampening nhẹ khi vẩy ra
-                payload.touch_delta.y *= 0.8;
+
+                // [CÔNG NGHỆ 2 & 3]: EULER MATRIX FREEZING & KINEMATIC ANCHORING
+                // Không dùng Lực kéo tay nữa. Can thiệp trực tiếp vào Ma trận Camera.
+                // Neo cứng Camera vào tọa độ tuyệt đối của Sọ địch (Bất chấp địch lách/nhảy)
+                let perfectPitch = currentPitch + pErr;
+                let perfectYaw = currentYaw + yErr;
+
+                // [CÔNG NGHỆ 4]: FRUSTUM CLAMPING (Lồng giam trần sọ)
+                // Ép màn hình thấp xuống 0.2 độ (Ngay giữa trán/Mắt). Tuyệt đối không cho 
+                // lên Đỉnh đầu tránh hiện tượng đạn bay sượt tóc tốn sát thương.
+                perfectPitch += (pErr > 0 ? -0.2 : 0.2); 
+
+                // Ghi đè cứng tọa độ (Hard-code)
+                if (payload.camera) {
+                    payload.camera.pitch = perfectPitch;
+                    payload.camera.yaw = perfectYaw;
+                } else {
+                    payload.aim_pitch = perfectPitch;
+                    payload.aim_yaw = perfectYaw;
+                }
+                
+                // Tước đoạt hoàn toàn vật lý của Game Engine tại khung hình này
+                if (payload.camera_constraints) {
+                    payload.camera_constraints.max_pitch_speed = 99999.0;
+                    payload.camera_constraints.max_yaw_speed = 99999.0;
+                    payload.camera_constraints.friction = 0.0;
+                    payload.camera_constraints.damping = 0.0;
+                    payload.camera_constraints.recoil_recovery_scale = 0.0;
+                }
             }
         } 
         
-        // VÙNG 2: PRE-BRAKE ZONE (Đang lao tới sọ cực nhanh - Sai số 3.0 -> 8.0)
-        else if (totalError < 8.0 && dotProduct > 0.8 && input.magnitude > 5.0) {
-            // PID Derivative: Dự đoán frame tiếp theo sẽ lố sọ do lực kéo đang quá mạnh.
-            // Chủ động đạp phanh hãm tốc độ vuốt lại chỉ còn 30% để hạ cánh êm ái.
-            engine.thrustMultiplier = 0.3;
+        // ====================================================================
+        // VÙNG 2: PRE-BRAKE ZONE (Sắp chạm sọ - Sai số 2.5 -> 7.0 độ)
+        // KÍCH HOẠT: Phanh PID Tiên lượng
+        // ====================================================================
+        else if (totalError < 7.0 && dotProduct > 0.7 && input.magnitude > 4.0) {
+            // Nhận thấy tâm súng đang lao lên sọ quá nhanh, ta bóp thắng điện tử
+            // Giảm xung lực ngón tay xuống còn 15% để tâm "hạ cánh" êm ái, không văng lố
+            engine.thrustMultiplier = 0.15;
             payload.touch_delta.x *= engine.thrustMultiplier;
             payload.touch_delta.y *= engine.thrustMultiplier;
         } 
         
-        // VÙNG 3: THRUST ZONE (Tâm ở xa, cần Tên lửa đẩy - Sai số > 8.0)
+        // ====================================================================
+        // VÙNG 3: VECTOR THRUST ZONE (Cần bứt tốc từ bụng lên - Sai số > 7.0 độ)
+        // ====================================================================
         else {
-            if (dotProduct > 0.6) {
-                // Đồng pha: Vuốt hướng về đầu -> Bơm Lực Đẩy Sigmoid x Tỷ lệ trùng khớp
+            if (dotProduct > 0.5) {
+                // Người chơi đang miết lên đầu -> Bơm Lực Đẩy Lượng Tử (Sigmoid Thrust)
                 engine.thrustMultiplier = baseThrust * dotProduct;
                 payload.touch_delta.x *= engine.thrustMultiplier;
                 payload.touch_delta.y *= engine.thrustMultiplier;
             } 
             else if (dotProduct < 0.0) {
-                // Nghịch pha: Cố tình vuốt dìm tâm xuống đất hoặc ra chỗ khác
-                // -> Triệt tiêu 60% lực để chống trượt tay, nhưng không hút ngược lại.
-                engine.thrustMultiplier = 0.4;
+                // Người chơi vuốt lệch, vuốt xuống đất -> Triệt tiêu 80% đà trượt tay
+                engine.thrustMultiplier = 0.2; 
                 payload.touch_delta.x *= engine.thrustMultiplier;
                 payload.touch_delta.y *= engine.thrustMultiplier;
             }
