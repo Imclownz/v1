@@ -78,7 +78,7 @@ class InputInterceptor {
         // 2. KỸ THUẬT LỌC NHIỄU "SUB-PIXEL EMA SMOOTHING"
         // Hệ số Alpha = 0.65: Tin tưởng 65% vào lực vuốt hiện tại, 
         // giữ lại 35% lực vuốt của Frame trước để bù đắp nếu bị rớt Frame cảm ứng.
-        const ALPHA = 0.65;
+        const ALPHA = 0.45;
         
         // Khởi tạo giá trị ban đầu nếu chưa có
         if (inputState.smoothX === undefined) inputState.smoothX = 0;
@@ -94,7 +94,7 @@ class InputInterceptor {
         // 4. BỘ LỌC MICRO-DEADZONE (CHỐNG RUNG TAY)
         // Nếu lực vuốt nhỏ hơn 0.5 pixel (dấu hiệu của việc ngón tay đang nghỉ 
         // hoặc thở nhẹ trên màn hình), ta triệt tiêu nó về 0 để súng không bị trôi.
-        if (mag < 0.5) {
+        if (mag < 1.0) {
             inputState.smoothX = 0;
             inputState.smoothY = 0;
             inputState.magnitude = 0;
@@ -214,9 +214,9 @@ class WeaponAnalyzer {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER & EPSILON FRICTION ZEROING
-// Công nghệ: Ma trận chấm điểm đa biến, Phóng tia nhộng 3D (Capsule Cast),
-//            Lách Anti-Cheat bằng Epsilon Bypass và Dời trọng tâm xương.
+// BƯỚC 2: TARGET SCANNER V3.5 (BATTLE ROYALE OPTIMIZED EDITION)
+// Công nghệ: Pre-culling, Team/Vehicle Filters, CPU-Efficient Math.
+// Nhiệm vụ: Xử lý mượt mà lobby 50 người, không giật lag, khóa chuẩn xác.
 // ============================================================================
 class FrictionZeroing {
     
@@ -231,131 +231,126 @@ class FrictionZeroing {
         
         if (!payload.players || !Array.isArray(payload.players)) return payload;
 
-        // Lấy tọa độ bản thân (Dùng fire_origin hoặc anchorPos)
         let origin = payload.fire_origin || payload.anchorPos;
         if (!origin || (origin.x === 0 && origin.y === 0)) return payload;
 
-        // Lấy góc nhìn hiện tại của Camera
         let currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (payload.camera ? payload.camera.yaw : 0.0);
         let currentPitch = payload.aim_pitch !== undefined ? payload.aim_pitch : (payload.camera ? payload.camera.pitch : 0.0);
 
         let bestTarget = null;
         let lowestDangerScore = 999999.0;
+        let previousTargetId = state.target.id; 
 
         // ====================================================================
-        // A. QUÉT MỤC TIÊU & EPSILON BYPASS (LÁCH ANTI-CHEAT)
+        // A. BỘ LỌC SINH TỒN 50 NGƯỜI (TỐI ƯU HÓA CPU TUYỆT ĐỐI)
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             let enemy = payload.players[i];
             
-            if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked || !enemy.pos) continue;
+            // 1. LỌC RÁC CƠ BẢN (DEAD, KNOCKED, TEAMMATES, VEHICLES)
+            if (!enemy || !enemy.pos) continue;
+            if (enemy.is_dead || enemy.hp <= 0) continue;
             
-            // Xác định tọa độ Đầu/Cổ
+            // [QUAN TRỌNG NHẤT SINH TỒN]: Bỏ qua Đồng đội, Kẻ thù bị Knock, Lái xe, Nhảy dù
+            if (enemy.is_teammate || (origin.team_id !== undefined && enemy.team_id === origin.team_id)) continue;
+            if (enemy.is_knocked || enemy.in_vehicle || enemy.is_parachuting) continue;
+            
+            // 2. LỌC KHOẢNG CÁCH NHANH (PRE-CULLING CHỐNG LAG)
+            // Thay vì dùng Căn bậc hai (Math.sqrt) cho cả 50 người gây nặng máy,
+            // Ta dùng phép trừ hình vuông (Chebyshev distance) cực nhẹ.
+            let dx = enemy.pos.x - origin.x;
+            let dz = enemy.pos.z - origin.z;
+            
+            // Tầm quét Rada tối đa: 150 mét (Vượt quá bỏ qua luôn để CPU thở)
+            if (Math.abs(dx) > 150.0 || Math.abs(dz) > 150.0) continue;
+
+            let dy = enemy.pos.y - origin.y;
+            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            
+            // ====================================================================
+            // B. QUÉT MỤC TIÊU & HỦY DIỆT VẬT LÝ TỨ CHI
+            // ====================================================================
             let headPos = enemy.pos;
             if (enemy.hitboxes) {
                 if (enemy.hitboxes.head && enemy.hitboxes.head.pos) headPos = enemy.hitboxes.head.pos;
                 else if (enemy.hitboxes.neck && enemy.hitboxes.neck.pos) headPos = enemy.hitboxes.neck.pos;
                 
-                // --------------------------------------------------------------
-                // [CÔNG NGHỆ 3]: GHOSTING & EPSILON BYPASS
-                // Không set ma sát về 0 để tránh cờ Heuristic của Server.
-                // Ép bán kính xương thành số siêu nhỏ và dời thân dưới lún xuống đất.
-                // --------------------------------------------------------------
                 const allBones = Object.keys(enemy.hitboxes);
                 for (let b = 0; b < allBones.length; b++) {
                     let boneName = allBones[b].toLowerCase();
                     let bone = enemy.hitboxes[allBones[b]];
 
                     if (boneName.includes('head') || boneName.includes('neck')) {
-                        // Giữ nguyên hoặc mở rộng nhẹ sọ để hút đạn
                         if (bone.radius) bone.radius = 0.25; 
+                        bone.magnetism = 1.0; 
+                        bone.snap_weight = 99999.0;
                     } else {
-                        // Biến thân dưới thành không khí (Epsilon Size)
                         if (bone.radius !== undefined) bone.radius = 0.0001;
-                        
-                        // Đỉnh cao tàng hình: Dời trọng tâm của Ngực/Bụng lún xuống đất 1.5 mét
-                        // Ma sát của game sẽ hút xuống gót chân địch thay vì hút vào ngực, 
-                        // tạo đà trơn tuột cho ngón tay bạn vút thẳng lên trên!
+                        bone.magnetism = 0.0;
+                        bone.friction = 0.0;
+                        bone.snap_weight = -99999.0;
                         if (bone.pos && bone.pos.z) bone.pos.z -= 1.5;
                     }
                 }
             }
 
-            // Tính toán Không gian 3D
-            let dx = headPos.x - origin.x;
-            let dy = headPos.y - origin.y;
-            let dz = headPos.z - origin.z;
-            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            
-            if (distance3D > 250.0) continue; // Bỏ qua địch ngoài tầm radar
-
             let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
             let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
 
-            let deltaYaw = this.normalizeAngle(enemyYaw - currentYaw);
-            let deltaPitch = this.normalizeAngle(enemyPitch - currentPitch);
-            let fov2D = Math.sqrt(deltaYaw*deltaYaw + deltaPitch*deltaPitch);
+            let rawDeltaYaw = this.normalizeAngle(enemyYaw - currentYaw);
+            let rawDeltaPitch = this.normalizeAngle(enemyPitch - currentPitch);
+            
+            let absDeltaYaw = Math.abs(rawDeltaYaw);
+            let absDeltaPitch = Math.abs(rawDeltaPitch);
+            let fov2D = Math.sqrt(absDeltaYaw*absDeltaYaw + absDeltaPitch*absDeltaPitch);
 
-            // --------------------------------------------------------------
-            // [CÔNG NGHỆ 2]: VOLUMETRIC CAPSULE CAST (Tia Nhộng 3D)
-            // FOV mở rộng cực đại (180 độ) ở khoảng cách < 3m, và thu hẹp dần.
-            // Bắt tuyệt đối không có góc chết cận chiến.
-            // --------------------------------------------------------------
+            // W2S OFF-SCREEN CULLING (Bộ lọc khung hình)
+            if (absDeltaYaw > 80.0 || absDeltaPitch > 60.0) continue;
+
             let capsuleFovLimit = (distance3D < 3.0) ? 180.0 : ((120.0 / distance3D) + 12.0);
+            
+            // STICKY FOV (Nam châm bám dính)
+            let isStickyTarget = (enemy.id === previousTargetId);
+            if (isStickyTarget) {
+                capsuleFovLimit *= 1.35; 
+            }
+
             if (fov2D > capsuleFovLimit) continue;
 
             // ====================================================================
-            // B. MA TRẬN CHẤM ĐIỂM (AI TARGETING)
+            // C. MA TRẬN CHẤM ĐIỂM AI ADAPTIVE
             // ====================================================================
-            
-            // 1. Chuẩn hóa các biến số (Tỷ lệ 0.0 -> 1.0)
             let distScore = Math.min(distance3D / 150.0, 1.0);
-            let fovScore = Math.min(fov2D / 180.0, 1.0);
-            let hpScore = (enemy.hp || 200.0) / 200.0;
+            let fovScore = Math.min(fov2D / (capsuleFovLimit || 180.0), 1.0);
 
-            // --------------------------------------------------------------
-            // [CÔNG NGHỆ 4]: STANCE & LOS FILTERING (Bộ lọc Tư thế & Vật cản)
-            // --------------------------------------------------------------
             let stancePenalty = 1.0;
-            
-            // Nếu độ cao của đầu địch (headPos.z hoặc headPos.y tùy map) thấp hơn
-            // Camera của bạn 0.8m -> Bọn chúng đang Nằm bò hoặc Bị Knock.
-            // Phạt hệ số x4.0 để hệ thống tự động ưu tiên bắn thằng đang đứng sau lưng nó!
-            let heightDiff = origin.y - headPos.y; // Hoặc origin.z tùy Engine cấu hình trục lên
-            if (heightDiff > 0.8) {
-                stancePenalty *= 4.0; 
-            }
-
-            // Nếu địch đang nấp sau gốc cây/Bức tường bông
+            // Trong Sinh Tồn, có thể bạn đứng trên đồi bắn xuống, nên bỏ qua phạt độ cao
+            // Chỉ phạt khi địch nấp tường
             if (enemy.is_behind_cover) {
-                stancePenalty *= 20.0; // Phạt cực nặng, gần như loại bỏ
+                stancePenalty *= 20.0; 
             }
 
-            // --------------------------------------------------------------
-            // [CÔNG NGHỆ 1]: TỔNG HỢP MULTI-FACTOR SCORING
-            // Trọng số: 55% Góc ngắm, 35% Khoảng cách, 10% Lượng máu
-            // --------------------------------------------------------------
-            let dangerScore = ((fovScore * 0.55) + (distScore * 0.35) + (hpScore * 0.10)) * stancePenalty;
+            let stickyBonus = isStickyTarget ? 0.70 : 1.0; // Tăng độ dính trong combat đông người
+            let dangerScore = ((fovScore * 0.65) + (distScore * 0.35)) * stancePenalty * stickyBonus;
 
             if (dangerScore < lowestDangerScore) {
                 lowestDangerScore = dangerScore;
                 bestTarget = {
                     id: enemy.id,
                     distance: distance3D,
-                    deltaPitch: deltaPitch, // Lưu lại Sai số Pitch...
-                    deltaYaw: deltaYaw      // ...và Yaw để cung cấp cho Phanh ABS ở Bước 3
+                    deltaPitch: rawDeltaPitch, 
+                    deltaYaw: rawDeltaYaw      
                 };
             }
         }
 
         // ====================================================================
-        // C. BÁO CÁO KẾT QUẢ CHO ĐỘNG CƠ VORTEX (BƯỚC 3)
+        // D. BÁO CÁO KẾT QUẢ CHO ĐỘNG CƠ VORTEX (BƯỚC 3)
         // ====================================================================
         if (bestTarget) {
             state.target.id = bestTarget.id;
             state.target.distance = bestTarget.distance;
-            // Hai biến sinh tử dành cho Phanh ABS:
             state.target.pitchError = bestTarget.deltaPitch; 
             state.target.yawError = bestTarget.deltaYaw;     
         } else {
@@ -370,19 +365,17 @@ class FrictionZeroing {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V2.0 (LỒNG GIAM KHÔNG GIAN)
-// Công nghệ: Euler Matrix Freezing, Frustum Clamping, Asymmetric Annihilation
-// Nhiệm vụ: Hủy diệt vật lý Engine, đóng băng ma trận Camera thẳng vào sọ.
+// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V3.1 (HARDCODED THRESHOLD)
+// Công nghệ: Hardcoded Tap/Hold, Magnetic Cushion, Inner Deadzone, Sub-pixel Remainder.
 // ============================================================================
 class ThrustAndBrakeEngine {
     
-    // Hàm Đường cong Sigmoid (Chữ S) tinh chỉnh lực đẩy chuẩn xác theo từng mét
+    // Hàm Đường cong Sigmoid tinh chỉnh lực đẩy Vector
     static calculateSigmoidThrust(distance) {
-        const MAX_THRUST = 10.0; // Cận chiến: Lực bạo lực để bứt khỏi bụng
-        const MIN_THRUST = 0.5; // Tầm xa: Tắt lực đẩy, chuyển sang hãm phanh
-        const MID_POINT = 15.0; // Điểm rơi lực (15 mét)
-        const SLOPE = 5.0;      
-
+        const MAX_THRUST = 6.5; 
+        const MIN_THRUST = 0.1; 
+        const MID_POINT = 10.0; 
+        const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance - MID_POINT) / SLOPE));
         return MIN_THRUST + (MAX_THRUST - MIN_THRUST) * progress;
     }
@@ -392,7 +385,29 @@ class ThrustAndBrakeEngine {
         const input = state.input;
         const target = state.target;
         const engine = state.engine;
+        const weapon = state.weapon;
 
+        // Khởi tạo Bộ đệm phần dư thập phân (Sub-pixel Remainder)
+        if (engine.remX === undefined) { engine.remX = 0; engine.remY = 0; }
+
+        // ====================================================================
+        // [ĐÃ ĐIỀU CHỈNH]: PHÂN BIỆT TAP/HOLD BẰNG THÔNG SỐ CỨNG (HARDCODED)
+        // ====================================================================
+        const currentTime = Date.now();
+        if (weapon.isFiring && !engine.wasFiring) {
+            engine.fireStartTime = currentTime; // Vừa chạm cò
+        }
+        engine.wasFiring = weapon.isFiring;
+
+        // Tính thời gian đã đè cò (mili-giây)
+        let currentDuration = weapon.isFiring ? (currentTime - (engine.fireStartTime || 0)) : 0;
+        
+        // THÔNG SỐ CỨNG: 150ms. 
+        // Dưới 150ms -> Tap (bắn nhấp vẩy tâm). Trên 150ms -> Hold (Đè cò sấy cứng tâm).
+        const HARD_TAP_THRESHOLD = 150; 
+        engine.isTapping = (currentDuration < HARD_TAP_THRESHOLD);
+
+        // Reset trạng thái cờ Engine
         engine.isABSBraking = false;
         engine.thrustMultiplier = 1.0;
 
@@ -400,105 +415,110 @@ class ThrustAndBrakeEngine {
             return payload;
         }
 
-        // Lấy sai số nguyên thủy (Đã xóa Math.abs ở Bước 2)
         let pErr = target.pitchError; 
         let yErr = target.yawError;
         let totalError = Math.sqrt(pErr**2 + yErr**2);
 
         let baseThrust = this.calculateSigmoidThrust(target.distance);
-
-        // Vector Đích chuẩn hóa
         let errMag = totalError || 0.0001;
         let targetDirX = yErr / errMag;
         let targetDirY = pErr / errMag;
-
-        // Tích Vô Hướng (Dot Product): Kiểm tra ngón tay đang vuốt đúng hướng sọ không
         let dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
-        // Đọc Ma trận Camera hiện tại
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
 
+        // Đọc lực vuốt nguyên thủy + Cộng dồn phần dư từ Frame trước
+        let rawX = payload.touch_delta.x + engine.remX;
+        let rawY = payload.touch_delta.y + engine.remY;
+
         // ====================================================================
-        // VÙNG 1: ABSOLUTE HARD-LOCK ZONE (Tâm đã vào sọ - Sai số < 2.5 độ)
-        // KÍCH HOẠT: Lồng giam tọa độ & Đóng băng Euler
+        // VÙNG 1: INNER DEADZONE - VÙNG CHÂN KHÔNG TÀNG HÌNH (Sai số < 0.4 độ)
         // ====================================================================
-        if (totalError < 2.5) {
+        if (totalError < 0.4) {
+            engine.isABSBraking = true; // Bật cờ cho Bước 4 biến đạn thành Laser
+            // Trả lại 100% độ rung tự nhiên cho tay bạn (Anti-cheat bị mù)
+        } 
+        // ====================================================================
+        // VÙNG 2: ABSOLUTE HARD-LOCK & ADAPTIVE CAGE (Sai số 0.4 -> 3.0 độ)
+        // ====================================================================
+        else if (totalError < 3.0) {
             engine.isABSBraking = true;
 
-            // [CÔNG NGHỆ 1]: ASYMMETRIC INPUT ANNIHILATION (Hố Đen Bất Đối Xứng)
-            // Nếu người chơi cố tình vuốt tay RẤT MẠNH (>6.0px) và NGƯỢC HƯỚNG (dot < -0.7)
-            // -> Có nghĩa là họ muốn bỏ chạy hoặc vẩy sang thằng khác -> Phá lồng giam.
-            if (input.magnitude > 6.0 && dotProduct < -0.7) {
+            if (input.magnitude > 7.0 && dotProduct < -0.6) {
+                // Phá lồng giam vẩy mục tiêu
                 engine.isABSBraking = false;
-                payload.touch_delta.x *= 0.8; 
-                payload.touch_delta.y *= 0.8; 
+                rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                // Nuốt chửng 100% lực vuốt (ngón tay miết lên vọt qua đầu cũng bị xóa sạch)
-                payload.touch_delta.x = 0;
-                payload.touch_delta.y = 0;
-
-                // [CÔNG NGHỆ 2 & 3]: EULER MATRIX FREEZING & KINEMATIC ANCHORING
-                // Không dùng Lực kéo tay nữa. Can thiệp trực tiếp vào Ma trận Camera.
-                // Neo cứng Camera vào tọa độ tuyệt đối của Sọ địch (Bất chấp địch lách/nhảy)
-                let perfectPitch = currentPitch + pErr;
-                let perfectYaw = currentYaw + yErr;
-
-                // [CÔNG NGHỆ 4]: FRUSTUM CLAMPING (Lồng giam trần sọ)
-                // Ép màn hình thấp xuống 0.2 độ (Ngay giữa trán/Mắt). Tuyệt đối không cho 
-                // lên Đỉnh đầu tránh hiện tượng đạn bay sượt tóc tốn sát thương.
-                perfectPitch += (pErr > 0 ? -0.2 : 0.2); 
-
-                // Ghi đè cứng tọa độ (Hard-code)
-                if (payload.camera) {
-                    payload.camera.pitch = perfectPitch;
-                    payload.camera.yaw = perfectYaw;
+                if (engine.isTapping) {
+                    // Đang Tap (< 150ms): Lồng Giam Mềm (Hãm 85% lực nhưng vẫn cho miết tìm sọ)
+                    rawX *= 0.15; 
+                    rawY *= 0.15;
                 } else {
-                    payload.aim_pitch = perfectPitch;
-                    payload.aim_yaw = perfectYaw;
-                }
-                
-                // Tước đoạt hoàn toàn vật lý của Game Engine tại khung hình này
-                if (payload.camera_constraints) {
-                    payload.camera_constraints.max_pitch_speed = 99999.0;
-                    payload.camera_constraints.max_yaw_speed = 99999.0;
-                    payload.camera_constraints.friction = 0.0;
-                    payload.camera_constraints.damping = 0.0;
-                    payload.camera_constraints.recoil_recovery_scale = 0.0;
+                    // Đang Hold (> 150ms): Đóng băng Euler Tuyệt Đối
+                    rawX = 0; rawY = 0;
+                    
+                    let perfectPitch = currentPitch + pErr;
+                    let perfectYaw = currentYaw + yErr;
+                    perfectPitch += (pErr > 0 ? -0.3 : 0.2); // Frustum Clamp (Neo Trán)
+
+                    if (payload.camera) { payload.camera.pitch = perfectPitch; payload.camera.yaw = perfectYaw; }
+                    else { payload.aim_pitch = perfectPitch; payload.aim_yaw = perfectYaw; }
+                    
+                    if (payload.camera_constraints) {
+                        payload.camera_constraints.max_pitch_speed = 99999.0;
+                        payload.camera_constraints.max_yaw_speed = 99999.0;
+                        payload.camera_constraints.friction = 0.0;
+                        payload.camera_constraints.damping = 0.0;
+                        payload.camera_constraints.recoil_recovery_scale = 0.0;
+                    }
                 }
             }
         } 
-        
         // ====================================================================
-        // VÙNG 2: PRE-BRAKE ZONE (Sắp chạm sọ - Sai số 2.5 -> 7.0 độ)
-        // KÍCH HOẠT: Phanh PID Tiên lượng
+        // VÙNG 3: MAGNETIC CUSHION - ĐỆM TỪ TÍNH (Sai số 3.0 -> 8.0 độ)
         // ====================================================================
-        else if (totalError < 7.0 && dotProduct > 0.7 && input.magnitude > 4.0) {
-            // Nhận thấy tâm súng đang lao lên sọ quá nhanh, ta bóp thắng điện tử
-            // Giảm xung lực ngón tay xuống còn 15% để tâm "hạ cánh" êm ái, không văng lố
-            engine.thrustMultiplier = 0.15;
-            payload.touch_delta.x *= engine.thrustMultiplier;
-            payload.touch_delta.y *= engine.thrustMultiplier;
+        else if (totalError < 8.0 && dotProduct > 0.5) {
+            // Phanh Tuyến Tính: Hạ cánh êm ái, tối đa hãm 85%
+            let brakeFactor = 1.0 - ((totalError - 3.0) / 5.0); 
+            engine.thrustMultiplier = 1.0 - (brakeFactor * 0.85); 
+            
+            rawX *= engine.thrustMultiplier;
+            rawY *= engine.thrustMultiplier;
         } 
-        
         // ====================================================================
-        // VÙNG 3: VECTOR THRUST ZONE (Cần bứt tốc từ bụng lên - Sai số > 7.0 độ)
+        // VÙNG 4: VECTOR THRUST - TÊN LỬA ĐẨY (Sai số > 8.0 độ)
         // ====================================================================
         else {
             if (dotProduct > 0.5) {
-                // Người chơi đang miết lên đầu -> Bơm Lực Đẩy Lượng Tử (Sigmoid Thrust)
                 engine.thrustMultiplier = baseThrust * dotProduct;
-                payload.touch_delta.x *= engine.thrustMultiplier;
-                payload.touch_delta.y *= engine.thrustMultiplier;
+                engine.thrustMultiplier *= 0.90; // Overshoot Damping (Chừa trống 10% cho tay vuốt)
+                
+                rawX *= engine.thrustMultiplier;
+                rawY *= engine.thrustMultiplier;
             } 
             else if (dotProduct < 0.0) {
-                // Người chơi vuốt lệch, vuốt xuống đất -> Triệt tiêu 80% đà trượt tay
-                engine.thrustMultiplier = 0.2; 
-                payload.touch_delta.x *= engine.thrustMultiplier;
-                payload.touch_delta.y *= engine.thrustMultiplier;
+                // Vuốt ngược -> Xóa 75% đà trượt tay
+                engine.thrustMultiplier = 0.25; 
+                rawX *= engine.thrustMultiplier;
+                rawY *= engine.thrustMultiplier;
             }
         }
+
+        // ====================================================================
+        // [CÔNG NGHỆ BỔ SUNG]: SUB-PIXEL REMAINDER (BỘ ĐỆM PHẦN DƯ)
+        // ====================================================================
+        // Game Engine ưu tiên số nguyên. Ta làm tròn nhưng CẤT PHẦN LẺ vào bộ nhớ.
+        let finalX = Math.round(rawX);
+        let finalY = Math.round(rawY);
+        
+        // Tích tụ phần lẻ cho Frame tiếp theo
+        engine.remX = rawX - finalX;
+        engine.remY = rawY - finalY;
+
+        payload.touch_delta.x = finalX;
+        payload.touch_delta.y = finalY;
 
         return payload;
     }
@@ -529,7 +549,7 @@ class ShotgunCore {
                 payload.weapon.recoil_accumulation = 0.0;
             } else {
                 // Nếu chưa lọt vào vùng ABS, vẫn giữ lại 20% độ tản mát để bắn rỉa
-                payload.weapon.dynamic_spread *= 0.2;
+                payload.weapon.dynamic_spread *= 0.1;
             }
         }
         return payload;
@@ -546,7 +566,7 @@ class SMGCore {
             if (engine.isABSBraking) {
                 // Đánh lừa Anti-Cheat: Thay vì ép Recoil = 0 liên tục, ta tạo vòng lặp 3 viên.
                 // Game Engine sẽ tưởng bạn đang Tap (nhấp nhả cò) liên tục với tốc độ ảo ảnh.
-                if (weaponState.bulletCount % 3 === 0) {
+                if (weaponState.bulletCount % 2 === 0) {
                     payload.weapon.recoil_accumulation = 0.0; // Reset độ giật tịnh tiến
                     payload.weapon.dynamic_spread = 0.0;      // Reset độ nở tâm
                 } else {
