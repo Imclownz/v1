@@ -214,9 +214,9 @@ class WeaponAnalyzer {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER V3.5 (BATTLE ROYALE OPTIMIZED EDITION)
-// Công nghệ: Pre-culling, Team/Vehicle Filters, CPU-Efficient Math.
-// Nhiệm vụ: Xử lý mượt mà lobby 50 người, không giật lag, khóa chuẩn xác.
+// BƯỚC 2: TARGET SCANNER V5.0 (BATTLE ROYALE EDITION)
+// Công nghệ: Target Caching (Tiết kiệm 90% CPU), 3D Dot-Product FOV (Chống mù góc),
+//            Aggressive Culling (Lọc rác xa/đồng đội), Limb Magnetism Kill.
 // ============================================================================
 class FrictionZeroing {
     
@@ -237,116 +237,147 @@ class FrictionZeroing {
         let currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (payload.camera ? payload.camera.yaw : 0.0);
         let currentPitch = payload.aim_pitch !== undefined ? payload.aim_pitch : (payload.camera ? payload.camera.pitch : 0.0);
 
-        let bestTarget = null;
-        let lowestDangerScore = 999999.0;
-        let previousTargetId = state.target.id; 
+        // [CÔNG NGHỆ 3]: TOÁN HỌC VECTOR 3D (Chống điểm mù Z-Axis Gimbal Lock)
+        // Dựng Vector hướng nhìn của Camera để tính FOV Hình Cầu 3D chuẩn xác
+        let yawRad = currentYaw * Math.PI / 180.0;
+        let pitchRad = currentPitch * Math.PI / 180.0;
+        let camForwardX = Math.cos(pitchRad) * Math.sin(yawRad);
+        let camForwardY = -Math.sin(pitchRad);
+        let camForwardZ = Math.cos(pitchRad) * Math.cos(yawRad);
+
+        // Khởi tạo/Cập nhật Bộ đếm Khung hình cho Caching
+        if (!state.target.scanFrame) state.target.scanFrame = 0;
+        state.target.scanFrame++;
+
+        let previousTargetId = state.target.id;
+        let cachedEnemy = null;
+        let validEnemies = [];
 
         // ====================================================================
-        // A. BỘ LỌC SINH TỒN 50 NGƯỜI (TỐI ƯU HÓA CPU TUYỆT ĐỐI)
+        // A. AGGRESSIVE CULLING (BỘ LỌC RÁC SINH TỒN O(N))
+        // Lọc cực nhanh bằng các phép toán siêu nhẹ để loại bỏ 90% rác
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             let enemy = payload.players[i];
             
-            // 1. LỌC RÁC CƠ BẢN (DEAD, KNOCKED, TEAMMATES, VEHICLES)
-            if (!enemy || !enemy.pos) continue;
-            if (enemy.is_dead || enemy.hp <= 0) continue;
+            // 1. Lọc Trạng thái
+            if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked || !enemy.pos) continue;
             
-            // [QUAN TRỌNG NHẤT SINH TỒN]: Bỏ qua Đồng đội, Kẻ thù bị Knock, Lái xe, Nhảy dù
-            if (enemy.is_teammate || (origin.team_id !== undefined && enemy.team_id === origin.team_id)) continue;
-            if (enemy.is_knocked || enemy.in_vehicle || enemy.is_parachuting) continue;
+            // 2. Lọc Đồng đội (Teammate Confusion Fix)
+            if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
             
-            // 2. LỌC KHOẢNG CÁCH NHANH (PRE-CULLING CHỐNG LAG)
-            // Thay vì dùng Căn bậc hai (Math.sqrt) cho cả 50 người gây nặng máy,
-            // Ta dùng phép trừ hình vuông (Chebyshev distance) cực nhẹ.
+            // 3. Lọc Rỗng (LOD Distance Fix - Địch quá xa không được game render xương)
+            if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
+
+            // 4. Lọc Khoảng cách nhanh (Bỏ qua những kẻ địch > 130m)
             let dx = enemy.pos.x - origin.x;
-            let dz = enemy.pos.z - origin.z;
-            
-            // Tầm quét Rada tối đa: 150 mét (Vượt quá bỏ qua luôn để CPU thở)
-            if (Math.abs(dx) > 150.0 || Math.abs(dz) > 150.0) continue;
-
             let dy = enemy.pos.y - origin.y;
-            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            
-            // ====================================================================
-            // B. QUÉT MỤC TIÊU & HỦY DIỆT VẬT LÝ TỨ CHI
-            // ====================================================================
-            let headPos = enemy.pos;
-            if (enemy.hitboxes) {
-                if (enemy.hitboxes.head && enemy.hitboxes.head.pos) headPos = enemy.hitboxes.head.pos;
-                else if (enemy.hitboxes.neck && enemy.hitboxes.neck.pos) headPos = enemy.hitboxes.neck.pos;
-                
-                const allBones = Object.keys(enemy.hitboxes);
-                for (let b = 0; b < allBones.length; b++) {
-                    let boneName = allBones[b].toLowerCase();
-                    let bone = enemy.hitboxes[allBones[b]];
+            let dz = enemy.pos.z - origin.z;
+            let distApprox = Math.sqrt(dx*dx + dy*dy + dz*dz);
+            if (distApprox > 130.0) continue; 
 
-                    if (boneName.includes('head') || boneName.includes('neck')) {
-                        if (bone.radius) bone.radius = 0.25; 
-                        bone.magnetism = 1.0; 
-                        bone.snap_weight = 99999.0;
-                    } else {
-                        if (bone.radius !== undefined) bone.radius = 0.0001;
-                        bone.magnetism = 0.0;
-                        bone.friction = 0.0;
-                        bone.snap_weight = -99999.0;
-                        if (bone.pos && bone.pos.z) bone.pos.z -= 1.5;
-                    }
+            // --------------------------------------------------------------
+            // LIMB MAGNETISM KILL (Diệt ma sát tứ chi) 
+            // Chỉ chạy Epsilon Bypass cho những kẻ địch lọt vào vòng này để giữ FPS 60
+            // --------------------------------------------------------------
+            const allBones = Object.keys(enemy.hitboxes);
+            for (let b = 0; b < allBones.length; b++) {
+                let boneName = allBones[b].toLowerCase();
+                let bone = enemy.hitboxes[allBones[b]];
+
+                if (boneName.includes('head') || boneName.includes('neck')) {
+                    if (bone.radius) bone.radius = 0.25; 
+                    bone.magnetism = 1.0; 
+                    bone.snap_weight = 99999.0;
+                } else {
+                    if (bone.radius !== undefined) bone.radius = 0.0001;
+                    bone.magnetism = 0.0; bone.friction = 0.0; bone.snap_weight = -99999.0;
+                    if (bone.pos && bone.pos.z) bone.pos.z -= 1.5;
                 }
             }
 
+            validEnemies.push(enemy);
+            if (enemy.id === previousTargetId) cachedEnemy = enemy;
+        }
+
+        // ====================================================================
+        // B. TARGET CACHING LOGIC (TIẾT KIỆM 90% CPU BOTTLENECK)
+        // ====================================================================
+        // Chỉ quét toàn bản đồ (Full Scan) mỗi 10 khung hình, HOẶC khi mất mục tiêu.
+        let needsFullScan = (state.target.scanFrame % 10 === 0) || !previousTargetId || !cachedEnemy;
+        
+        let bestTarget = null;
+        let lowestDangerScore = 999999.0;
+
+        // Hàm tính toán cốt lõi cho một mục tiêu
+        const evaluateTarget = (enemy) => {
+            let headPos = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
+            
+            let dx = headPos.x - origin.x;
+            let dy = headPos.y - origin.y;
+            let dz = headPos.z - origin.z;
+            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+            // TÍCH VÔ HƯỚNG 3D: Tính góc FOV Cầu (Spherical Angle) cực kỳ chính xác
+            let targetDirX = dx / distance3D;
+            let targetDirY = dy / distance3D;
+            let targetDirZ = dz / distance3D;
+            let dot = (camForwardX * targetDirX) + (camForwardY * targetDirY) + (camForwardZ * targetDirZ);
+            let fov3D = Math.acos(Math.max(-1.0, Math.min(1.0, dot))) * (180.0 / Math.PI);
+
+            // Tính 2D Yaw/Pitch để truyền lực vuốt cho Bước 3
             let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
             let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
-
-            let rawDeltaYaw = this.normalizeAngle(enemyYaw - currentYaw);
-            let rawDeltaPitch = this.normalizeAngle(enemyPitch - currentPitch);
-            
-            let absDeltaYaw = Math.abs(rawDeltaYaw);
-            let absDeltaPitch = Math.abs(rawDeltaPitch);
-            let fov2D = Math.sqrt(absDeltaYaw*absDeltaYaw + absDeltaPitch*absDeltaPitch);
-
-            // W2S OFF-SCREEN CULLING (Bộ lọc khung hình)
-            if (absDeltaYaw > 80.0 || absDeltaPitch > 60.0) continue;
+            let rawDeltaYaw = FrictionZeroing.normalizeAngle(enemyYaw - currentYaw);
+            let rawDeltaPitch = FrictionZeroing.normalizeAngle(enemyPitch - currentPitch);
 
             let capsuleFovLimit = (distance3D < 3.0) ? 180.0 : ((120.0 / distance3D) + 12.0);
             
-            // STICKY FOV (Nam châm bám dính)
             let isStickyTarget = (enemy.id === previousTargetId);
-            if (isStickyTarget) {
-                capsuleFovLimit *= 1.35; 
-            }
+            if (isStickyTarget) capsuleFovLimit *= 1.35; // Sticky FOV
 
-            if (fov2D > capsuleFovLimit) continue;
+            // SỬ DỤNG GÓC 3D ĐỂ LOẠI BỎ ĐỊCH - Bất chấp trên núi hay dưới vực
+            if (fov3D > capsuleFovLimit) return null;
 
-            // ====================================================================
-            // C. MA TRẬN CHẤM ĐIỂM AI ADAPTIVE
-            // ====================================================================
-            let distScore = Math.min(distance3D / 150.0, 1.0);
-            let fovScore = Math.min(fov2D / (capsuleFovLimit || 180.0), 1.0);
-
+            let distScore = Math.min(distance3D / 130.0, 1.0);
+            let fovScore = Math.min(fov3D / (capsuleFovLimit || 180.0), 1.0);
+            
             let stancePenalty = 1.0;
-            // Trong Sinh Tồn, có thể bạn đứng trên đồi bắn xuống, nên bỏ qua phạt độ cao
-            // Chỉ phạt khi địch nấp tường
-            if (enemy.is_behind_cover) {
-                stancePenalty *= 20.0; 
+            let heightDiff = origin.y - headPos.y; 
+            if (heightDiff > 0.8) stancePenalty *= 4.0; 
+            if (enemy.is_behind_cover) stancePenalty *= 20.0;
+
+            let stickyBonus = isStickyTarget ? 0.70 : 1.0;
+            let dangerScore = ((fovScore * 0.60) + (distScore * 0.40)) * stancePenalty * stickyBonus;
+
+            return {
+                id: enemy.id, distance: distance3D, 
+                deltaPitch: rawDeltaPitch, deltaYaw: rawDeltaYaw, 
+                score: dangerScore
+            };
+        };
+
+        if (needsFullScan) {
+            // KHUNG HÌNH QUÉT CHÍNH: Tính toán điểm cho toàn bộ địch hợp lệ
+            for (let i = 0; i < validEnemies.length; i++) {
+                let res = evaluateTarget(validEnemies[i]);
+                if (res && res.score < lowestDangerScore) {
+                    lowestDangerScore = res.score;
+                    bestTarget = res;
+                }
             }
-
-            let stickyBonus = isStickyTarget ? 0.70 : 1.0; // Tăng độ dính trong combat đông người
-            let dangerScore = ((fovScore * 0.65) + (distScore * 0.35)) * stancePenalty * stickyBonus;
-
-            if (dangerScore < lowestDangerScore) {
-                lowestDangerScore = dangerScore;
-                bestTarget = {
-                    id: enemy.id,
-                    distance: distance3D,
-                    deltaPitch: rawDeltaPitch, 
-                    deltaYaw: rawDeltaYaw      
-                };
+        } else {
+            // 9 KHUNG HÌNH NGHỈ: Chỉ cập nhật tọa độ cho 1 mục tiêu duy nhất đã khóa
+            bestTarget = evaluateTarget(cachedEnemy);
+            if (!bestTarget) {
+                // Nếu địch đột ngột lách ra khỏi FOV, ép khung hình sau phải quét lại lập tức
+                state.target.scanFrame = 9; 
             }
         }
 
         // ====================================================================
-        // D. BÁO CÁO KẾT QUẢ CHO ĐỘNG CƠ VORTEX (BƯỚC 3)
+        // C. BÁO CÁO KẾT QUẢ CHO ĐỘNG CƠ VORTEX (BƯỚC 3)
         // ====================================================================
         if (bestTarget) {
             state.target.id = bestTarget.id;
