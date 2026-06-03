@@ -396,12 +396,13 @@ class FrictionZeroing {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V3.1 (HARDCODED THRESHOLD)
-// Công nghệ: Hardcoded Tap/Hold, Magnetic Cushion, Inner Deadzone, Sub-pixel Remainder.
+// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V4.0 (ACTIVE TRACKING EDITION)
+// Công nghệ: Diagonal Tolerance Cone (Phễu 60 độ), Active Auto-Tracking, 
+//            Hardcoded Tap/Hold, Magnetic Cushion.
+// Nhiệm vụ: Giải phóng lực kéo chéo, tự động trượt camera theo địch nhảy.
 // ============================================================================
 class ThrustAndBrakeEngine {
     
-    // Hàm Đường cong Sigmoid tinh chỉnh lực đẩy Vector
     static calculateSigmoidThrust(distance) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.25; 
@@ -418,48 +419,58 @@ class ThrustAndBrakeEngine {
         const engine = state.engine;
         const weapon = state.weapon;
 
-        // Khởi tạo Bộ đệm phần dư thập phân (Sub-pixel Remainder)
         if (engine.remX === undefined) { engine.remX = 0; engine.remY = 0; }
 
-        // ====================================================================
-        // [ĐÃ ĐIỀU CHỈNH]: PHÂN BIỆT TAP/HOLD BẰNG THÔNG SỐ CỨNG (HARDCODED)
-        // ====================================================================
         const currentTime = Date.now();
         if (weapon.isFiring && !engine.wasFiring) {
-            engine.fireStartTime = currentTime; // Vừa chạm cò
+            engine.fireStartTime = currentTime;
         }
         engine.wasFiring = weapon.isFiring;
 
-        // Tính thời gian đã đè cò (mili-giây)
         let currentDuration = weapon.isFiring ? (currentTime - (engine.fireStartTime || 0)) : 0;
-        
-        // THÔNG SỐ CỨNG: 150ms. 
-        // Dưới 150ms -> Tap (bắn nhấp vẩy tâm). Trên 150ms -> Hold (Đè cò sấy cứng tâm).
         const HARD_TAP_THRESHOLD = 150; 
         engine.isTapping = (currentDuration < HARD_TAP_THRESHOLD);
 
-        // Reset trạng thái cờ Engine
         engine.isABSBraking = false;
         engine.thrustMultiplier = 1.0;
 
-        if (!target.id || !input.isSwiping || !payload.touch_delta) {
-            return payload;
-        }
+        // ====================================================================
+        // [CÔNG NGHỆ 4]: SỬA ĐỔI ĐIỀU KIỆN NGẮT SỚM ĐỂ BẬT AUTO-TRACKING
+        // Thay vì thoát hoàn toàn khi người chơi buông tay, hệ thống vẫn sẽ 
+        // chạy tiếp để giữ Camera trượt theo địch nếu đang ở trong vùng Khóa!
+        // ====================================================================
+        if (!target.id) return payload; // Không có mục tiêu -> Bỏ qua
+        if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
+        
+        let hasInput = input.isSwiping && input.magnitude > 0;
 
         let pErr = target.pitchError; 
         let yErr = target.yawError;
         let totalError = Math.sqrt(pErr**2 + yErr**2);
 
+        // Nếu KHÔNG có thao tác tay, và KHÔNG nằm trong vùng Hố đen (<3.0 độ) -> Bỏ qua
+        if (!hasInput && totalError >= 3.0) {
+            return payload;
+        }
+
         let baseThrust = this.calculateSigmoidThrust(target.distance);
         let errMag = totalError || 0.0001;
         let targetDirX = yErr / errMag;
         let targetDirY = pErr / errMag;
-        let dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
+        
+        // Tính toán DotProduct (Sự đồng pha) chỉ khi có vuốt tay
+        let dotProduct = 0;
+        if (hasInput) {
+            dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
+        }
 
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
 
-        // Đọc lực vuốt nguyên thủy + Cộng dồn phần dư từ Frame trước
+        // Xác định Tọa độ Xương Tuyệt Đối của địch tại Frame này
+        let absoluteBonePitch = currentPitch + pErr;
+        let absoluteBoneYaw = currentYaw + yErr;
+
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
 
@@ -467,36 +478,43 @@ class ThrustAndBrakeEngine {
         // VÙNG 1: INNER DEADZONE - VÙNG CHÂN KHÔNG TÀNG HÌNH (Sai số < 0.4 độ)
         // ====================================================================
         if (totalError < 0.4) {
-            engine.isABSBraking = true; // Bật cờ cho Bước 4 biến đạn thành Laser
-            // Trả lại 100% độ rung tự nhiên cho tay bạn (Anti-cheat bị mù)
+            engine.isABSBraking = true; 
         } 
         // ====================================================================
-        // VÙNG 2: ABSOLUTE HARD-LOCK & ADAPTIVE CAGE (Sai số 0.4 -> 3.0 độ)
+        // VÙNG 2: HARD-LOCK & ACTIVE AUTO-TRACKING (Sai số 0.4 -> 3.0 độ)
         // ====================================================================
         else if (totalError < 3.0) {
             engine.isABSBraking = true;
 
-            if (input.magnitude > 7.0 && dotProduct < -0.6) {
+            if (hasInput && input.magnitude > 7.0 && dotProduct < -0.6) {
                 // Phá lồng giam vẩy mục tiêu
                 engine.isABSBraking = false;
                 rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                if (engine.isTapping) {
-                    // Đang Tap (< 150ms): Lồng Giam Mềm (Hãm 85% lực nhưng vẫn cho miết tìm sọ)
+                if (engine.isTapping && hasInput) {
+                    // Đang Tap: Lồng Giam Mềm
                     rawX *= 0.2; 
                     rawY *= 0.2;
                 } else {
-                    // Đang Hold (> 150ms): Đóng băng Euler Tuyệt Đối
+                    // [CÔNG NGHỆ 4]: NAM CHÂM ĐỘNG (ACTIVE AUTO-TRACKING)
+                    // Hủy hoàn toàn lực tay của người chơi.
                     rawX = 0; rawY = 0;
                     
-                    let perfectPitch = currentPitch + pErr;
-                    let perfectYaw = currentYaw + yErr;
-                    perfectPitch += (pErr > 0 ? -0.3 : 0.2); // Frustum Clamp (Neo Trán)
+                    // Gắn chặt Camera vào Delta di chuyển của Xương địch.
+                    // Địch nhảy lên hoặc lướt ngang, Camera tự động giật theo dù bạn đã buông tay!
+                    let perfectPitch = absoluteBonePitch + (pErr > 0 ? -0.3 : 0.2); 
+                    let perfectYaw = absoluteBoneYaw;
 
-                    if (payload.camera) { payload.camera.pitch = perfectPitch; payload.camera.yaw = perfectYaw; }
-                    else { payload.aim_pitch = perfectPitch; payload.aim_yaw = perfectYaw; }
+                    if (payload.camera) { 
+                        payload.camera.pitch = perfectPitch; 
+                        payload.camera.yaw = perfectYaw; 
+                    } else { 
+                        payload.aim_pitch = perfectPitch; 
+                        payload.aim_yaw = perfectYaw; 
+                    }
                     
+                    // Ép tử vật lý Engine chống rung lắc
                     if (payload.camera_constraints) {
                         payload.camera_constraints.max_pitch_speed = 99999.0;
                         payload.camera_constraints.max_yaw_speed = 99999.0;
@@ -510,25 +528,33 @@ class ThrustAndBrakeEngine {
         // ====================================================================
         // VÙNG 3: MAGNETIC CUSHION - ĐỆM TỪ TÍNH (Sai số 3.0 -> 8.0 độ)
         // ====================================================================
-        else if (totalError < 8.0 && dotProduct > 0.5) {
-            // Phanh Tuyến Tính: Hạ cánh êm ái, tối đa hãm 85%
+        else if (totalError < 8.0 && dotProduct > 0.4 && hasInput) {
             let brakeFactor = 1.0 - ((totalError - 3.0) / 5.0); 
             engine.thrustMultiplier = 1.0 - (brakeFactor * 0.8); 
-            
             rawX *= engine.thrustMultiplier;
             rawY *= engine.thrustMultiplier;
         } 
         // ====================================================================
-        // VÙNG 4: VECTOR THRUST - TÊN LỬA ĐẨY (Sai số > 8.0 độ)
+        // VÙNG 4: VECTOR THRUST & DIAGONAL CONE (Sai số > 8.0 độ)
         // ====================================================================
-        else {
+        else if (hasInput) {
+            // [CÔNG NGHỆ 3]: PHỄU KHUẾCH ĐẠI CHÉO (DIAGONAL TOLERANCE CONE)
+            // Thay vì phạt góc vuốt chéo (giảm lực), ta coi mọi góc vuốt lọt 
+            // trong Phễu 60 độ (dotProduct > 0.5) đều là 100% Đồng Pha!
             if (dotProduct > 0.5) {
-                engine.thrustMultiplier = baseThrust * dotProduct;
-                engine.thrustMultiplier *= 0.90; // Overshoot Damping (Chừa trống 10% cho tay vuốt)
+                // Bơm TỐI ĐA lực đẩy thẳng vào Hướng Chéo mà ngón tay bạn đang kéo
+                engine.thrustMultiplier = baseThrust * 0.90; 
                 
                 rawX *= engine.thrustMultiplier;
                 rawY *= engine.thrustMultiplier;
             } 
+            else if (dotProduct > 0.0) {
+                // Góc 60 - 90 độ: Giảm lực đẩy tuyến tính xuống 1.0x (Trượt tay tự nhiên)
+                engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
+                engine.thrustMultiplier *= 0.90;
+                rawX *= engine.thrustMultiplier;
+                rawY *= engine.thrustMultiplier;
+            }
             else if (dotProduct < 0.0) {
                 // Vuốt ngược -> Xóa 75% đà trượt tay
                 engine.thrustMultiplier = 0.25; 
@@ -538,13 +564,11 @@ class ThrustAndBrakeEngine {
         }
 
         // ====================================================================
-        // [CÔNG NGHỆ BỔ SUNG]: SUB-PIXEL REMAINDER (BỘ ĐỆM PHẦN DƯ)
+        // SUB-PIXEL REMAINDER (BỘ ĐỆM PHẦN DƯ)
         // ====================================================================
-        // Game Engine ưu tiên số nguyên. Ta làm tròn nhưng CẤT PHẦN LẺ vào bộ nhớ.
         let finalX = Math.round(rawX);
         let finalY = Math.round(rawY);
         
-        // Tích tụ phần lẻ cho Frame tiếp theo
         engine.remX = rawX - finalX;
         engine.remY = rawY - finalY;
 
