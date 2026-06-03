@@ -78,7 +78,7 @@ class InputInterceptor {
         // 2. KỸ THUẬT LỌC NHIỄU "SUB-PIXEL EMA SMOOTHING"
         // Hệ số Alpha = 0.65: Tin tưởng 65% vào lực vuốt hiện tại, 
         // giữ lại 35% lực vuốt của Frame trước để bù đắp nếu bị rớt Frame cảm ứng.
-        const ALPHA = 0.45;
+        const ALPHA = 0.5;
         
         // Khởi tạo giá trị ban đầu nếu chưa có
         if (inputState.smoothX === undefined) inputState.smoothX = 0;
@@ -287,7 +287,7 @@ class FrictionZeroing {
 
                 if (boneName.includes('head') || boneName.includes('neck')) {
                     if (bone.radius) bone.radius = 0.25; 
-                    bone.magnetism = 1.0; 
+                    bone.magnetism = 3.0; 
                     bone.snap_weight = 99999.0;
                 } else {
                     if (bone.radius !== undefined) bone.radius = 0.0001;
@@ -403,8 +403,8 @@ class ThrustAndBrakeEngine {
     
     // Hàm Đường cong Sigmoid tinh chỉnh lực đẩy Vector
     static calculateSigmoidThrust(distance) {
-        const MAX_THRUST = 6.5; 
-        const MIN_THRUST = 0.1; 
+        const MAX_THRUST = 10.0; 
+        const MIN_THRUST = 0.25; 
         const MID_POINT = 10.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance - MID_POINT) / SLOPE));
@@ -484,8 +484,8 @@ class ThrustAndBrakeEngine {
             else {
                 if (engine.isTapping) {
                     // Đang Tap (< 150ms): Lồng Giam Mềm (Hãm 85% lực nhưng vẫn cho miết tìm sọ)
-                    rawX *= 0.15; 
-                    rawY *= 0.15;
+                    rawX *= 0.2; 
+                    rawY *= 0.2;
                 } else {
                     // Đang Hold (> 150ms): Đóng băng Euler Tuyệt Đối
                     rawX = 0; rawY = 0;
@@ -513,7 +513,7 @@ class ThrustAndBrakeEngine {
         else if (totalError < 8.0 && dotProduct > 0.5) {
             // Phanh Tuyến Tính: Hạ cánh êm ái, tối đa hãm 85%
             let brakeFactor = 1.0 - ((totalError - 3.0) / 5.0); 
-            engine.thrustMultiplier = 1.0 - (brakeFactor * 0.85); 
+            engine.thrustMultiplier = 1.0 - (brakeFactor * 0.8); 
             
             rawX *= engine.thrustMultiplier;
             rawY *= engine.thrustMultiplier;
