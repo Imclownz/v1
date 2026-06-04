@@ -422,12 +422,11 @@ class FrictionZeroing {
         return payload;
     }
 }
-
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V6.0 (GRANDMASTER EDITION)
-// Công nghệ: ADS Sensor Dampening, Ballistic Lead Synergy, Active Auto-Tracking, 
-//            Diagonal Tolerance Cone (Phễu 60 độ), Magnetic Cushion.
-// Nhiệm vụ: Tối ưu ngắm Scope, bám dính quỹ đạo tương lai, giải phóng lực chéo.
+// BƯỚC 3: VECTOR THRUST & HARD-LOCK ENGINE V6.1 (UNIFIED ADS & X-BOOST)
+// Công nghệ: Unified Thrust (Xóa giới hạn Scope), Horizontal X-Axis Boost, 
+//            Active Auto-Tracking, Diagonal Tolerance Cone, Magnetic Cushion.
+// Nhiệm vụ: Tối đa hóa lực kéo chéo, khuếch đại trục ngang đuổi địch di chuyển.
 // ============================================================================
 class ThrustAndBrakeEngine {
     
@@ -473,7 +472,6 @@ class ThrustAndBrakeEngine {
         
         let hasInput = input.isSwiping && input.magnitude > 0;
 
-        // Lưu ý: pErr và yErr lúc này ĐÃ BAO GỒM Bù Trừ Đạn Đạo (Tương lai) từ Bước 2
         let pErr = target.pitchError; 
         let yErr = target.yawError;
         let totalError = Math.sqrt(pErr**2 + yErr**2);
@@ -483,16 +481,10 @@ class ThrustAndBrakeEngine {
             return payload;
         }
 
+        // Lấy lực đẩy gốc từ Đường cong Sigmoid (Full 100% lực, không bị bóp bởi ADS)
         let baseThrust = this.calculateSigmoidThrust(target.distance);
         
-        // --------------------------------------------------------------------
-        // [CÔNG NGHỆ MỚI]: CẢM BIẾN ỐNG NGẮM TẦM XA (ADS DAMPENING)
-        // Nhận tín hiệu từ Bước 2. Bật Scope -> Giảm 60% Tên lửa đẩy. 
-        // Triệt tiêu ngay lập tức hiện tượng tâm văng vọt lên trời khi nhích nhẹ tay.
-        // --------------------------------------------------------------------
-        if (engine.isADS) {
-            baseThrust *= 0.40; 
-        }
+        // [ĐÃ XÓA]: Cắt giảm lực khi bật Scope (ADS Dampening) đã bị loại bỏ hoàn toàn!
 
         let errMag = totalError || 0.0001;
         let targetDirX = yErr / errMag;
@@ -507,14 +499,16 @@ class ThrustAndBrakeEngine {
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
 
-        // --------------------------------------------------------------------
-        // TỌA ĐỘ BÁM DÍNH TUYỆT ĐỐI (Đã gộp Vận tốc địch & Trọng lực rơi của đạn)
-        // --------------------------------------------------------------------
+        // TỌA ĐỘ BÁM DÍNH TUYỆT ĐỐI
         let absoluteBonePitch = currentPitch + pErr;
         let absoluteBoneYaw = currentYaw + yErr;
 
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
+
+        // TỈ LỆ KHUẾCH ĐẠI TRỤC NGANG (HORIZONTAL X-AXIS BOOST)
+        // Bơm thêm 40% lực đẩy vào trục X giúp tâm lao theo kẻ địch đang lướt/chạy ngang cực nhanh
+        const X_AXIS_BOOST = 1.40; 
 
         // ====================================================================
         // VÙNG 1: INNER DEADZONE - VÙNG CHÂN KHÔNG TÀNG HÌNH (Sai số < 0.4 độ)
@@ -522,8 +516,7 @@ class ThrustAndBrakeEngine {
         if (totalError < 0.4) {
             engine.isABSBraking = true; 
             
-            // Nếu bạn thả tay lúc tâm đã vào sọ, hệ thống vẫn "Neo Camera" cực mượt 
-            // để giữ cái tâm khớp với đường đạn rơi (Bullet Drop Compensation)
+            // Neo Camera mượt mà giữ tâm khớp với đường đạn
             if (!hasInput) {
                 if (payload.camera) { 
                     payload.camera.pitch = absoluteBonePitch; 
@@ -535,9 +528,9 @@ class ThrustAndBrakeEngine {
             }
         } 
         // ====================================================================
-        // VÙNG 2: HARD-LOCK & ACTIVE AUTO-TRACKING (Sai số 0.4 -> 3.0 độ)
+        // VÙNG 2: HARD-LOCK & ACTIVE AUTO-TRACKING (Sai số 0.4 -> 5.0 độ)
         // ====================================================================
-        else if (totalError < 3.0) {
+        else if (totalError < 5.0) {
             engine.isABSBraking = true;
 
             // Bứt phá lồng giam nếu vuốt cực gắt ngược hướng
@@ -547,12 +540,11 @@ class ThrustAndBrakeEngine {
             } 
             else {
                 if (engine.isTapping && hasInput) {
-                    // Đang Tap: Lồng giam mềm (Nếu bật Scope thì hãm lực gắt hơn)
-                    rawX *= (engine.isADS ? 0.08 : 0.2); 
-                    rawY *= (engine.isADS ? 0.08 : 0.2);
+                    // Đang Tap: Lồng giam mềm (Đồng nhất lực cho cả Hip-fire lẫn Scope)
+                    rawX *= 0.2; 
+                    rawY *= 0.2;
                 } else {
-                    // [NAM CHÂM ĐỘNG]: Hủy lực vuốt. Gắn chặt Camera vào Xương địch.
-                    // Địch lướt Tatsuya hoặc nhảy -> Camera tự động giật theo tương ứng.
+                    // NAM CHÂM ĐỘNG: Gắn chặt Camera vào Xương địch.
                     rawX = 0; rawY = 0;
                     
                     let perfectPitch = absoluteBonePitch + (pErr > 0 ? -0.3 : 0.2); 
@@ -578,32 +570,36 @@ class ThrustAndBrakeEngine {
             }
         } 
         // ====================================================================
-        // VÙNG 3: MAGNETIC CUSHION - ĐỆM TỪ TÍNH (Sai số 3.0 -> 8.0 độ)
+        // VÙNG 3: MAGNETIC CUSHION - ĐỆM TỪ TÍNH (Sai số 5.0 -> 8.0 độ)
         // ====================================================================
         else if (totalError < 8.0 && dotProduct > 0.4 && hasInput) {
-            let brakeFactor = 1.0 - ((totalError - 3.0) / 5.0); 
-            // Bật Scope -> Đệm từ tính nới lỏng nhẹ để tâm bám dính êm hơn
-            let cushionStrength = engine.isADS ? 0.4 : 0.8; 
+            let brakeFactor = 1.0 - ((totalError - 5.0) / 3.0); 
             
-            engine.thrustMultiplier = 1.0 - (brakeFactor * cushionStrength); 
-            rawX *= engine.thrustMultiplier;
+            // Đệm từ tính duy nhất một mốc 1.0 (Không bị thay đổi khi bật Scope)
+            engine.thrustMultiplier = 1.0 - (brakeFactor * 1.0); 
+            
+            // Khuếch đại trục X ngay cả khi đang phanh để đuổi kịp địch Strafe
+            rawX *= (engine.thrustMultiplier * (X_AXIS_BOOST - 0.15)); // Boost nhẹ
             rawY *= engine.thrustMultiplier;
         } 
         // ====================================================================
         // VÙNG 4: VECTOR THRUST & DIAGONAL CONE (Sai số > 8.0 độ)
         // ====================================================================
         else if (hasInput) {
-            // PHỄU KHUẾCH ĐẠI 60 ĐỘ: Vuốt chéo vẫn được bơm 100% lực đẩy!
+            // PHỄU KHUẾCH ĐẠI 60 ĐỘ: Vuốt chéo được bơm 100% lực đẩy!
             if (dotProduct > 0.5) {
                 engine.thrustMultiplier = baseThrust * 0.90; 
-                rawX *= engine.thrustMultiplier;
+                
+                // Tiêm lực Tên Lửa trục X (Chống tụt tâm khi địch chạy ngang)
+                rawX *= (engine.thrustMultiplier * X_AXIS_BOOST);
                 rawY *= engine.thrustMultiplier;
             } 
             else if (dotProduct > 0.0) {
-                // Góc rìa (60 - 90 độ): Trượt tay tự nhiên
+                // Góc rìa (60 - 90 độ): Trượt tay tự nhiên + X-Boost
                 engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
                 engine.thrustMultiplier *= 0.90;
-                rawX *= engine.thrustMultiplier;
+                
+                rawX *= (engine.thrustMultiplier * X_AXIS_BOOST);
                 rawY *= engine.thrustMultiplier;
             }
             else if (dotProduct < 0.0) {
