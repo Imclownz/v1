@@ -433,8 +433,8 @@ class ThrustAndBrakeEngine {
     // Hàm Đường cong Sigmoid tinh chỉnh lực đẩy (Base Thrust)
     static calculateSigmoidThrust(distance) {
         const MAX_THRUST = 10.0; 
-        const MIN_THRUST = 0.25; 
-        const MID_POINT = 10.0; 
+        const MIN_THRUST = 0.2; 
+        const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance - MID_POINT) / SLOPE));
         return MIN_THRUST + (MAX_THRUST - MIN_THRUST) * progress;
@@ -508,7 +508,7 @@ class ThrustAndBrakeEngine {
 
         // TỈ LỆ KHUẾCH ĐẠI TRỤC NGANG (HORIZONTAL X-AXIS BOOST)
         // Bơm thêm 40% lực đẩy vào trục X giúp tâm lao theo kẻ địch đang lướt/chạy ngang cực nhanh
-        const X_AXIS_BOOST = 1.40; 
+        const X_AXIS_BOOST = 1.50; 
 
         // ====================================================================
         // VÙNG 1: INNER DEADZONE - VÙNG CHÂN KHÔNG TÀNG HÌNH (Sai số < 0.4 độ)
