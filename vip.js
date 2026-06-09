@@ -502,7 +502,7 @@ class VectorThrustEngine {
                 // [CÔNG NGHỆ 3]: VECTOR GUIDANCE (BẺ CONG QUỸ ĐẠO MƯỢT MÀ)
                 // Pha trộn (Blend) 75% lực tay của bạn + 25% hướng đi lý tưởng của Hệ thống
                 // Cảm giác vuốt sẽ hoàn toàn là tay bạn, nhưng tâm tự lượn cong vào sọ
-                let blendFactor = 0.25; 
+                let blendFactor = 0.5; 
                 let guidedDirX = (input.dirX * (1.0 - blendFactor)) + (targetDirX * blendFactor);
                 let guidedDirY = (input.dirY * (1.0 - blendFactor)) + (targetDirY * blendFactor);
 
@@ -516,8 +516,8 @@ class VectorThrustEngine {
                 // Đệm phanh từ tính (Magnetic Cushion) khi sắp chạm mốc 3.0 độ
                 if (total2DError < 8.0) {
                     let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
-                    rawX *= (1.0 - (brakeFactor * 0.8));
-                    rawY *= (1.0 - (brakeFactor * 0.8));
+                    rawX *= (1.0 - (brakeFactor * 0.75));
+                    rawY *= (1.0 - (brakeFactor * 0.75));
                 }
             } 
             else if (dotProduct < 0.0) {
