@@ -208,9 +208,10 @@ class WeaponAnalyzer {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER 2D-3D (Mắt Thần Quét Đa Lớp V7.0)
-// Công nghệ: Screen-Center 2D Culling, X-Axis Delta Tracking, Ultra-Magnetism.
-// Nhiệm vụ: Tìm địch gần tâm chữ thập nhất, đo vận tốc lướt ngang của địch.
+// BƯỚC 2: TARGET SCANNER 2D-3D (MẮT THẦN ĐỘNG HỌC V7.1)
+// Công nghệ: Kinematic Posture Sensor, Full Skeletal Zero-Friction, 
+//            LOD Virtual Head Fallback, 2D Screen-Center Culling.
+// Nhiệm vụ: Tái tạo khung xương, khử ma sát tứ chi, nội suy sọ địch và khóa 2D.
 // ============================================================================
 class TargetScanner2D3D {
     
@@ -242,13 +243,13 @@ class TargetScanner2D3D {
         state.target.scanFrame++;
 
         let previousTargetId = state.target.id;
-        let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; // Lưu góc cũ để tính vận tốc ngang
+        let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; 
 
         let bestTarget = null;
-        let lowest2DDistance = 999999.0; // Điểm số dựa trên mặt phẳng 2D Màn hình
+        let lowest2DDistance = 999999.0; 
 
         // ====================================================================
-        // A. AGGRESSIVE CULLING & ULTRA-MAGNETISM (Lọc rác & Tăng từ tính Sọ)
+        // A. XÂY DỰNG MA TRẬN KHUNG XƯƠNG & PHÂN LẬP VẬT LÝ
         // ====================================================================
         for (let i = 0; i < payload.players.length; i++) {
             let enemy = payload.players[i];
@@ -256,78 +257,141 @@ class TargetScanner2D3D {
             // 1. Lọc tử sĩ & Đồng đội
             if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked || !enemy.pos) continue;
             if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
-            if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
+            if (!enemy.hitboxes) continue;
 
-            let headPos = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
+            // Khởi tạo Radar định vị các đốt xương cốt lõi
+            let bones = {
+                head: null, neck: null, chest: null, spine: null, hips: null, feet: []
+            };
 
-            let dx = headPos.x - origin.x;
-            let dy = headPos.y - origin.y;
-            let dz = headPos.z - origin.z;
-            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            
-            // Bỏ qua địch quá xa (150m) để tiết kiệm RAM
-            if (distance3D > 150.0) continue; 
-
-            // Hủy diệt vật lý Tứ chi - Chỉ để lại Sọ
             const allBones = Object.keys(enemy.hitboxes);
             for (let b = 0; b < allBones.length; b++) {
                 let boneName = allBones[b].toLowerCase();
-                let bone = enemy.hitboxes[allBones[b]];
+                let boneObj = enemy.hitboxes[allBones[b]];
 
-                if (boneName.includes('head') || boneName.includes('neck')) {
-                    if (bone.radius) bone.radius = 0.5; // Kích thước đầu x2
-                    bone.magnetism = 5.0;               // Từ tính x500%
-                    bone.snap_weight = 99999.0;
-                } else {
-                    if (bone.radius !== undefined) bone.radius = 0.0001;
-                    bone.magnetism = 0.0; bone.friction = 0.0; bone.snap_weight = -99999.0;
-                    if (bone.pos && bone.pos.z) bone.pos.z -= 1.5;
+                // [CÔNG NGHỆ 1]: BẢO TỒN VÀ KHUẾCH ĐẠI APEX MAGNETISM (HỐ ĐEN)
+                // Lọc bằng Tên gốc và Mã Hash (-2111735698: Đầu, 96688289: Cổ)
+                if (boneName.includes('head') || boneName.includes('neck') || 
+                    boneName.includes('-2111735698') || boneName.includes('96688289')) {
+                    
+                    if (boneObj.radius) boneObj.radius = 0.45;
+                    boneObj.magnetism = 5.0;
+                    boneObj.snap_weight = 99999.0;
+
+                    // Lưu trữ tọa độ đỉnh tháp
+                    if (boneName.includes('head') || boneName.includes('-2111735698')) bones.head = boneObj.pos;
+                    else if (!bones.head) bones.neck = boneObj.pos;
+                } 
+                // [CÔNG NGHỆ 2]: KHỬ MA SÁT KHUNG XƯƠNG CÒN LẠI (ZERO-FRICTION BODY)
+                else {
+                    // Biến Tay, Chân, Bụng, Ngực thành không khí
+                    if (boneObj.radius !== undefined) boneObj.radius = 0.0001;
+                    boneObj.magnetism = 0.0; 
+                    boneObj.friction = 0.0; 
+                    boneObj.snap_weight = -99999.0;
+                    
+                    if (boneObj.pos && boneObj.pos.z) boneObj.pos.z -= 1.5;
+
+                    // Lấy Tọa độ làm Cảm biến Tư thế
+                    if (boneName.includes('spine1') || boneName.includes('chest') || boneName.includes('-1541408846')) bones.chest = boneObj.pos;
+                    if (boneName.includes('spine') || boneName.includes('-1051086991')) bones.spine = boneObj.pos;
+                    if (boneName.includes('hips') || boneName.includes('pelvis') || boneName.includes('1529948125')) bones.hips = boneObj.pos;
+                    if (boneName.includes('foot') || boneName.includes('toe') || boneName.includes('leg') || boneName.includes('calf')) bones.feet.push(boneObj.pos);
                 }
             }
 
             // ====================================================================
-            // PHA 1 & 3: TÍNH TOÁN 3D EULER & CHIẾU LÊN MẶT PHẲNG 2D MÀN HÌNH
+            // B. CẢM BIẾN TƯ THẾ (POSTURE RECOGNITION) & LOD FALLBACK
             // ====================================================================
-            let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
-            let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
-            let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
+            let targetHeadPos = bones.head || bones.neck;
+
+            // [LOD FALLBACK]: Game giấu Đầu vì địch ở quá xa
+            if (!targetHeadPos) {
+                let basePos = bones.chest || bones.spine || bones.hips || enemy.pos;
+                if (basePos) {
+                    // Mượn Bụng/Hông dựng lại Đầu Ảo nhô cao 0.6m
+                    targetHeadPos = { x: basePos.x, y: basePos.y + 0.6, z: basePos.z }; 
+                } else {
+                    continue; 
+                }
+            }
+
+            // [POSTURE RECOGNITION]: Nhận diện nằm bò qua trục Y của Hông và Đầu
+            if (bones.hips && targetHeadPos) {
+                let verticalDiff = targetHeadPos.y - bones.hips.y;
+                if (verticalDiff < 0.25) {
+                    // Địch đang NẰM BÒ (Prone). Đầu đưa ra trước.
+                    // Hạ trọng tâm Đầu ảo xuống 0.15m để đạn không vọt qua lưng.
+                    targetHeadPos.y -= 0.15;
+                }
+            }
+
+            let dx = targetHeadPos.x - origin.x;
+            let dy = targetHeadPos.y - origin.y;
+            let dz = targetHeadPos.z - origin.z;
+            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
             
-            // Đây là Tọa độ 3D thực tế
+            if (distance3D > 200.0) continue; 
+
+            // ====================================================================
+            // C. BÙ TRỪ ĐẠN ĐẠO (KINEMATIC LEAD OFFSET)
+            // ====================================================================
+            let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
+            let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
+            let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
+
+            if (distance3D > 40.0) {
+                let vX = enemy.real_velocity ? enemy.real_velocity.x : (enemy.velocity ? enemy.velocity.x : 0);
+                let vZ = enemy.real_velocity ? enemy.real_velocity.z : (enemy.velocity ? enemy.velocity.z : 0);
+                let travelTime = distance3D / 800.0; 
+                
+                // Tiêm vận tốc vào tương lai
+                let leadX = targetHeadPos.x + (vX * travelTime);
+                let leadZ = targetHeadPos.z + (vZ * travelTime);
+                let leadY = targetHeadPos.y + (9.8 * travelTime * travelTime * 0.5); // Bù rơi
+                
+                let leadDx = leadX - origin.x;
+                let leadDy = leadY - origin.y;
+                let leadDz = leadZ - origin.z;
+                
+                distXZ = Math.sqrt(leadDx*leadDx + leadDz*leadDz) || 0.001;
+                enemyYaw = Math.atan2(leadDx, leadDz) * (180.0 / Math.PI);
+                enemyPitch = -Math.atan2(leadDy, distXZ) * (180.0 / Math.PI);
+            }
+
+            // Tọa độ 3D Góc (Euler)
             let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
             let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
 
-            // [LÕI 2D]: Dùng DeltaYaw và DeltaPitch làm Trục X và Y của Màn hình phẳng.
-            // Biến fov2D chính là KHOẢNG CÁCH PIXEL từ Sọ địch đến Giao điểm Tâm Chữ Thập.
+            // ====================================================================
+            // D. CHIẾU MÀN HÌNH 2D SCREEN-CENTER
+            // ====================================================================
+            // Biến fov2D là KHOẢNG CÁCH PIXEL từ sọ địch đến tâm màn hình chữ thập
             let fov2D = Math.sqrt(rawDeltaYaw**2 + rawDeltaPitch**2);
 
-            // Cắt rìa màn hình (Bật Scope thì chỉ lấy địch ở khu vực hẹp giữa màn)
             let baseCapsule = (distance3D < 3.0) ? 180.0 : ((120.0 / distance3D) + 12.0);
             let capsuleFovLimit = isADS ? (baseCapsule * 0.35) : baseCapsule; 
             
             let isStickyTarget = (enemy.id === previousTargetId);
-            if (isStickyTarget) capsuleFovLimit *= 1.5; // Dính chặt mục tiêu cũ
+            if (isStickyTarget) capsuleFovLimit *= 1.5; 
 
             if (fov2D > capsuleFovLimit) continue;
 
-            // Chấm điểm hoàn toàn dựa trên 2D (Địch càng gần Tâm chữ thập -> Điểm càng nhỏ)
+            // Chấm điểm 2D ưu tiên địch gần Tâm chữ thập
             let stancePenalty = 1.0;
-            let heightDiff = origin.y - headPos.y; 
+            let heightDiff = origin.y - targetHeadPos.y; 
             if (heightDiff > 0.8) stancePenalty *= 2.0; 
             if (enemy.is_behind_cover) stancePenalty *= 10.0;
 
             let stickyBonus = isStickyTarget ? 0.50 : 1.0;
             let score2D = fov2D * stancePenalty * stickyBonus;
 
+            // Xác định Kẻ thù Số 1 (Best Target)
             if (score2D < lowest2DDistance) {
                 lowest2DDistance = score2D;
 
-                // ====================================================================
-                // PHA 2: THEO DÕI VẬN TỐC LƯỚT NGANG (STRAFE DELTA TRACKING)
-                // ====================================================================
+                // Tính toán Vận tốc lướt ngang (Delta Yaw)
                 let currentEnemyDeltaYaw = 0.0;
-                
-                // NẾU vẫn là thằng địch cũ, ta so sánh góc ngang hiện tại và góc của 16ms trước
-                // Để biết chính xác nó đang lướt sang Trái hay Phải với tốc độ bao nhiêu độ/mili-giây!
                 if (isStickyTarget) {
                     currentEnemyDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - previousEnemyYaw);
                 }
@@ -335,17 +399,17 @@ class TargetScanner2D3D {
                 bestTarget = {
                     id: enemy.id, 
                     distance3D: distance3D,
-                    distance2D: fov2D,              // Gửi 2D cho Trợ lực kéo
-                    deltaPitch: rawDeltaPitch,      // Gửi 3D cho Khóa cứng
-                    deltaYaw: rawDeltaYaw,          // Gửi 3D cho Khóa cứng
-                    enemyDeltaYaw: currentEnemyDeltaYaw, // Gửi Vận tốc ngang cho X-Boost
-                    absoluteEnemyYaw: enemyYaw      // Lưu lại để dùng cho Frame tiếp theo
+                    distance2D: fov2D,              // Truyền cho Bước 3 bẻ cong Quỹ đạo
+                    deltaPitch: rawDeltaPitch,      // Truyền cho Bước 3 khóa 3D
+                    deltaYaw: rawDeltaYaw,          // Truyền cho Bước 3 khóa 3D
+                    enemyDeltaYaw: currentEnemyDeltaYaw, // Truyền cho X-Boost tự kéo
+                    absoluteEnemyYaw: enemyYaw      
                 };
             }
         }
 
         // ====================================================================
-        // XUẤT BÁO CÁO CẬP NHẬT VÀO VORTEX STATE
+        // E. XUẤT BÁO CÁO VÀO BỘ NHỚ VORTEX STATE
         // ====================================================================
         if (bestTarget) {
             state.target.id = bestTarget.id;
@@ -354,7 +418,6 @@ class TargetScanner2D3D {
             state.target.pitchError = bestTarget.deltaPitch; 
             state.target.yawError = bestTarget.deltaYaw;
             
-            // Lưu lại Vận tốc lướt ngang và Góc tuyệt đối
             state.target.enemyDeltaYaw = bestTarget.enemyDeltaYaw;
             state.target.lastEnemyYaw = bestTarget.absoluteEnemyYaw;
         } else {
@@ -372,12 +435,14 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (Động cơ Trợ lực Hướng tâm V7.0)
-// Công nghệ: ADS 15px Pre-kick, 2D Vector Guidance, X-Axis Delta Auto-Pull, Euler Freezing.
-// Nhiệm vụ: Bẻ cong quỹ đạo vuốt 2D, tự động trôi trục ngang, khóa 3D khi cận đích.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (ĐỘNG CƠ TRỢ LỰC HƯỚNG TÂM V7.1)
+// Công nghệ: Skeletal Spine-Sliding, ADS 15px Pre-kick, Delta-X Auto-Pull, 
+//            Surgical Apex Lock (Khóa Đỉnh Tháp Sọ).
+// Nhiệm vụ: Tận dụng cơ thể "Không khí" để trượt tâm lên sọ, khóa 3D tuyệt đối.
 // ============================================================================
 class VectorThrustEngine {
     
+    // Hàm Đường cong Sigmoid (Giữ nguyên sức mạnh đẩy)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.25; 
@@ -404,16 +469,16 @@ class VectorThrustEngine {
         let rawY = payload.touch_delta.y + engine.remY;
 
         // ====================================================================
-        // [CÔNG NGHỆ 1]: SCOPE PRE-KICK (CHỈ HÍCH 15PX KHI BẬT ỐNG NGẮM)
+        // [CÔNG NGHỆ 1]: SCOPE PRE-KICK (HÍCH 15PX KHI BẬT ỐNG NGẮM)
         // ====================================================================
         const ADS_KICK_PIXELS = 15; 
 
         if (engine.isADS && weapon.isFiring && weapon.bulletCount === 1) {
-            // Chỉ hích mồi nếu tâm còn cách đầu > 1.5 độ (Tránh vọt lố qua đầu)
-            if (target.distance2D > 1.5) {
-                rawY -= ADS_KICK_PIXELS; // Trừ Y = Vuốt lên trên
+            // Nhờ Khung xương, ta biết chính xác khoảng cách. 
+            // Nới mốc an toàn xuống 1.2 độ để cú hích búng tâm sát cằm địch nhất có thể.
+            if (target.distance2D > 1.2) {
+                rawY -= ADS_KICK_PIXELS; // Vuốt lên trên
                 
-                // Ép hệ thống nhận diện có thao tác tay ảo
                 input.isSwiping = true;
                 if (input.magnitude === 0) {
                     input.magnitude = ADS_KICK_PIXELS;
@@ -423,55 +488,55 @@ class VectorThrustEngine {
         }
 
         let hasInput = input.isSwiping && input.magnitude > 0;
-        let total2DError = target.distance2D; // Sử dụng khoảng cách Pixel 2D làm gốc
+        let total2DError = target.distance2D; 
 
-        if (!hasInput && total2DError >= 3.0) return payload; // Buông tay -> Trả lại game gốc
+        // Buông tay -> Trả lại vật lý tự nhiên
+        if (!hasInput && total2DError >= 2.5) return payload; 
 
-        // Lấy lực đẩy gốc (Giữ nguyên 100% sức mạnh cho cả Hip-fire lẫn Scope)
         let baseThrust = this.calculateSigmoidThrust(total2DError);
         
         let errMag = total2DError || 0.0001;
-        // Vector chuẩn hóa từ Tâm màn hình chỉ thẳng tới Sọ địch
         let targetDirX = target.yawError / errMag; 
         let targetDirY = target.pitchError / errMag;
         
         let dotProduct = 0;
         if (hasInput) dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
-        // Tọa độ 3D Tuyệt đối (Dùng để khóa Euler)
+        // Tọa độ 3D Tuyệt đối của Đỉnh tháp (Cổ/Sọ)
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
         let absoluteBonePitch = currentPitch + target.pitchError;
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // [CÔNG NGHỆ 2]: AUTO-PULL TRỤC X (STRAFE TRACKING ĐỘC LẬP)
+        // [CÔNG NGHỆ 2]: AUTO-PULL TRỤC X (STRAFE TRACKING VỚI BÙ TRỪ XƯƠNG)
         // ====================================================================
-        // 1 độ lướt ngang của địch tương đương khoảng 18 pixels trên màn hình
-        // Ta cộng trực tiếp vào trục X, hệ thống sẽ tự trôi theo địch!
+        // Trục X giờ đây theo dõi vận tốc hông/chân từ Bước 2 cực kỳ ổn định.
         let autoPullX = target.enemyDeltaYaw * 18.0; 
         rawX += autoPullX;
 
-        // Trợ lực nền cho trục X (X-Axis Boost)
         const X_AXIS_BOOST = 1.40; 
 
         // ====================================================================
-        // PHA 3: KHÓA 3D EULER (VÙNG CHÂN KHÔNG < 3.0 ĐỘ)
+        // PHA 3: SURGICAL APEX LOCK (KHÓA ĐỈNH THÁP < 2.5 ĐỘ)
         // ====================================================================
-        if (total2DError < 3.0) {
+        // Vì tọa độ Sọ quá chính xác, ta thu hẹp Hố đen từ 3.0 xuống 2.5.
+        // Tránh việc tâm bị hút quá sớm khi còn đang ở ngoài không khí.
+        if (total2DError < 2.5) {
             engine.isABSBraking = true;
 
-            // Bứt phá lồng giam nếu vuốt cực gắt ngược hướng
+            // Bứt phá lồng giam
             if (hasInput && input.magnitude > 7.0 && dotProduct < -0.6) {
                 engine.isABSBraking = false;
                 rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                // Đóng băng Màn hình -> Chuyển sang Khóa Tọa Độ 3D Không Gian
+                // Đóng băng màn hình cảm ứng
                 rawX = 0; rawY = 0;
                 
-                // Nhích nhẹ xuống dưới cằm một chút để tránh ghim lố da đầu
-                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.1); 
+                // [TINH CHỈNH TỌA ĐỘ]: Neo tâm chính xác vào "Sống mũi / Trán"
+                // target.pitchError > 0 nghĩa là sọ địch đang ở DƯỚI tâm súng
+                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.15); 
                 let perfectYaw = absoluteBoneYaw;
 
                 if (payload.camera) { 
@@ -482,7 +547,6 @@ class VectorThrustEngine {
                     payload.aim_yaw = perfectYaw; 
                 }
                 
-                // Khóa chết vật lý Engine
                 if (payload.camera_constraints) {
                     payload.camera_constraints.max_pitch_speed = 99999.0;
                     payload.camera_constraints.max_yaw_speed = 99999.0;
@@ -493,41 +557,39 @@ class VectorThrustEngine {
             }
         } 
         // ====================================================================
-        // PHA 2: HỖ TRỢ KÉO 2D (VECTOR GUIDANCE) (Sai số > 3.0 độ)
+        // PHA 2: SKELETAL SPINE-SLIDING (HỖ TRỢ KÉO 2D SIÊU MƯỢT)
         // ====================================================================
         else if (hasInput) {
             engine.isABSBraking = false;
 
             if (dotProduct > 0.3) {
-                // [CÔNG NGHỆ 3]: VECTOR GUIDANCE (BẺ CONG QUỸ ĐẠO MƯỢT MÀ)
-                // Pha trộn (Blend) 75% lực tay của bạn + 25% hướng đi lý tưởng của Hệ thống
-                // Cảm giác vuốt sẽ hoàn toàn là tay bạn, nhưng tâm tự lượn cong vào sọ
-                let blendFactor = 0.5; 
+                // Do Tứ chi và Bụng/Ngực ĐÃ BỊ LÀM TRƠN ở Bước 2 (Friction = 0)
+                // Ta tăng độ Blend lên 0.35. Hệ thống sẽ tự tin bẻ cong quỹ đạo ngón tay 
+                // của bạn trượt thẳng một đường dọc theo Cột sống (Spine) lên tới Sọ.
+                let blendFactor = 0.35; 
                 let guidedDirX = (input.dirX * (1.0 - blendFactor)) + (targetDirX * blendFactor);
                 let guidedDirY = (input.dirY * (1.0 - blendFactor)) + (targetDirY * blendFactor);
 
                 engine.thrustMultiplier = baseThrust * 0.90; 
                 
-                // Bơm lực theo quỹ đạo ĐÃ ĐƯỢC BẺ CONG
-                // Kèm theo khuếch đại trục ngang để đuổi kịp tốc độ chạy
+                // Bơm lực kết hợp Khuếch đại ngang & Vector Hướng sọ
                 rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
                 rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
 
-                // Đệm phanh từ tính (Magnetic Cushion) khi sắp chạm mốc 3.0 độ
-                if (total2DError < 8.0) {
-                    let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
-                    rawX *= (1.0 - (brakeFactor * 0.75));
-                    rawY *= (1.0 - (brakeFactor * 0.75));
+                // Magnetic Cushion (Đệm từ tính) nới lỏng để không bị khựng khi trượt qua cổ
+                if (total2DError < 7.0) {
+                    let brakeFactor = 1.0 - ((total2DError - 2.5) / 4.5); 
+                    rawX *= (1.0 - (brakeFactor * 0.65));
+                    rawY *= (1.0 - (brakeFactor * 0.65));
                 }
             } 
             else if (dotProduct < 0.0) {
-                // Vuốt ngược -> Phanh
+                // Phanh nếu vuốt ngược
                 rawX *= 0.25; 
                 rawY *= 0.25;
             }
         }
 
-        // Sub-pixel Remainder (Lưu phần lẻ)
         let finalX = Math.round(rawX);
         let finalY = Math.round(rawY);
         
@@ -542,7 +604,7 @@ class VectorThrustEngine {
 }
 
 // ============================================================================
-// [NEW] LÕI VŨ KHÍ: MARKSMAN CORE (SÚNG GÕ 1 VIÊN DE, WOODPECKER, SKS)
+// LÕI VŨ KHÍ: MARKSMAN CORE V7.1 (SÚNG GÕ 1 VIÊN DE, WOODPECKER, SKS)
 // ============================================================================
 class MarksmanCore {
     static execute(payload) {
@@ -550,26 +612,26 @@ class MarksmanCore {
         const engine = _vortex.__VortexState.engine;
 
         if (payload.weapon) {
-            // [CÔNG NGHỆ]: INVERSE BRAKING (PHANH NGHỊCH ĐẢO CHỐNG VỌT LỐ)
+            // INVERSE BRAKING (PHANH NGHỊCH ĐẢO CHỐNG VỌT LỐ)
             if (engine.isABSBraking) {
-                // Tâm đã khóa vào sọ. Triệt tiêu 100% độ giật nảy lên của dòng Marksman.
-                // Điều này giúp DE/Woodpecker không bị nảy vọt qua da đầu ở viên đầu tiên.
-                payload.weapon.recoil_y = 0.0;
+                // Nhờ Khóa Đỉnh Tháp quá chuẩn xác, ta ép độ giật dội ngược lại (-0.5) 
+                // mạnh hơn một chút để dập tắt hoàn toàn quán tính của Woodpecker/DE.
+                payload.weapon.recoil_y = -0.5;
                 payload.weapon.recoil_x = 0.0;
                 payload.weapon.recoil_accumulation = 0.0;
                 
-                // Thu gọn hồng tâm đến mức tối đa để đạn ghim thẳng 1 điểm
+                // Khóa tia Slug
                 payload.weapon.base_spread = 0.0001;
                 payload.weapon.dynamic_spread = 0.0;
                 payload.weapon.spread_add_per_shot = 0.0;
 
-                // Phục hồi tâm ngay lập tức sau viên đạn
                 if (payload.weapon.recoil_recovery) {
                     payload.weapon.recoil_recovery = 99999.0; 
                 }
             } else {
-                // Khi ở ngoài Vùng Khóa, giữ nguyên độ nảy tự nhiên để Anti-cheat không phát hiện
-                payload.weapon.dynamic_spread *= 0.5; // Chỉ giảm 50% độ tản mát
+                // Ngoài vùng Khóa, hạ 50% độ giật để người chơi dễ "vẩy" tâm lên đầu hơn
+                payload.weapon.dynamic_spread *= 0.5; 
+                payload.weapon.recoil_y *= 0.5;
             }
         }
         return payload;
