@@ -435,14 +435,12 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (ĐỘNG CƠ TRỢ LỰC HƯỚNG TÂM V7.1)
-// Công nghệ: Skeletal Spine-Sliding, ADS 15px Pre-kick, Delta-X Auto-Pull, 
-//            Surgical Apex Lock (Khóa Đỉnh Tháp Sọ).
-// Nhiệm vụ: Tận dụng cơ thể "Không khí" để trượt tâm lên sọ, khóa 3D tuyệt đối.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (Động cơ Trợ lực Hướng tâm V7.0)
+// Công nghệ: ADS 15px Pre-kick, 2D Vector Guidance, X-Axis Delta Auto-Pull, Euler Freezing.
+// Nhiệm vụ: Bẻ cong quỹ đạo vuốt 2D, tự động trôi trục ngang, khóa 3D khi cận đích.
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid (Giữ nguyên sức mạnh đẩy)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.25; 
@@ -469,16 +467,16 @@ class VectorThrustEngine {
         let rawY = payload.touch_delta.y + engine.remY;
 
         // ====================================================================
-        // [CÔNG NGHỆ 1]: SCOPE PRE-KICK (HÍCH 15PX KHI BẬT ỐNG NGẮM)
+        // [CÔNG NGHỆ 1]: SCOPE PRE-KICK (CHỈ HÍCH 15PX KHI BẬT ỐNG NGẮM)
         // ====================================================================
         const ADS_KICK_PIXELS = 15; 
 
         if (engine.isADS && weapon.isFiring && weapon.bulletCount === 1) {
-            // Nhờ Khung xương, ta biết chính xác khoảng cách. 
-            // Nới mốc an toàn xuống 1.2 độ để cú hích búng tâm sát cằm địch nhất có thể.
-            if (target.distance2D > 1.2) {
-                rawY -= ADS_KICK_PIXELS; // Vuốt lên trên
+            // Chỉ hích mồi nếu tâm còn cách đầu > 1.5 độ (Tránh vọt lố qua đầu)
+            if (target.distance2D > 1.5) {
+                rawY -= ADS_KICK_PIXELS; // Trừ Y = Vuốt lên trên
                 
+                // Ép hệ thống nhận diện có thao tác tay ảo
                 input.isSwiping = true;
                 if (input.magnitude === 0) {
                     input.magnitude = ADS_KICK_PIXELS;
@@ -488,55 +486,55 @@ class VectorThrustEngine {
         }
 
         let hasInput = input.isSwiping && input.magnitude > 0;
-        let total2DError = target.distance2D; 
+        let total2DError = target.distance2D; // Sử dụng khoảng cách Pixel 2D làm gốc
 
-        // Buông tay -> Trả lại vật lý tự nhiên
-        if (!hasInput && total2DError >= 2.5) return payload; 
+        if (!hasInput && total2DError >= 3.0) return payload; // Buông tay -> Trả lại game gốc
 
+        // Lấy lực đẩy gốc (Giữ nguyên 100% sức mạnh cho cả Hip-fire lẫn Scope)
         let baseThrust = this.calculateSigmoidThrust(total2DError);
         
         let errMag = total2DError || 0.0001;
+        // Vector chuẩn hóa từ Tâm màn hình chỉ thẳng tới Sọ địch
         let targetDirX = target.yawError / errMag; 
         let targetDirY = target.pitchError / errMag;
         
         let dotProduct = 0;
         if (hasInput) dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
-        // Tọa độ 3D Tuyệt đối của Đỉnh tháp (Cổ/Sọ)
+        // Tọa độ 3D Tuyệt đối (Dùng để khóa Euler)
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
         let absoluteBonePitch = currentPitch + target.pitchError;
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // [CÔNG NGHỆ 2]: AUTO-PULL TRỤC X (STRAFE TRACKING VỚI BÙ TRỪ XƯƠNG)
+        // [CÔNG NGHỆ 2]: AUTO-PULL TRỤC X (STRAFE TRACKING ĐỘC LẬP)
         // ====================================================================
-        // Trục X giờ đây theo dõi vận tốc hông/chân từ Bước 2 cực kỳ ổn định.
+        // 1 độ lướt ngang của địch tương đương khoảng 18 pixels trên màn hình
+        // Ta cộng trực tiếp vào trục X, hệ thống sẽ tự trôi theo địch!
         let autoPullX = target.enemyDeltaYaw * 18.0; 
         rawX += autoPullX;
 
+        // Trợ lực nền cho trục X (X-Axis Boost)
         const X_AXIS_BOOST = 1.40; 
 
         // ====================================================================
-        // PHA 3: SURGICAL APEX LOCK (KHÓA ĐỈNH THÁP < 2.5 ĐỘ)
+        // PHA 3: KHÓA 3D EULER (VÙNG CHÂN KHÔNG < 3.0 ĐỘ)
         // ====================================================================
-        // Vì tọa độ Sọ quá chính xác, ta thu hẹp Hố đen từ 3.0 xuống 2.5.
-        // Tránh việc tâm bị hút quá sớm khi còn đang ở ngoài không khí.
-        if (total2DError < 2.5) {
+        if (total2DError < 3.0) {
             engine.isABSBraking = true;
 
-            // Bứt phá lồng giam
+            // Bứt phá lồng giam nếu vuốt cực gắt ngược hướng
             if (hasInput && input.magnitude > 7.0 && dotProduct < -0.6) {
                 engine.isABSBraking = false;
                 rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                // Đóng băng màn hình cảm ứng
+                // Đóng băng Màn hình -> Chuyển sang Khóa Tọa Độ 3D Không Gian
                 rawX = 0; rawY = 0;
                 
-                // [TINH CHỈNH TỌA ĐỘ]: Neo tâm chính xác vào "Sống mũi / Trán"
-                // target.pitchError > 0 nghĩa là sọ địch đang ở DƯỚI tâm súng
-                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.15); 
+                // Nhích nhẹ xuống dưới cằm một chút để tránh ghim lố da đầu
+                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.1); 
                 let perfectYaw = absoluteBoneYaw;
 
                 if (payload.camera) { 
@@ -547,6 +545,7 @@ class VectorThrustEngine {
                     payload.aim_yaw = perfectYaw; 
                 }
                 
+                // Khóa chết vật lý Engine
                 if (payload.camera_constraints) {
                     payload.camera_constraints.max_pitch_speed = 99999.0;
                     payload.camera_constraints.max_yaw_speed = 99999.0;
@@ -557,39 +556,41 @@ class VectorThrustEngine {
             }
         } 
         // ====================================================================
-        // PHA 2: SKELETAL SPINE-SLIDING (HỖ TRỢ KÉO 2D SIÊU MƯỢT)
+        // PHA 2: HỖ TRỢ KÉO 2D (VECTOR GUIDANCE) (Sai số > 3.0 độ)
         // ====================================================================
         else if (hasInput) {
             engine.isABSBraking = false;
 
             if (dotProduct > 0.3) {
-                // Do Tứ chi và Bụng/Ngực ĐÃ BỊ LÀM TRƠN ở Bước 2 (Friction = 0)
-                // Ta tăng độ Blend lên 0.35. Hệ thống sẽ tự tin bẻ cong quỹ đạo ngón tay 
-                // của bạn trượt thẳng một đường dọc theo Cột sống (Spine) lên tới Sọ.
-                let blendFactor = 0.35; 
+                // [CÔNG NGHỆ 3]: VECTOR GUIDANCE (BẺ CONG QUỸ ĐẠO MƯỢT MÀ)
+                // Pha trộn (Blend) 75% lực tay của bạn + 25% hướng đi lý tưởng của Hệ thống
+                // Cảm giác vuốt sẽ hoàn toàn là tay bạn, nhưng tâm tự lượn cong vào sọ
+                let blendFactor = 0.5; 
                 let guidedDirX = (input.dirX * (1.0 - blendFactor)) + (targetDirX * blendFactor);
                 let guidedDirY = (input.dirY * (1.0 - blendFactor)) + (targetDirY * blendFactor);
 
                 engine.thrustMultiplier = baseThrust * 0.90; 
                 
-                // Bơm lực kết hợp Khuếch đại ngang & Vector Hướng sọ
+                // Bơm lực theo quỹ đạo ĐÃ ĐƯỢC BẺ CONG
+                // Kèm theo khuếch đại trục ngang để đuổi kịp tốc độ chạy
                 rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
                 rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
 
-                // Magnetic Cushion (Đệm từ tính) nới lỏng để không bị khựng khi trượt qua cổ
-                if (total2DError < 7.0) {
-                    let brakeFactor = 1.0 - ((total2DError - 2.5) / 4.5); 
-                    rawX *= (1.0 - (brakeFactor * 0.65));
-                    rawY *= (1.0 - (brakeFactor * 0.65));
+                // Đệm phanh từ tính (Magnetic Cushion) khi sắp chạm mốc 3.0 độ
+                if (total2DError < 8.0) {
+                    let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
+                    rawX *= (1.0 - (brakeFactor * 0.75));
+                    rawY *= (1.0 - (brakeFactor * 0.75));
                 }
             } 
             else if (dotProduct < 0.0) {
-                // Phanh nếu vuốt ngược
+                // Vuốt ngược -> Phanh
                 rawX *= 0.25; 
                 rawY *= 0.25;
             }
         }
 
+        // Sub-pixel Remainder (Lưu phần lẻ)
         let finalX = Math.round(rawX);
         let finalY = Math.round(rawY);
         
@@ -604,7 +605,7 @@ class VectorThrustEngine {
 }
 
 // ============================================================================
-// LÕI VŨ KHÍ: MARKSMAN CORE V7.1 (SÚNG GÕ 1 VIÊN DE, WOODPECKER, SKS)
+// [NEW] LÕI VŨ KHÍ: MARKSMAN CORE (SÚNG GÕ 1 VIÊN DE, WOODPECKER, SKS)
 // ============================================================================
 class MarksmanCore {
     static execute(payload) {
@@ -612,26 +613,26 @@ class MarksmanCore {
         const engine = _vortex.__VortexState.engine;
 
         if (payload.weapon) {
-            // INVERSE BRAKING (PHANH NGHỊCH ĐẢO CHỐNG VỌT LỐ)
+            // [CÔNG NGHỆ]: INVERSE BRAKING (PHANH NGHỊCH ĐẢO CHỐNG VỌT LỐ)
             if (engine.isABSBraking) {
-                // Nhờ Khóa Đỉnh Tháp quá chuẩn xác, ta ép độ giật dội ngược lại (-0.5) 
-                // mạnh hơn một chút để dập tắt hoàn toàn quán tính của Woodpecker/DE.
-                payload.weapon.recoil_y = -0.5;
+                // Tâm đã khóa vào sọ. Triệt tiêu 100% độ giật nảy lên của dòng Marksman.
+                // Điều này giúp DE/Woodpecker không bị nảy vọt qua da đầu ở viên đầu tiên.
+                payload.weapon.recoil_y = 0.0;
                 payload.weapon.recoil_x = 0.0;
                 payload.weapon.recoil_accumulation = 0.0;
                 
-                // Khóa tia Slug
+                // Thu gọn hồng tâm đến mức tối đa để đạn ghim thẳng 1 điểm
                 payload.weapon.base_spread = 0.0001;
                 payload.weapon.dynamic_spread = 0.0;
                 payload.weapon.spread_add_per_shot = 0.0;
 
+                // Phục hồi tâm ngay lập tức sau viên đạn
                 if (payload.weapon.recoil_recovery) {
                     payload.weapon.recoil_recovery = 99999.0; 
                 }
             } else {
-                // Ngoài vùng Khóa, hạ 50% độ giật để người chơi dễ "vẩy" tâm lên đầu hơn
-                payload.weapon.dynamic_spread *= 0.5; 
-                payload.weapon.recoil_y *= 0.5;
+                // Khi ở ngoài Vùng Khóa, giữ nguyên độ nảy tự nhiên để Anti-cheat không phát hiện
+                payload.weapon.dynamic_spread *= 0.5; // Chỉ giảm 50% độ tản mát
             }
         }
         return payload;
