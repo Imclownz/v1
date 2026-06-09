@@ -683,78 +683,84 @@ class BallisticsSynchronizer {
 }
 
 // ============================================================================
-// BƯỚC 5: BALLISTICS SYNCHRONIZER V7.0 (ABSOLUTE RAY-DIR LOCK)
-// Công nghệ: Physics Override, Bone-Hash Spoofing, Damage Integrity Injection.
-// Nhiệm vụ: Đảm bảo đạn luôn bay theo tia Camera (Ray-Lock) và mã hóa Headshot hợp lệ.
+// BƯỚC 5: BALLISTICS SYNCHRONIZER (Lớp Bảo Hiểm Tia Đạn V7.0)
+// Công nghệ: Smart Bone Hijacking, Magnetic Bullet Bending, Anti-Falloff.
+// Nhiệm vụ: Xóa RNG, khóa tia đạn chính xác vào mục tiêu, khuếch đại sát thương.
 // ============================================================================
 class BallisticsSynchronizer {
     static execute(payload) {
-        const engine = _vortex.__VortexState.engine;
+        const state = _vortex.__VortexState;
+        const engine = state.engine;
+        const target = state.target;
+        const weapon = state.weapon;
 
-        // CHỈ can thiệp đường đạn khi Phanh ABS đã đạt trạng thái đóng băng
-        if (engine.isABSBraking) {
+        // CHỈ can thiệp đường đạn khi Phanh ABS đã đóng băng được tâm súng tại sọ
+        // VÀ hệ thống đã xác định được một Target cụ thể
+        if (engine.isABSBraking && target.id !== null) {
             
-            // 1. TỐI ƯU HÓA TIA ĐẠN (RAY-DIR LOCK)
-            // Ép Engine không được quyền tính toán lại hướng đạn (tắt mọi độ lệch do giật)
+            // ====================================================================
+            // 1. ĐỒNG BỘ TIA ĐẠN VẬT LÝ (MAGNETIC BULLET BENDING)
+            // ====================================================================
             if (payload.bullet_events) {
                 for (let i = 0; i < payload.bullet_events.length; i++) {
                     let bullet = payload.bullet_events[i];
                     
-                    // Loại bỏ ma sát không khí, RNG deviation (độ lệch ngẫu nhiên)
+                    // Xóa bỏ tản mát ngẫu nhiên (RNG deviation)
                     bullet.spread_angle = 0.0; 
                     bullet.deviation = 0.0; 
                     bullet.angular_velocity = 0.0;
-                    bullet.gravity_scale = 0.0; // Triệt tiêu trọng lực rơi đạn (Chỉ áp dụng khi Lock)
                     
-                    // Buff xuyên thấu: Đạn đi xuyên qua các chướng ngại vật mỏng (tường gỗ, mép tường)
-                    // Đây là chìa khóa để bắn trúng sọ khi địch vừa nấp sau mép tường
+                    // [CÔNG NGHỆ MỚI]: Đồng bộ vật lý đạn với thuật toán Đón Đầu ở Bước 2
+                    if (bullet.trajectory) {
+                        bullet.trajectory.gravity_scale = 0.0; // Tắt lực hút trái đất tác động lên viên đạn này
+                        bullet.trajectory.drag = 0.0;          // Tắt lực cản gió
+                    }
+
+                    // Xuyên thấu ảo: Giúp đạn ghim vào sọ ngay cả khi địch lách nhẹ sau mép tường
                     bullet.is_penetrating = true; 
                     bullet.collision_obstacle = false;
-                    
-                    // Ép tia đạn (Direction Vector) trùng 100% với trục Camera đã Khóa (Vùng 2)
-                    bullet.direction = { x: 0, y: 0, z: 1 }; // Hướng tia đạn tuyệt đối
                 }
             }
 
-            // 2. MÃ HÓA CỨNG BÁO CÁO SÁT THƯƠNG (BONE-HASH SPOOFING)
-            // Giao thức này gửi trực tiếp lên Server để báo cáo viên đạn trúng đâu.
+            // ====================================================================
+            // 2. MÃ HÓA CỨNG BÁO CÁO SÁT THƯƠNG (SMART BONE HIJACKING)
+            // ====================================================================
             if (payload.damage_report || payload.hit_event) {
-                let report = payload.damage_report || payload.hit_event;
-                
-                // MÃ BONE_HASH của Đầu (Head): 
-                // Sử dụng mã HASH thực của Game để báo cáo là Headshot
-                report.hit_bone = -2111735698; 
-                report.is_headshot = true;
-                
-                // [CÔNG NGHỆ MỚI]: DAMAGE INTEGRITY INJECTION
-                // Khai tử luật Suy hao sát thương tầm xa (Distance Penalty).
-                // Đạn bay xa 100m vẫn gây sát thương y hệt như bắn sát mặt.
-                report.distance_penalty = 0.0; 
-                
-                // Tăng nhẹ hệ số sát thương để bù đắp cho việc các súng gõ 1 viên
-                // đôi khi bị giảm dame do khoảng cách.
-                if (report.damage_multiplier !== undefined) {
-                    report.damage_multiplier = 1.35; 
-                }
-                
-                // Gán lại ID mục tiêu chuẩn xác nhất
-                report.target_id = _vortex.__VortexState.target.id;
-            }
+                // Hỗ trợ mảng (Array) cho các súng bắn ra nhiều tia cùng lúc như Shotgun
+                let reports = payload.damage_report ? 
+                              (Array.isArray(payload.damage_report) ? payload.damage_report : [payload.damage_report]) : 
+                              (Array.isArray(payload.hit_event) ? payload.hit_event : [payload.hit_event]);
 
-            // 3. XỬ LÝ ĐẠN "MA" (Ghost Bullet Injection)
-            // Nếu phát bắn bị hụt do lag mạng, hệ thống tự động inject thêm 1 gói tin 
-            // "Ghost Hit" để Server game xác nhận là trúng sọ.
-            if (payload.weapon && payload.is_firing) {
-                payload.force_hit_detection = true; // Bắt buộc Engine check Hit
+                for (let r = 0; r < reports.length; r++) {
+                    let report = reports[r];
+
+                    // CHỐT CHẶN AN TOÀN: Chỉ đổi thành Headshot nếu trúng ĐÚNG thằng đang khóa.
+                    // Nếu lỡ bắn trúng thằng khác chạy ngang qua, giữ nguyên sát thương gốc để tránh bị Report.
+                    if (report.target_id === target.id || report.entity_id === target.id) {
+                        
+                        // -2111735698 chính là mã BONE_HASH tuyệt đối của xương Đầu (Head)
+                        report.hit_bone = -2111735698; 
+                        report.is_headshot = true;
+                        
+                        // Khai tử luật Suy hao sát thương tầm xa (Damage Falloff)
+                        report.distance_penalty = 0.0; 
+
+                        // Khuếch đại bạo kích tùy theo phân loại súng
+                        if (weapon.type === "MARKSMAN" || weapon.type === "SNIPER" || weapon.type === "SHOTGUN") {
+                            report.damage_multiplier = 1.50; // Súng gõ 1 viên cần kết liễu cực gắt
+                        } else {
+                            report.damage_multiplier = 1.35; // Súng sấy SMG/AR
+                        }
+                    }
+                }
             }
         }
-        
         return payload;
     }
 }
 
 // ============================================================================
-// BỘ ĐIỀU PHỐI CHÍNH (VORTEX DISPATCHER V7.0)
+// BỘ ĐIỀU PHỐI (VORTEX DISPATCHER V7.0) - DÂY CHUYỀN LẮP RÁP (ASSEMBLY LINE)
 // ============================================================================
 class VortexDispatcher {
     
@@ -781,24 +787,27 @@ class VortexDispatcher {
 
         // --- DÂY CHUYỀN VORTEX V7.0 VẬN HÀNH ---
         
+        // Nhịp 1: Đọc tay & Nhận diện súng
         payload = InputInterceptor.execute(payload);
         payload = WeaponAnalyzer.execute(payload);
-        payload = TargetScanner2D3D.execute(payload); // Quét 2D -> 3D
+        
+        // Nhịp 2: Mắt thần quét 2D -> 3D
+        payload = TargetScanner2D3D.execute(payload); 
 
         const weaponType = _vortex.__VortexState.weapon.type;
         
         if (weaponType !== "NONE" && weaponType !== "SNIPER") {
             
-            // Động cơ tính lực đẩy Vector 2D và Bám trục X
+            // Nhịp 3: Động cơ tính lực đẩy Vector 2D và Bám trục X
             payload = VectorThrustEngine.execute(payload);
 
-            // Điều hướng Core Vũ khí
+            // Nhịp 4: Điều hướng Core Vũ khí (Làm chủ độ giật)
             if (weaponType === "SHOTGUN") payload = ShotgunCore.execute(payload);
             else if (weaponType === "SMG") payload = SMGCore.execute(payload);
             else if (weaponType === "AR") payload = ARCore.execute(payload);
-            else if (weaponType === "MARKSMAN") payload = MarksmanCore.execute(payload); // Nhánh xử lý súng nảy mạnh mới
+            else if (weaponType === "MARKSMAN") payload = MarksmanCore.execute(payload); 
 
-            // Đồng bộ đường đạn
+            // Nhịp 5: Đồng bộ tia đạn vật lý
             payload = BallisticsSynchronizer.execute(payload);
         }
 
