@@ -372,15 +372,19 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (Động cơ Trợ lực Hướng tâm V7.0)
-// Công nghệ: ADS 15px Pre-kick, 2D Vector Guidance, X-Axis Delta Auto-Pull, Euler Freezing.
-// Nhiệm vụ: Bẻ cong quỹ đạo vuốt 2D, tự động trôi trục ngang, khóa 3D khi cận đích.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (ULTIMATE FUSION V7.2)
+// Dung hợp tinh hoa: 
+// 1. Hệ thống 4 Vùng (Tâm bão, Lồng giam, Đệm từ tính, Tên lửa).
+// 2. Siêu Trục X (Phễu 60 độ + Bẻ cong quỹ đạo 2D + X-Boost 1.5 + AutoPullX).
+// 3. ADS 15px Pre-kick (Giữ nguyên từ VIP 53, bỏ Hip-fire).
+// 4. Thuận tự nhiên 100% (Bỏ lồng giam Tap/Hold).
 // ============================================================================
 class VectorThrustEngine {
     
+    // Hàm Đường cong Sigmoid (Tên lửa đẩy)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
-        const MIN_THRUST = 0.15; 
+        const MIN_THRUST = 0.25; 
         const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance2D - MID_POINT) / SLOPE));
@@ -394,26 +398,23 @@ class VectorThrustEngine {
         const engine = state.engine;
         const weapon = state.weapon;
 
+        // Khởi tạo Bộ đệm phần dư (Chống mất pixel thập phân)
         if (engine.remX === undefined) { engine.remX = 0; engine.remY = 0; }
 
         if (!target.id) return payload; 
         if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
 
-        // Đọc lực vuốt (Đã được làm mượt EMA từ Bước 1)
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
 
         // ====================================================================
-        // [CÔNG NGHỆ 1]: SCOPE PRE-KICK (CHỈ HÍCH 15PX KHI BẬT ỐNG NGẮM)
+        // [KẾ THỪA VIP 53]: SCOPE PRE-KICK (CHỈ HÍCH 15PX KHI BẬT ỐNG NGẮM)
+        // Bỏ qua Hip-fire để giữ cảm giác sấy/vuốt tự nhiên 100%
         // ====================================================================
         const ADS_KICK_PIXELS = 15; 
-
         if (engine.isADS && weapon.isFiring && weapon.bulletCount === 1) {
-            // Chỉ hích mồi nếu tâm còn cách đầu > 1.5 độ (Tránh vọt lố qua đầu)
             if (target.distance2D > 1.5) {
-                rawY -= ADS_KICK_PIXELS; // Trừ Y = Vuốt lên trên
-                
-                // Ép hệ thống nhận diện có thao tác tay ảo
+                rawY -= ADS_KICK_PIXELS; // Vuốt lên
                 input.isSwiping = true;
                 if (input.magnitude === 0) {
                     input.magnitude = ADS_KICK_PIXELS;
@@ -423,54 +424,69 @@ class VectorThrustEngine {
         }
 
         let hasInput = input.isSwiping && input.magnitude > 0;
-        let total2DError = target.distance2D; // Sử dụng khoảng cách Pixel 2D làm gốc
+        let total2DError = target.distance2D; 
 
-        if (!hasInput && total2DError >= 3.0) return payload; // Buông tay -> Trả lại game gốc
+        // [KẾ THỪA VIP 50]: Giải phóng Camera. Buông tay ngoài vùng Hố đen -> Trả lại game gốc
+        if (!hasInput && total2DError >= 3.0) return payload; 
 
-        // Lấy lực đẩy gốc (Giữ nguyên 100% sức mạnh cho cả Hip-fire lẫn Scope)
         let baseThrust = this.calculateSigmoidThrust(total2DError);
         
         let errMag = total2DError || 0.0001;
-        // Vector chuẩn hóa từ Tâm màn hình chỉ thẳng tới Sọ địch
         let targetDirX = target.yawError / errMag; 
         let targetDirY = target.pitchError / errMag;
         
         let dotProduct = 0;
         if (hasInput) dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
-        // Tọa độ 3D Tuyệt đối (Dùng để khóa Euler)
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
         let absoluteBonePitch = currentPitch + target.pitchError;
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // [CÔNG NGHỆ 2]: AUTO-PULL TRỤC X (STRAFE TRACKING ĐỘC LẬP)
+        // [SIÊU TRỤC X]: AUTO-PULL + VECTOR GUIDANCE + X-BOOST 1.50
         // ====================================================================
-        // 1 độ lướt ngang của địch tương đương khoảng 18 pixels trên màn hình
-        // Ta cộng trực tiếp vào trục X, hệ thống sẽ tự trôi theo địch!
         let autoPullX = target.enemyDeltaYaw * 18.0; 
-        rawX += autoPullX;
-
-        // Trợ lực nền cho trục X (X-Axis Boost)
-        const X_AXIS_BOOST = 1.40; 
+        const X_AXIS_BOOST = 1.50; 
+        
+        // Hệ số nắn quỹ đạo mềm mại từ VIP 53
+        let blendFactor = 0.30; 
+        let guidedDirX = (input.dirX * (1.0 - blendFactor)) + (targetDirX * blendFactor);
+        let guidedDirY = (input.dirY * (1.0 - blendFactor)) + (targetDirY * blendFactor);
 
         // ====================================================================
-        // PHA 3: KHÓA 3D EULER (VÙNG CHÂN KHÔNG < 3.0 ĐỘ)
+        // VÙNG 1: TÂM BÃO TÀNG HÌNH (Ghost Tracking < 0.4 độ)
         // ====================================================================
-        if (total2DError < 3.0) {
+        if (total2DError < 0.4) {
+            engine.isABSBraking = true; 
+            
+            // Thả ngón tay cái ra, Camera vẫn chết cứng ở sọ địch
+            if (!hasInput) {
+                if (payload.camera) { 
+                    payload.camera.pitch = absoluteBonePitch; 
+                    payload.camera.yaw = absoluteBoneYaw; 
+                } else { 
+                    payload.aim_pitch = absoluteBonePitch; 
+                    payload.aim_yaw = absoluteBoneYaw; 
+                }
+            }
+        } 
+        // ====================================================================
+        // VÙNG 2: LỒNG GIAM ĐỘNG HỌC (0.4 -> 3.0 độ)
+        // ====================================================================
+        else if (total2DError < 3.0) {
             engine.isABSBraking = true;
 
-            // Bứt phá lồng giam nếu vuốt cực gắt ngược hướng
+            // Lực bứt phá lồng giam (Cứu bồ / Đổi mục tiêu)
             if (hasInput && input.magnitude > 7.0 && dotProduct < -0.6) {
                 engine.isABSBraking = false;
                 rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                // Đóng băng Màn hình -> Chuyển sang Khóa Tọa Độ 3D Không Gian
+                // Đóng băng màn hình vuốt tay
                 rawX = 0; rawY = 0;
                 
-                // Nhích nhẹ xuống dưới cằm một chút để tránh ghim lố da đầu
+                // Khóa cứng tọa độ 3D vào sọ
                 let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.1); 
                 let perfectYaw = absoluteBoneYaw;
 
@@ -482,7 +498,7 @@ class VectorThrustEngine {
                     payload.aim_yaw = perfectYaw; 
                 }
                 
-                // Khóa chết vật lý Engine
+                // Ép tử vật lý Engine
                 if (payload.camera_constraints) {
                     payload.camera_constraints.max_pitch_speed = 99999.0;
                     payload.camera_constraints.max_yaw_speed = 99999.0;
@@ -493,41 +509,58 @@ class VectorThrustEngine {
             }
         } 
         // ====================================================================
-        // PHA 2: HỖ TRỢ KÉO 2D (VECTOR GUIDANCE) (Sai số > 3.0 độ)
+        // VÙNG 3: ĐỆM TỪ TÍNH (Magnetic Cushion 3.0 -> 8.0 độ)
+        // ====================================================================
+        else if (total2DError < 8.0 && hasInput) {
+            engine.isABSBraking = false;
+            
+            if (dotProduct > 0.0) {
+                // Hãm lực mượt mà từ 100% về 25% khi tiến gần vào mốc 3.0
+                let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
+                let cushion = 1.0 - (brakeFactor * 0.75); 
+                
+                engine.thrustMultiplier = baseThrust * cushion; 
+                
+                // Bơm lực kết hợp Nắn quỹ đạo + Khuếch đại X 150% + Trôi màn hình
+                rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
+                rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
+            } else {
+                // Phanh gấp nếu vuốt ngược
+                rawX *= 0.25; 
+                rawY *= 0.25;
+            }
+        } 
+        // ====================================================================
+        // VÙNG 4: TÊN LỬA ĐẨY & PHỄU KHUẾCH ĐẠI 60 ĐỘ (> 8.0 độ)
         // ====================================================================
         else if (hasInput) {
             engine.isABSBraking = false;
 
-            if (dotProduct > 0.3) {
-                // [CÔNG NGHỆ 3]: VECTOR GUIDANCE (BẺ CONG QUỸ ĐẠO MƯỢT MÀ)
-                // Pha trộn (Blend) 75% lực tay của bạn + 25% hướng đi lý tưởng của Hệ thống
-                // Cảm giác vuốt sẽ hoàn toàn là tay bạn, nhưng tâm tự lượn cong vào sọ
-                let blendFactor = 0.3; 
-                let guidedDirX = (input.dirX * (1.0 - blendFactor)) + (targetDirX * blendFactor);
-                let guidedDirY = (input.dirY * (1.0 - blendFactor)) + (targetDirY * blendFactor);
-
+            if (dotProduct > 0.5) {
+                // Vùng lõi phễu: Bơm Max lực 90%
                 engine.thrustMultiplier = baseThrust * 0.90; 
-                
-                // Bơm lực theo quỹ đạo ĐÃ ĐƯỢC BẺ CONG
-                // Kèm theo khuếch đại trục ngang để đuổi kịp tốc độ chạy
                 rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
                 rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
-
-                // Đệm phanh từ tính (Magnetic Cushion) khi sắp chạm mốc 3.0 độ
-                if (total2DError < 8.0) {
-                    let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
-                    rawX *= (1.0 - (brakeFactor * 0.75));
-                    rawY *= (1.0 - (brakeFactor * 0.75));
-                }
             } 
-            else if (dotProduct < 0.0) {
-                // Vuốt ngược -> Phanh
-                rawX *= 0.25; 
-                rawY *= 0.25;
+            else if (dotProduct > 0.0) {
+                // Góc rìa phễu: Giảm dần lực dựa theo độ chéo tay
+                engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
+                engine.thrustMultiplier *= 0.90;
+                
+                rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
+                rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
+            }
+            else {
+                // Vuốt ngược hướng địch
+                engine.thrustMultiplier = 0.25; 
+                rawX *= engine.thrustMultiplier;
+                rawY *= engine.thrustMultiplier;
             }
         }
 
-        // Sub-pixel Remainder (Lưu phần lẻ)
+        // ====================================================================
+        // LƯU PHẦN DƯ SUB-PIXEL
+        // ====================================================================
         let finalX = Math.round(rawX);
         let finalY = Math.round(rawY);
         
