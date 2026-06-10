@@ -369,16 +369,17 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.5 SKEW SCALE & ADS OVERDRIVE)
-// Sự dung hợp tối thượng: 
-// 1. Khôi phục hoàn toàn toán học tính toán 2D nhân tỷ lệ lực thô từ hệ thống cũ.
-// 2. Giữ nguyên Lồng giam 3D Snap-Lock tĩnh tuyệt đối cho Vùng < 5.0 độ của VIP 55.
-// 3. Giữ nguyên Phản lực dọc siêu mạnh độc lập khi bật ngắm (ADS Overdrive 4.5x).
-// 4. Giữ nguyên Auto-Pull Trục X tự động trôi màn hình theo vận tốc lướt của địch.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.6 THE PERFECT PIPELINE)
+// Tái cấu trúc toàn diện chuỗi MA TRẬN 2D -> TRỢ LỰC KÉO -> KHÓA 3D
+// Công nghệ:
+// 1. Raw Velocity Blending: Giải quyết xung đột, kết hợp Quán tính tay + Bẻ cong quỹ đạo.
+// 2. 3D Snap-Lock: Khóa tọa độ không gian tĩnh tuyệt đối (Vùng < 5.0 độ).
+// 3. ADS Vertical Overdrive: Phản lực dọc 4.5x độc lập khi bật ống ngắm.
+// 4. Ultimate X-Axis: Auto-Pull (Trôi theo địch) + X-Boost 1.5x.
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid từ VIP 55 (MAX_THRUST = 15.0 bảo toàn lực đẩy tên lửa)
+    // Hàm Đường cong Sigmoid (Gia tốc đẩy cơ bản)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 15.0; 
         const MIN_THRUST = 0.15; 
@@ -393,54 +394,71 @@ class VectorThrustEngine {
         const input = state.input;
         const target = state.target;
         const engine = state.engine;
-        const weapon = state.weapon;
+        // Weapon Analyzer ở Bước 1.5 đã lọc Sniper thành NONE, nên không cần xét ở đây
 
-        // Khởi tạo Bộ đệm phần dư để tránh mất pixel thập phân khi quét màn hình cảm ứng
+        // Khởi tạo Bộ đệm phần dư chống mất pixel
         if (engine.remX === undefined) { engine.remX = 0; engine.remY = 0; }
 
-        // Bỏ qua hoàn toàn nếu không tìm thấy mục tiêu (Súng ngắm đã bị lọc bỏ từ Bước 1.5)
         if (!target.id) return payload; 
         if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
 
+        // Lực tay thô thực tế của người chơi (Đã bù pixel dư từ frame trước)
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
 
         let hasInput = input.isSwiping && input.magnitude > 0;
         let total2DError = target.distance2D; 
 
-        // Buông tay ngoài vùng khóa (>= 3.0 độ) -> Lập tức giải phóng Camera trả lại game gốc
+        // Buông tay ngoài vùng khóa (>= 3.0 độ) -> Giải phóng Camera
         if (!hasInput && total2DError >= 3.0) return payload; 
 
         let baseThrust = this.calculateSigmoidThrust(total2DError);
         
         let errMag = total2DError || 0.0001;
+        // Vector chuẩn hóa hướng thẳng vào sọ địch
         let targetDirX = target.yawError / errMag; 
         let targetDirY = target.pitchError / errMag;
         
-        // Tính tích vô hướng để xác định góc vuốt ngón tay so với hướng địch (Bảo lưu Phễu 60 độ)
+        // Tích vô hướng (Sự đồng pha giữa hướng vuốt và hướng địch)
         let dotProduct = 0;
         if (hasInput) dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
         
-        // Trích xuất Tọa độ 3D tuyệt đối của sọ mục tiêu
         let absoluteBonePitch = currentPitch + target.pitchError;
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // THÔNG SỐ TRỤC X: AUTO-PULL & X-BOOST 1.50
+        // [CÔNG NGHỆ CHỐT CHẶN]: RAW VELOCITY BLENDING (BẺ CONG QUỸ ĐẠO THỰC)
+        // Giải quyết triệt để lỗi vô hiệu hóa ngầm ở phiên bản trước.
+        // ====================================================================
+        let blendedRawX = rawX;
+        let blendedRawY = rawY;
+
+        if (hasInput && dotProduct > 0.0) {
+            // 1. Tính toán Vận tốc lý tưởng (Nếu tay người chơi vuốt chuẩn 100% vào sọ)
+            let idealVx = input.magnitude * targetDirX;
+            let idealVy = input.magnitude * targetDirY;
+
+            // 2. Pha trộn: 70% lực cơ học thực tế + 30% quỹ đạo lý tưởng của Aimbot
+            let blendFactor = 0.30; 
+            blendedRawX = (rawX * (1.0 - blendFactor)) + (idealVx * blendFactor);
+            blendedRawY = (rawY * (1.0 - blendFactor)) + (idealVy * blendFactor);
+        }
+
+        // ====================================================================
+        // THÔNG SỐ TRỤC X: AUTO-PULL & X-BOOST
         // ====================================================================
         let autoPullX = target.enemyDeltaYaw * 18.0; 
         const X_AXIS_BOOST = 1.50; 
 
         // ====================================================================
-        // VÙNG 1: TÂM BÃO TÀNG HÌNH (Ghost Tracking < 0.5 độ) - GIỮ NGUYÊN TỪ VIP 55
+        // PHA 1 & 3: TÂM BÃO TÀNG HÌNH & LỒNG GIAM 3D SNAP-LOCK
         // ====================================================================
         if (total2DError < 0.5) {
+            // VÙNG 1: Ghost Tracking (Thả tay vẫn dính sọ)
             engine.isABSBraking = true; 
-            
-            // Khi thả tay lúc đã trúng sọ, khóa chết góc nhìn khớp hoàn toàn với tia đạn
             if (!hasInput) {
                 if (payload.camera) { 
                     payload.camera.pitch = absoluteBonePitch; 
@@ -451,19 +469,16 @@ class VectorThrustEngine {
                 }
             }
         } 
-        // ====================================================================
-        // VÙNG 2: LỒNG GIAM 3D SNAP-LOCK (< 5.0 độ) - GIỮ NGUYÊN TỪ VIP 55
-        // ====================================================================
         else if (total2DError < 5.0) {
+            // VÙNG 2: 3D Snap-Lock (Khóa cứng không gian)
             engine.isABSBraking = true;
 
-            // Cơ chế bứt phá lồng giam mềm khi vuốt cực gắt đổi mục tiêu
             if (hasInput && input.magnitude > 7.0 && dotProduct < -0.6) {
                 engine.isABSBraking = false;
                 rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                // Triệt tiêu lực tay thô, viết đè ma trận góc xoay 3D thẳng vào sọ địch
+                // Triệt tiêu lực tay cảm ứng, viết đè 100% ma trận Camera
                 rawX = 0; rawY = 0;
                 
                 let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.1); 
@@ -487,10 +502,11 @@ class VectorThrustEngine {
             }
         } 
         // ====================================================================
-        // VÙNG 3: MAGNETIC CUSHION - ĐỆM TỪ TÍNH (Sai số 5.0 -> 8.0 độ)
-        // ĐÃ KHÔI PHỤC: TOÁN HỌC 2D NHÂN TỶ LỆ LỰC THÔ TỪ HỆ THỐNG CŨ
+        // PHA 2: TRỢ LỰC KÉO (MAGNETIC CUSHION & VECTOR THRUST)
+        // Nơi thuật toán Raw Velocity Blending tỏa sáng.
         // ====================================================================
         else if (total2DError < 8.0 && hasInput) {
+            // VÙNG 3: Đệm từ tính
             engine.isABSBraking = false;
             
             if (dotProduct > 0.0) {
@@ -498,32 +514,24 @@ class VectorThrustEngine {
                 let cushion = 1.0 - (brakeFactor * 0.8); 
                 engine.thrustMultiplier = baseThrust * cushion; 
                 
-                // Tách biệt thông số tính ma sát cho hai trục dọc/ngang độc lập
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
                 let thrustY = engine.isADS ? 4.5 : engine.thrustMultiplier; 
                 
-                // TOÁN HỌC HỆ THỐNG CŨ: Nhân trực tiếp hệ số ma sát vào lực tay gốc của người chơi
-                rawX = (rawX * thrustX) + autoPullX;
-                rawY = (rawY * thrustY);
+                // CÔNG THỨC MỚI: Nhân lực đẩy vào Vận tốc Đã Pha Trộn (Đã bẻ cong)
+                rawX = (blendedRawX * thrustX) + autoPullX;
+                rawY = (blendedRawY * thrustY);
             } else {
-                // Vuốt ngược hướng địch -> Áp phanh hãm tốc độ
-                rawX *= 0.25; 
-                rawY *= 0.25;
+                rawX *= 0.25; rawY *= 0.25;
             }
         } 
-        // ====================================================================
-        // VÙNG 4: VECTOR THRUST & PHỄU KHUẾCH ĐẠI 60 ĐỘ (Sai số > 8.0 độ)
-        // ĐÃ KHÔI PHỤC: TOÁN HỌC 2D NHÂN TỶ LỆ LỰC THÔ TỪ HỆ THỐNG CŨ
-        // ====================================================================
         else if (hasInput) {
+            // VÙNG 4: Tên lửa đẩy & Phễu 60 độ
             engine.isABSBraking = false;
 
             if (dotProduct > 0.5) {
-                // Tâm nằm trong góc phễu -> Bơm 90% lực Sigmoid tối đa
                 engine.thrustMultiplier = baseThrust * 0.90; 
             } 
             else if (dotProduct > 0.0) {
-                // Tâm nằm rìa phễu chéo -> Giảm dần lực theo độ lệch hướng tay vuốt
                 engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
                 engine.thrustMultiplier *= 0.90;
             }
@@ -535,9 +543,9 @@ class VectorThrustEngine {
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
                 let thrustY = engine.isADS ? 4.5 : engine.thrustMultiplier; 
                 
-                // TOÁN HỌC HỆ THỐNG CŨ: Nhân trực tiếp hệ số ma sát vào lực tay gốc của người chơi
-                rawX = (rawX * thrustX) + autoPullX;
-                rawY = (rawY * thrustY);
+                // CÔNG THỨC MỚI: Nhân lực đẩy vào Vận tốc Đã Pha Trộn (Đã bẻ cong)
+                rawX = (blendedRawX * thrustX) + autoPullX;
+                rawY = (blendedRawY * thrustY);
             } else {
                 rawX *= engine.thrustMultiplier;
                 rawY *= engine.thrustMultiplier;
@@ -545,7 +553,7 @@ class VectorThrustEngine {
         }
 
         // ====================================================================
-        // BỘ ĐỆM PHẦN DƯ SUB-PIXEL DÀNH CHO CẢM ỨNG IOS
+        // BỘ ĐỆM PHẦN DƯ SUB-PIXEL
         // ====================================================================
         let finalX = Math.round(rawX);
         let finalY = Math.round(rawY);
