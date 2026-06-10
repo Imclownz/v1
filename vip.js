@@ -119,6 +119,7 @@ class InputInterceptor {
 // ============================================================================
 // BƯỚC 1.5: WEAPON ANALYZER (Phân loại súng & Đếm đạn)
 // Nhiệm vụ: Tách biệt hoàn toàn súng nảy mạnh (MARKSMAN) khỏi AR/SMG/SG.
+// [V7.3 UPDATE]: Khai tử hoàn toàn Súng Ngắm (Sniper), gán về trạng thái NONE.
 // ============================================================================
 class WeaponAnalyzer {
     static execute(payload) {
@@ -138,7 +139,7 @@ class WeaponAnalyzer {
         // Logic đếm số viên đạn đã bắn ra trong 1 lần đè cò
         if (currentlyFiring) {
             if (!weaponState.isFiring) {
-                weaponState.bulletCount = 1; // Viên đầu tiên (Rất quan trọng cho Scope Kick)
+                weaponState.bulletCount = 1; // Viên đầu tiên
             } else {
                 weaponState.bulletCount += 1;
             }
@@ -160,8 +161,7 @@ class WeaponAnalyzer {
                 
                 const identifier = `${currentId}_${payload.weapon.name || ""}_${payload.weapon.category || ""}`.toUpperCase();
 
-                // [A]. NHÁNH MỚI: MARKSMAN (Súng gõ 1 viên, độ nảy nòng cực gắt)
-                // Theo đúng yêu cầu: DE, Woodpecker, SKS, AC80, M590 (và các súng tương tự)
+                // [A]. NHÁNH MARKSMAN (Súng gõ 1 viên, độ nảy nòng cực gắt)
                 if (identifier.includes("WOODPECKER") || identifier.includes("SKS") || 
                     identifier.includes("AC80") || identifier.includes("SVD") || 
                     identifier.includes("DESERT_EAGLE") || identifier.includes("DEAGLE") ||
@@ -184,12 +184,7 @@ class WeaponAnalyzer {
                          identifier.includes("BIZON")) {
                     weaponState.type = "SMG";
                 } 
-                // [D]. SNIPER (Súng ngắm phát một)
-                else if (identifier.includes("SNIPER") || identifier.includes("AWM") || 
-                         identifier.includes("KAR98") || identifier.includes("M82B")) {
-                    weaponState.type = "SNIPER"; 
-                } 
-                // [E]. AR (Súng trường sấy tự động)
+                // [D]. AR (Súng trường sấy tự động)
                 else if (identifier.includes("AR") || identifier.includes("RIFLE") || 
                          identifier.includes("AK") || identifier.includes("SCAR") || 
                          identifier.includes("M4A1") || identifier.includes("FAMAS") || 
@@ -197,6 +192,8 @@ class WeaponAnalyzer {
                          identifier.includes("AUG") || identifier.includes("PISTOL")) {
                     weaponState.type = "AR";
                 } 
+                // [E]. TRẠNG THÁI NONE (Khai tử Sniper, Vũ khí cận chiến, Lựu đạn)
+                // Bất kỳ súng nào không lọt vào A, B, C, D (bao gồm cả AWM, KAR98) sẽ rơi vào đây
                 else {
                     weaponState.type = "NONE";
                 }
@@ -372,16 +369,15 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (ULTIMATE FUSION V7.2)
-// Dung hợp tinh hoa: 
-// 1. Hệ thống 4 Vùng (Tâm bão, Lồng giam, Đệm từ tính, Tên lửa).
-// 2. Siêu Trục X (Phễu 60 độ + Bẻ cong quỹ đạo 2D + X-Boost 1.5 + AutoPullX).
-// 3. ADS 15px Pre-kick (Giữ nguyên từ VIP 53, bỏ Hip-fire).
-// 4. Thuận tự nhiên 100% (Bỏ lồng giam Tap/Hold).
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.3 SURGICAL GLIDE & ADS OVERDRIVE)
+// Công nghệ cốt lõi: 
+// 1. Khai tử 15px Pre-kick -> Thay bằng Phản lực Y-Axis Độc lập (ADS Overdrive).
+// 2. Surgical Exact-Interpolation (Trượt nội suy động học, xóa bỏ giật Teleport).
+// 3. Kế thừa Siêu Trục X (Phễu góc + Bẻ cong quỹ đạo + X-Boost 1.5 + AutoPull).
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid (Tên lửa đẩy)
+    // Hàm Đường cong Sigmoid (Chỉ còn kiểm soát lực kéo Hip-fire và Trục X)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.25; 
@@ -398,7 +394,7 @@ class VectorThrustEngine {
         const engine = state.engine;
         const weapon = state.weapon;
 
-        // Khởi tạo Bộ đệm phần dư (Chống mất pixel thập phân)
+        // Khởi tạo Bộ đệm phần dư (Chống mất pixel do làm tròn số)
         if (engine.remX === undefined) { engine.remX = 0; engine.remY = 0; }
 
         if (!target.id) return payload; 
@@ -407,26 +403,12 @@ class VectorThrustEngine {
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
 
-        // ====================================================================
-        // [KẾ THỪA VIP 53]: SCOPE PRE-KICK (CHỈ HÍCH 15PX KHI BẬT ỐNG NGẮM)
-        // Bỏ qua Hip-fire để giữ cảm giác sấy/vuốt tự nhiên 100%
-        // ====================================================================
-        const ADS_KICK_PIXELS = 15; 
-        if (engine.isADS && weapon.isFiring && weapon.bulletCount === 1) {
-            if (target.distance2D > 1.5) {
-                rawY -= ADS_KICK_PIXELS; // Vuốt lên
-                input.isSwiping = true;
-                if (input.magnitude === 0) {
-                    input.magnitude = ADS_KICK_PIXELS;
-                    input.dirX = 0; input.dirY = -1.0; 
-                }
-            }
-        }
+        // [XÓA BỎ HOÀN TOÀN CƠ CHẾ 15PX PRE-KICK CŨ TẠI ĐÂY]
 
         let hasInput = input.isSwiping && input.magnitude > 0;
         let total2DError = target.distance2D; 
 
-        // [KẾ THỪA VIP 50]: Giải phóng Camera. Buông tay ngoài vùng Hố đen -> Trả lại game gốc
+        // Buông tay ngoài vùng Hố đen -> Giải phóng Camera trả lại game gốc
         if (!hasInput && total2DError >= 3.0) return payload; 
 
         let baseThrust = this.calculateSigmoidThrust(total2DError);
@@ -444,12 +426,11 @@ class VectorThrustEngine {
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // [SIÊU TRỤC X]: AUTO-PULL + VECTOR GUIDANCE + X-BOOST 1.50
+        // [CƠ CHẾ KẾ THỪA]: SIÊU TRỤC X (AUTO-PULL + VECTOR GUIDANCE + X-BOOST)
         // ====================================================================
         let autoPullX = target.enemyDeltaYaw * 18.0; 
         const X_AXIS_BOOST = 1.50; 
         
-        // Hệ số nắn quỹ đạo mềm mại từ VIP 53
         let blendFactor = 0.30; 
         let guidedDirX = (input.dirX * (1.0 - blendFactor)) + (targetDirX * blendFactor);
         let guidedDirY = (input.dirY * (1.0 - blendFactor)) + (targetDirY * blendFactor);
@@ -460,7 +441,7 @@ class VectorThrustEngine {
         if (total2DError < 0.4) {
             engine.isABSBraking = true; 
             
-            // Thả ngón tay cái ra, Camera vẫn chết cứng ở sọ địch
+            // Chỉ đóng băng tuyệt đối Camera khi người chơi thả tay khỏi màn hình
             if (!hasInput) {
                 if (payload.camera) { 
                     payload.camera.pitch = absoluteBonePitch; 
@@ -472,36 +453,37 @@ class VectorThrustEngine {
             }
         } 
         // ====================================================================
-        // VÙNG 2: LỒNG GIAM ĐỘNG HỌC (0.4 -> 3.0 độ)
+        // VÙNG 2: SURGICAL EXACT-INTERPOLATION (Lồng Giam Nội Suy 0.4 -> 3.0 độ)
         // ====================================================================
         else if (total2DError < 3.0) {
             engine.isABSBraking = true;
 
-            // Lực bứt phá lồng giam (Cứu bồ / Đổi mục tiêu)
+            // Lực bứt phá lồng giam (Vuốt gắt ngược hướng)
             if (hasInput && input.magnitude > 7.0 && dotProduct < -0.6) {
                 engine.isABSBraking = false;
                 rawX *= 0.8; rawY *= 0.8; 
             } 
             else {
-                // Đóng băng màn hình vuốt tay
-                rawX = 0; rawY = 0;
+                // [CÔNG NGHỆ ĐIỀU CHỈNH 3]: NỘI SUY ĐỘNG HỌC (DYNAMIC EASING)
+                // Xóa bỏ lệnh dịch chuyển tức thời (Teleport). Tính toán chính xác 
+                // số Pixel còn thiếu và ép ngón tay "trượt bù" (Glide) vào giữa trán.
                 
-                // Khóa cứng tọa độ 3D vào sọ
-                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.1); 
-                let perfectYaw = absoluteBoneYaw;
-
-                if (payload.camera) { 
-                    payload.camera.pitch = perfectPitch; 
-                    payload.camera.yaw = perfectYaw; 
-                } else { 
-                    payload.aim_pitch = perfectPitch; 
-                    payload.aim_yaw = perfectYaw; 
-                }
+                // Cân chỉnh tâm rơi vào sống mũi (Ngăn đạn vọt qua da đầu)
+                let aimPitchOffset = target.pitchError + (target.pitchError > 0 ? -0.1 : 0.15); 
                 
-                // Ép tử vật lý Engine
+                // Quy đổi Góc Euler sang Pixel màn hình (1 độ ~ 18 Pixel)
+                let pixelDeltaX = target.yawError * 18.0;
+                let pixelDeltaY = aimPitchOffset * 18.0;
+                
+                // Hệ số trượt mượt mà: Bù 55% quãng đường mỗi khung hình. 
+                // Tâm sẽ nhẹ nhàng lướt vút vào sọ trong 2 mili-giây mà không bị khựng.
+                let glideFactor = 0.55; 
+                
+                rawX = (pixelDeltaX * glideFactor) + autoPullX;
+                rawY = (pixelDeltaY * glideFactor);
+                
+                // Xóa bỏ lực cản của game để nội suy Pixel không bị chậm lại
                 if (payload.camera_constraints) {
-                    payload.camera_constraints.max_pitch_speed = 99999.0;
-                    payload.camera_constraints.max_yaw_speed = 99999.0;
                     payload.camera_constraints.friction = 0.0;
                     payload.camera_constraints.damping = 0.0;
                     payload.camera_constraints.recoil_recovery_scale = 0.0;
@@ -515,19 +497,18 @@ class VectorThrustEngine {
             engine.isABSBraking = false;
             
             if (dotProduct > 0.0) {
-                // Hãm lực mượt mà từ 100% về 25% khi tiến gần vào mốc 3.0
                 let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
                 let cushion = 1.0 - (brakeFactor * 0.75); 
-                
                 engine.thrustMultiplier = baseThrust * cushion; 
                 
-                // Bơm lực kết hợp Nắn quỹ đạo + Khuếch đại X 150% + Trôi màn hình
-                rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
-                rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
+                // [CÔNG NGHỆ ĐIỀU CHỈNH 2]: ADS VERTICAL OVERDRIVE (Phản Lực Y-Axis)
+                let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
+                let thrustY = engine.isADS ? 4.5 : engine.thrustMultiplier; 
+                
+                rawX = (input.magnitude * guidedDirX * thrustX) + autoPullX;
+                rawY = (input.magnitude * guidedDirY * thrustY);
             } else {
-                // Phanh gấp nếu vuốt ngược
-                rawX *= 0.25; 
-                rawY *= 0.25;
+                rawX *= 0.25; rawY *= 0.25;
             }
         } 
         // ====================================================================
@@ -537,22 +518,24 @@ class VectorThrustEngine {
             engine.isABSBraking = false;
 
             if (dotProduct > 0.5) {
-                // Vùng lõi phễu: Bơm Max lực 90%
                 engine.thrustMultiplier = baseThrust * 0.90; 
-                rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
-                rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
             } 
             else if (dotProduct > 0.0) {
-                // Góc rìa phễu: Giảm dần lực dựa theo độ chéo tay
                 engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
                 engine.thrustMultiplier *= 0.90;
-                
-                rawX = (input.magnitude * guidedDirX * engine.thrustMultiplier * X_AXIS_BOOST) + autoPullX;
-                rawY = (input.magnitude * guidedDirY * engine.thrustMultiplier);
             }
             else {
-                // Vuốt ngược hướng địch
                 engine.thrustMultiplier = 0.25; 
+            }
+
+            if (dotProduct > 0.0) {
+                // [CÔNG NGHỆ ĐIỀU CHỈNH 2]: ADS VERTICAL OVERDRIVE (Phản Lực Y-Axis)
+                let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
+                let thrustY = engine.isADS ? 4.5 : engine.thrustMultiplier; // Bơm tĩnh 4.5x độc lập
+                
+                rawX = (input.magnitude * guidedDirX * thrustX) + autoPullX;
+                rawY = (input.magnitude * guidedDirY * thrustY);
+            } else {
                 rawX *= engine.thrustMultiplier;
                 rawY *= engine.thrustMultiplier;
             }
@@ -829,7 +812,7 @@ class VortexDispatcher {
 
         const weaponType = _vortex.__VortexState.weapon.type;
         
-        if (weaponType !== "NONE" && weaponType !== "SNIPER") {
+        if (weaponType !== "NONE") {
             
             // Nhịp 3: Động cơ tính lực đẩy Vector 2D và Bám trục X
             payload = VectorThrustEngine.execute(payload);
