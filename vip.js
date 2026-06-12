@@ -52,6 +52,11 @@ if (!_vortex.__VortexState || _vortex.__VortexState.version !== "VORTEX_V7.0") {
             isABSBraking: false,
             remX: 0, remY: 0       // Bộ nhớ đệm Sub-pixel
         }
+
+        localPlayer: {
+            velocityY: 0.0,
+            displacementY: 0.0
+        }
     };
 }
 
@@ -205,13 +210,74 @@ class WeaponAnalyzer {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER 2D-3D (Mắt Thần Quét Đa Lớp V7.0)
-// Công nghệ: Screen-Center 2D Culling, X-Axis Delta Tracking, Ultra-Magnetism.
-// Nhiệm vụ: Tìm địch gần tâm chữ thập nhất, đo vận tốc lướt ngang của địch.
+// BƯỚC 2.5: SELF-KINEMATIC ISOLATOR (CÁCH LY ĐỘNG HỌC BẢN THÂN)
+// Công nghệ: 
+// 1. Zero-Stance Illusion (Đánh lừa trạng thái di chuyển để chống Nở Tâm).
+// 2. Tách xuất Vận tốc Y để phục vụ Bù trừ điểm ngắm.
+// ============================================================================
+class SelfKinematicIsolator {
+    static execute(payload) {
+        const state = _vortex.__VortexState;
+        
+        // Tìm kiếm dữ liệu của chính người chơi (Bản thân)
+        let myPlayer = payload.local_player || payload.my_player;
+        if (!myPlayer && payload.players) {
+            // Nội suy nếu Game giấu trong mảng chung
+            for (let i = 0; i < payload.players.length; i++) {
+                if (payload.players[i].is_local || payload.players[i].id === payload.my_id) {
+                    myPlayer = payload.players[i];
+                    break;
+                }
+            }
+        }
+
+        if (myPlayer) {
+            // [CÔNG NGHỆ 4]: TRÍCH XUẤT VẬN TỐC TRỤC Y (Trọng lực/Nhảy)
+            // Lấy vận tốc thực tế trước khi hệ thống đánh tráo nó về 0
+            let myVelY = myPlayer.real_velocity ? myPlayer.real_velocity.y : (myPlayer.velocity ? myPlayer.velocity.y : 0);
+            state.localPlayer.velocityY = myVelY;
+            
+            // Tính toán khoảng dịch chuyển dự kiến của Camera trong 1 Frame (16ms)
+            state.localPlayer.displacementY = myVelY * 0.016;
+
+            // [CÔNG NGHỆ 1]: ZERO-STANCE ILLUSION (Ảo ảnh Đứng im)
+            // Ép Game Engine tin rằng bạn đang ngồi/đứng im tĩnh lặng để triệt tiêu Movement Bloom
+            myPlayer.is_moving = false;
+            myPlayer.is_jumping = false;
+            myPlayer.is_falling = false;
+            myPlayer.is_crouching = true; // Ép trạng thái về Ngồi (Độ tản mát nhỏ nhất)
+            
+            if (myPlayer.velocity) {
+                myPlayer.velocity.x = 0.0; myPlayer.velocity.y = 0.0; myPlayer.velocity.z = 0.0;
+            }
+            if (myPlayer.real_velocity) {
+                myPlayer.real_velocity.x = 0.0; myPlayer.real_velocity.y = 0.0; myPlayer.real_velocity.z = 0.0;
+            }
+        }
+
+        // Bọc lót đánh lừa trực tiếp tham số Vũ khí (Weapon Movement Multiplier)
+        if (payload.weapon) {
+            payload.weapon.is_moving = false;
+            payload.weapon.is_jumping = false;
+            if (payload.weapon.movement_spread_multiplier !== undefined) payload.weapon.movement_spread_multiplier = 0.0;
+            if (payload.weapon.jump_spread_multiplier !== undefined) payload.weapon.jump_spread_multiplier = 0.0;
+        }
+
+        return payload;
+    }
+}
+
+// ============================================================================
+// BƯỚC 2: TARGET SCANNER 2D-3D (MẮT THẦN QUÉT ĐA LỚP V7.6)
+// Công nghệ: 
+// 1. Screen-Center 2D Culling (Quét mục tiêu gần tâm chữ thập nhất).
+// 2. Dynamic Aim-Offset (Bù trừ trọng lực/gia tốc rơi của bản thân từ Bước 2.5).
+// 3. Ultra-Magnetism (Khử ma sát tứ chi, dồn toàn bộ từ tính vào Sọ).
+// 4. X-Axis Delta Tracking (Đo vận tốc lướt ngang của địch).
 // ============================================================================
 class TargetScanner2D3D {
     
-    // Hàm chuẩn hóa góc quay (-180 đến 180 độ)
+    // Hàm chuẩn hóa góc quay (-180 đến 180 độ) để tính FOV chính xác
     static normalizeAngle(angle) {
         while (angle > 180.0) angle -= 360.0;
         while (angle < -180.0) angle += 360.0;
@@ -242,7 +308,7 @@ class TargetScanner2D3D {
         let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; // Lưu góc cũ để tính vận tốc ngang
 
         let bestTarget = null;
-        let lowest2DDistance = 999999.0; // Điểm số dựa trên mặt phẳng 2D Màn hình
+        let lowest2DDistance = 999999.0; // Điểm số ưu tiên dựa trên mặt phẳng 2D Màn hình
 
         // ====================================================================
         // A. AGGRESSIVE CULLING & ULTRA-MAGNETISM (Lọc rác & Tăng từ tính Sọ)
@@ -255,30 +321,42 @@ class TargetScanner2D3D {
             if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
             if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
 
-            let headPos = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
+            // 2. Clone (Nhân bản) tọa độ Sọ để không làm sai lệch bộ nhớ Engine Game
+            let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
+            let headPos = { x: headRef.x, y: headRef.y, z: headRef.z };
+
+            // ====================================================================
+            // [CÔNG NGHỆ BƯỚC 2.5]: DYNAMIC AIM-OFFSET (BÙ TRỪ GIA TỐC RƠI CỦA BẢN THÂN)
+            // Phương trình: Virtual_Head_Y = Real_Head_Y - (My_Velocity_Y * Time_Delta)
+            // ====================================================================
+            let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
+            headPos.y -= localDispY; 
+            // Giải thích: Nếu bạn đang nhảy và rơi xuống (localDispY âm), tọa độ Đầu ảo của địch 
+            // sẽ tự động được "nâng cao lên" để Camera của bạn hếch lên bắt đúng nhịp độ rơi.
 
             let dx = headPos.x - origin.x;
             let dy = headPos.y - origin.y;
             let dz = headPos.z - origin.z;
             let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
             
-            // Bỏ qua địch quá xa (150m) để tiết kiệm RAM
+            // Bỏ qua địch quá xa (150m) để tiết kiệm CPU
             if (distance3D > 150.0) continue; 
 
-            // Hủy diệt vật lý Tứ chi - Chỉ để lại Sọ
+            // 3. Hủy diệt vật lý Tứ chi - Dồn toàn bộ Từ tính (Magnetism) vào Sọ
             const allBones = Object.keys(enemy.hitboxes);
             for (let b = 0; b < allBones.length; b++) {
                 let boneName = allBones[b].toLowerCase();
                 let bone = enemy.hitboxes[allBones[b]];
 
                 if (boneName.includes('head') || boneName.includes('neck')) {
-                    if (bone.radius) bone.radius = 0.5; // Kích thước đầu x2
-                    bone.magnetism = 5.0;               // Từ tính x500%
+                    if (bone.radius) bone.radius = 0.5; // Kích thước đầu x2 để dễ bắt đạn
+                    bone.magnetism = 5.0;               // Từ tính đỉnh tháp x500%
                     bone.snap_weight = 99999.0;
                 } else {
+                    // Biến các vùng không phải Sọ thành "Không khí" (Zero-Friction)
                     if (bone.radius !== undefined) bone.radius = 0.0001;
                     bone.magnetism = 0.0; bone.friction = 0.0; bone.snap_weight = -99999.0;
-                    if (bone.pos && bone.pos.z) bone.pos.z -= 1.5;
+                    if (bone.pos && bone.pos.z) bone.pos.z -= 1.5; // Dìm trọng tâm xuống đất
                 }
             }
 
@@ -289,12 +367,12 @@ class TargetScanner2D3D {
             let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
             
-            // Đây là Tọa độ 3D thực tế
+            // Tọa độ 3D Không gian thực tế
             let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
             let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
 
-            // [LÕI 2D]: Dùng DeltaYaw và DeltaPitch làm Trục X và Y của Màn hình phẳng.
-            // Biến fov2D chính là KHOẢNG CÁCH PIXEL từ Sọ địch đến Giao điểm Tâm Chữ Thập.
+            // [LÕI 2D SCREEN-CENTER]: Dùng DeltaYaw và DeltaPitch làm Trục X và Y của Màn hình phẳng.
+            // Biến fov2D chính là KHOẢNG CÁCH PIXEL từ Sọ địch đến Giao điểm Tâm Chữ Thập (0,0).
             let fov2D = Math.sqrt(rawDeltaYaw**2 + rawDeltaPitch**2);
 
             // Cắt rìa màn hình (Bật Scope thì chỉ lấy địch ở khu vực hẹp giữa màn)
@@ -302,19 +380,20 @@ class TargetScanner2D3D {
             let capsuleFovLimit = isADS ? (baseCapsule * 0.35) : baseCapsule; 
             
             let isStickyTarget = (enemy.id === previousTargetId);
-            if (isStickyTarget) capsuleFovLimit *= 1.5; // Dính chặt mục tiêu cũ
+            if (isStickyTarget) capsuleFovLimit *= 1.5; // Nới lỏng FOV để giữ chặt mục tiêu cũ
 
             if (fov2D > capsuleFovLimit) continue;
 
-            // Chấm điểm hoàn toàn dựa trên 2D (Địch càng gần Tâm chữ thập -> Điểm càng nhỏ)
+            // Chấm điểm ưu tiên: Địch càng gần Tâm chữ thập (fov2D nhỏ) -> Điểm càng thấp
             let stancePenalty = 1.0;
             let heightDiff = origin.y - headPos.y; 
-            if (heightDiff > 0.8) stancePenalty *= 2.0; 
-            if (enemy.is_behind_cover) stancePenalty *= 10.0;
+            if (heightDiff > 0.8) stancePenalty *= 2.0; // Phạt điểm địch đứng trên cao
+            if (enemy.is_behind_cover) stancePenalty *= 10.0; // Phạt nặng địch nấp tường
 
             let stickyBonus = isStickyTarget ? 0.50 : 1.0;
             let score2D = fov2D * stancePenalty * stickyBonus;
 
+            // Xác định Kẻ thù hoàn hảo nhất
             if (score2D < lowest2DDistance) {
                 lowest2DDistance = score2D;
 
@@ -323,8 +402,7 @@ class TargetScanner2D3D {
                 // ====================================================================
                 let currentEnemyDeltaYaw = 0.0;
                 
-                // NẾU vẫn là thằng địch cũ, ta so sánh góc ngang hiện tại và góc của 16ms trước
-                // Để biết chính xác nó đang lướt sang Trái hay Phải với tốc độ bao nhiêu độ/mili-giây!
+                // Trừ góc của Frame trước để lấy chính xác Vận tốc chạy ngang (độ/mili-giây)
                 if (isStickyTarget) {
                     currentEnemyDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - previousEnemyYaw);
                 }
@@ -332,17 +410,17 @@ class TargetScanner2D3D {
                 bestTarget = {
                     id: enemy.id, 
                     distance3D: distance3D,
-                    distance2D: fov2D,              // Gửi 2D cho Trợ lực kéo
-                    deltaPitch: rawDeltaPitch,      // Gửi 3D cho Khóa cứng
-                    deltaYaw: rawDeltaYaw,          // Gửi 3D cho Khóa cứng
-                    enemyDeltaYaw: currentEnemyDeltaYaw, // Gửi Vận tốc ngang cho X-Boost
-                    absoluteEnemyYaw: enemyYaw      // Lưu lại để dùng cho Frame tiếp theo
+                    distance2D: fov2D,                   // Gửi 2D cho Trợ lực kéo Vùng ngoài
+                    deltaPitch: rawDeltaPitch,           // Gửi 3D cho Khóa cứng (Snap-Lock)
+                    deltaYaw: rawDeltaYaw,               // Gửi 3D cho Khóa cứng (Snap-Lock)
+                    enemyDeltaYaw: currentEnemyDeltaYaw, // Gửi Vận tốc ngang cho X-Boost Auto-Pull
+                    absoluteEnemyYaw: enemyYaw           // Lưu lại để dùng cho tính vận tốc ở Frame tiếp theo
                 };
             }
         }
 
         // ====================================================================
-        // XUẤT BÁO CÁO CẬP NHẬT VÀO VORTEX STATE
+        // XUẤT BÁO CÁO CẬP NHẬT VÀO VORTEX STATE ĐỂ BƯỚC 3 THỰC THI
         // ====================================================================
         if (bestTarget) {
             state.target.id = bestTarget.id;
@@ -351,7 +429,7 @@ class TargetScanner2D3D {
             state.target.pitchError = bestTarget.deltaPitch; 
             state.target.yawError = bestTarget.deltaYaw;
             
-            // Lưu lại Vận tốc lướt ngang và Góc tuyệt đối
+            // Cập nhật Vận tốc lướt ngang và Góc tuyệt đối
             state.target.enemyDeltaYaw = bestTarget.enemyDeltaYaw;
             state.target.lastEnemyYaw = bestTarget.absoluteEnemyYaw;
         } else {
@@ -818,13 +896,15 @@ class VortexDispatcher {
         payload = InputInterceptor.execute(payload);
         payload = WeaponAnalyzer.execute(payload);
         
-        // Nhịp 2: Mắt thần quét 2D -> 3D
+        // Nhịp 1.5: [NEW] Cách ly Động học (Triệt tiêu quán tính bản thân)
+        payload = SelfKinematicIsolator.execute(payload);
+
+        // Nhịp 2: Mắt thần quét 2D -> 3D (Đã có bù trừ trọng lực bản thân)
         payload = TargetScanner2D3D.execute(payload); 
 
         const weaponType = _vortex.__VortexState.weapon.type;
         
         if (weaponType !== "NONE") {
-            
             // Nhịp 3: Động cơ tính lực đẩy Vector 2D và Bám trục X
             payload = VectorThrustEngine.execute(payload);
 
