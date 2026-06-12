@@ -381,8 +381,8 @@ class VectorThrustEngine {
     
     // Hàm Đường cong Sigmoid (Gia tốc đẩy cơ bản)
     static calculateSigmoidThrust(distance2D) {
-        const MAX_THRUST = 15.0; 
-        const MIN_THRUST = 0.15; 
+        const MAX_THRUST = 10.0; 
+        const MIN_THRUST = 0.01; 
         const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance2D - MID_POINT) / SLOPE));
@@ -442,7 +442,7 @@ class VectorThrustEngine {
             let idealVy = input.magnitude * targetDirY;
 
             // 2. Pha trộn: 70% lực cơ học thực tế + 30% quỹ đạo lý tưởng của Aimbot
-            let blendFactor = 0.30; 
+            let blendFactor = 0.75; 
             blendedRawX = (rawX * (1.0 - blendFactor)) + (idealVx * blendFactor);
             blendedRawY = (rawY * (1.0 - blendFactor)) + (idealVy * blendFactor);
         }
@@ -451,7 +451,7 @@ class VectorThrustEngine {
         // THÔNG SỐ TRỤC X: AUTO-PULL & X-BOOST
         // ====================================================================
         let autoPullX = target.enemyDeltaYaw * 18.0; 
-        const X_AXIS_BOOST = 1.50; 
+        const X_AXIS_BOOST = 1.25; 
 
         // ====================================================================
         // PHA 1 & 3: TÂM BÃO TÀNG HÌNH & LỒNG GIAM 3D SNAP-LOCK
@@ -469,7 +469,7 @@ class VectorThrustEngine {
                 }
             }
         } 
-        else if (total2DError < 5.0) {
+        else if (total2DError < 3.0) {
             // VÙNG 2: 3D Snap-Lock (Khóa cứng không gian)
             engine.isABSBraking = true;
 
