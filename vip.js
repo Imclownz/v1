@@ -946,9 +946,15 @@ class BallisticsSynchronizer {
 }
 
 // ============================================================================
-// BƯỚC 5: BALLISTICS SYNCHRONIZER (Lớp Bảo Hiểm Tia Đạn V7.0)
-// Công nghệ: Smart Bone Hijacking, Magnetic Bullet Bending, Anti-Falloff.
-// Nhiệm vụ: Xóa RNG, khóa tia đạn chính xác vào mục tiêu, khuếch đại sát thương.
+// BƯỚC 5: BALLISTICS SYNCHRONIZER (V7.9 MAGIC BULLET & PHANTOM SPOOFING)
+// Lớp Bảo Hiểm Cuối Cùng: Can thiệp thẳng vào hệ thống máy chủ.
+// Công nghệ:
+// 1. Long-Range Magic Bullet (> 8m, Hipfire):
+//    - Hitbox Inflation: Phình to Sọ tàng hình tỷ lệ thuận với khoảng cách.
+//    - Trajectory Hijacking: Cướp quyền và bẻ cong Vector đạn thẳng vào Sọ.
+//    - Phantom Damage Spoofing: Cưỡng ép nổ sát thương ảo nếu Game Engine bị lag.
+// 2. Smart Bone Hijacking: Viết đè mã xương (-2111735698) thành Headshot tuyệt đối.
+// 3. Anti-Falloff & Penetration: Xóa suy hao tầm xa, đạn xuyên vật thể.
 // ============================================================================
 class BallisticsSynchronizer {
     static execute(payload) {
@@ -957,67 +963,138 @@ class BallisticsSynchronizer {
         const target = state.target;
         const weapon = state.weapon;
 
-        // CHỈ can thiệp đường đạn khi Phanh ABS đã đóng băng được tâm súng tại sọ
-        // VÀ hệ thống đã xác định được một Target cụ thể
-        if (engine.isABSBraking && target.id !== null) {
-            
-            // ====================================================================
-            // 1. ĐỒNG BỘ TIA ĐẠN VẬT LÝ (MAGNETIC BULLET BENDING)
-            // ====================================================================
-            if (payload.bullet_events) {
-                for (let i = 0; i < payload.bullet_events.length; i++) {
-                    let bullet = payload.bullet_events[i];
-                    
-                    // Xóa bỏ tản mát ngẫu nhiên (RNG deviation)
-                    bullet.spread_angle = 0.0; 
-                    bullet.deviation = 0.0; 
-                    bullet.angular_velocity = 0.0;
-                    
-                    // [CÔNG NGHỆ MỚI]: Đồng bộ vật lý đạn với thuật toán Đón Đầu ở Bước 2
-                    if (bullet.trajectory) {
-                        bullet.trajectory.gravity_scale = 0.0; // Tắt lực hút trái đất tác động lên viên đạn này
-                        bullet.trajectory.drag = 0.0;          // Tắt lực cản gió
-                    }
+        // Bỏ qua nếu không có Target ID nào đang bị khóa
+        if (!target.id) return payload;
 
-                    // Xuyên thấu ảo: Giúp đạn ghim vào sọ ngay cả khi địch lách nhẹ sau mép tường
-                    bullet.is_penetrating = true; 
-                    bullet.collision_obstacle = false;
-                }
-            }
+        // Phân tích trạng thái Bắn Xa Không Ngắm (Long-Range Hip-Fire)
+        let isLongRangeHipFire = (!engine.isADS && target.distance3D > 8.0);
+        
+        // Điều kiện kích hoạt: Hoặc là tâm đã khóa cứng (ABS Braking), 
+        // Hoặc là đang bắn Hip-fire cự ly xa (Cần Magic Bullet gánh vác)
+        let isSystemEngaged = engine.isABSBraking || isLongRangeHipFire;
 
-            // ====================================================================
-            // 2. MÃ HÓA CỨNG BÁO CÁO SÁT THƯƠNG (SMART BONE HIJACKING)
-            // ====================================================================
-            if (payload.damage_report || payload.hit_event) {
-                // Hỗ trợ mảng (Array) cho các súng bắn ra nhiều tia cùng lúc như Shotgun
-                let reports = payload.damage_report ? 
-                              (Array.isArray(payload.damage_report) ? payload.damage_report : [payload.damage_report]) : 
-                              (Array.isArray(payload.hit_event) ? payload.hit_event : [payload.hit_event]);
+        if (!isSystemEngaged) return payload;
 
-                for (let r = 0; r < reports.length; r++) {
-                    let report = reports[r];
+        // Dung sai an toàn: Đạn ma thuật chỉ bẻ cong khi tâm súng ở gần địch (< 10 độ).
+        // Tránh tình trạng bạn bắn xuống đất mà đạn vẫn bẻ ngoặt 180 độ lên đầu.
+        let isWithinMagicTolerance = target.distance2D < 10.0;
 
-                    // CHỐT CHẶN AN TOÀN: Chỉ đổi thành Headshot nếu trúng ĐÚNG thằng đang khóa.
-                    // Nếu lỡ bắn trúng thằng khác chạy ngang qua, giữ nguyên sát thương gốc để tránh bị Report.
-                    if (report.target_id === target.id || report.entity_id === target.id) {
-                        
-                        // -2111735698 chính là mã BONE_HASH tuyệt đối của xương Đầu (Head)
-                        report.hit_bone = -2111735698; 
-                        report.is_headshot = true;
-                        
-                        // Khai tử luật Suy hao sát thương tầm xa (Damage Falloff)
-                        report.distance_penalty = 0.0; 
-
-                        // Khuếch đại bạo kích tùy theo phân loại súng
-                        if (weapon.type === "MARKSMAN" || weapon.type === "SNIPER" || weapon.type === "SHOTGUN") {
-                            report.damage_multiplier = 1.50; // Súng gõ 1 viên cần kết liễu cực gắt
-                        } else {
-                            report.damage_multiplier = 1.35; // Súng sấy SMG/AR
-                        }
+        // ====================================================================
+        // [LÕI 1]: DISTANCE-PROPORTIONAL HITBOX INFLATION (PHÌNH TO SỌ TÀNG HÌNH)
+        // ====================================================================
+        if (isLongRangeHipFire && isWithinMagicTolerance && payload.players) {
+            for (let i = 0; i < payload.players.length; i++) {
+                let enemy = payload.players[i];
+                if (enemy.id === target.id && enemy.hitboxes) {
+                    let head = enemy.hitboxes.head || enemy.hitboxes.neck;
+                    if (head) {
+                        // Địch càng xa, bán kính sọ ảo càng phình to để hứng đạn dễ hơn
+                        // Ví dụ: 30m -> Bán kính = 0.5 + 0.9 = 1.4 (Gấp gần 3 lần bình thường)
+                        let inflationRadius = 0.5 + (target.distance3D * 0.03);
+                        head.radius = inflationRadius;
+                        head.magnetism = 99.0; // Hút vạn vật
                     }
                 }
             }
         }
+
+        // ====================================================================
+        // [LÕI 2]: TRAJECTORY VECTOR HIJACKING (CƯỚP QUYỀN VÀ BẺ CONG ĐƯỜNG ĐẠN)
+        // ====================================================================
+        let bulletFiredThisFrame = false;
+
+        if (payload.bullet_events && payload.bullet_events.length > 0) {
+            bulletFiredThisFrame = true;
+
+            for (let i = 0; i < payload.bullet_events.length; i++) {
+                let bullet = payload.bullet_events[i];
+                
+                // 1. Tước đoạt vật lý tự nhiên (Tản mát ngẫu nhiên)
+                bullet.spread_angle = 0.0; 
+                bullet.deviation = 0.0; 
+                bullet.angular_velocity = 0.0;
+                
+                if (bullet.trajectory) {
+                    bullet.trajectory.gravity_scale = 0.0; // Đạn bay thẳng tắp, không bị rớt
+                    bullet.trajectory.drag = 0.0;          // Không bị cản gió
+
+                    // 2. MAGIC BULLET KÍCH HOẠT: Bẻ Vector đạn thẳng vào Tọa độ Sọ nội suy
+                    if (isLongRangeHipFire && isWithinMagicTolerance && target.lastHeadPos) {
+                        let originX = bullet.origin ? bullet.origin.x : (payload.fire_origin ? payload.fire_origin.x : 0);
+                        let originY = bullet.origin ? bullet.origin.y : (payload.fire_origin ? payload.fire_origin.y : 0);
+                        let originZ = bullet.origin ? bullet.origin.z : (payload.fire_origin ? payload.fire_origin.z : 0);
+
+                        if (originX !== 0 || originY !== 0 || originZ !== 0) {
+                            let dx = target.lastHeadPos.x - originX;
+                            let dy = target.lastHeadPos.y - originY;
+                            let dz = target.lastHeadPos.z - originZ;
+                            let dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+
+                            // Ghi đè Vector chỉ hướng của viên đạn từ nòng súng tới Sọ
+                            if (dist > 0) {
+                                bullet.trajectory.dir_x = dx / dist;
+                                bullet.trajectory.dir_y = dy / dist;
+                                bullet.trajectory.dir_z = dz / dist;
+                            }
+                        }
+                    }
+                }
+
+                // Xuyên thấu tàng hình: Đạn bỏ qua rào cản mỏng (mép bom keo, góc tường)
+                bullet.is_penetrating = true; 
+                bullet.collision_obstacle = false;
+            }
+        }
+
+        // ====================================================================
+        // [CÔNG NGHỆ CŨ & LÕI 3]: SMART BONE HIJACKING & PHANTOM DAMAGE SPOOFING
+        // ====================================================================
+        let dmgMultiplier = (weapon.type === "MARKSMAN" || weapon.type === "SNIPER" || weapon.type === "SHOTGUN") ? 1.50 : 1.35;
+        let hasDamageReportRegistered = false;
+
+        // A. Viết đè mã xương thực tế (Nếu viên đạn vô tình trúng chân/tay/ngực)
+        if (payload.damage_report || payload.hit_event) {
+            let reports = payload.damage_report ? 
+                          (Array.isArray(payload.damage_report) ? payload.damage_report : [payload.damage_report]) : 
+                          (Array.isArray(payload.hit_event) ? payload.hit_event : [payload.hit_event]);
+
+            for (let r = 0; r < reports.length; r++) {
+                let report = reports[r];
+
+                // Chỉ hack sát thương nếu trúng đúng mục tiêu đang bị khóa
+                if (report.target_id === target.id || report.entity_id === target.id) {
+                    hasDamageReportRegistered = true;
+                    
+                    report.hit_bone = -2111735698; // BONE_HASH tuyệt đối của Head (Đầu)
+                    report.is_headshot = true;
+                    report.distance_penalty = 0.0; // Bắn xa 100m vẫn rát như bắn gần 1m
+                    report.damage_multiplier = dmgMultiplier;
+                }
+            }
+        }
+
+        // B. [LÕI 3]: PHANTOM DAMAGE SPOOFING (CƯỠNG ÉP SÁT THƯƠNG ẢO)
+        // Nếu súng nổ, tâm nằm sát đầu địch (< 5.0 độ), nhưng vì game bị lag / ghost bullet 
+        // khiến đạn bay xuyên qua mà không nổ sát thương.
+        if (weapon.isFiring && bulletFiredThisFrame && !hasDamageReportRegistered && target.distance2D < 5.0) {
+            
+            // Tự động "Bịa" ra một gói tin Sát thương và nhét vào Payload gửi lên Server
+            let phantomHitEvent = {
+                target_id: target.id,
+                entity_id: target.id,
+                hit_bone: -2111735698,
+                is_headshot: true,
+                distance_penalty: 0.0,
+                damage_multiplier: dmgMultiplier,
+                is_phantom_spoof: true // Cờ ẩn của VORTEX
+            };
+
+            // Ép gói tin Ảo vào Payload
+            if (!payload.hit_event) payload.hit_event = [];
+            if (!Array.isArray(payload.hit_event)) payload.hit_event = [payload.hit_event];
+            payload.hit_event.push(phantomHitEvent);
+        }
+
         return payload;
     }
 }
