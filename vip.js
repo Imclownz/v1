@@ -535,20 +535,18 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.9 OMNI-DIRECTIONAL DOMINANCE)
-// Hợp thể các công nghệ tối thượng:
-// 1. ADS Decapitation Protocol: Quick-scope cướp quyền Camera tức thời & Khiên chống giật.
-// 2. Long-Range Hipfire (Khoảng cách > 8m):
-//    - Depth-Scaling Thrust: Suy hao gia tốc theo chiều sâu 3D (Chống vọt lố).
-//    - Dynamic Magnetic Expansion: Mở rộng vùng đệm từ tính lên 15.0 độ.
-//    - Y-Axis Compression: Ép xẹp trục dọc (Y), giữ nguyên gia tốc trục ngang (X).
-//    - Kinetic Energy Bleeding: Xả van áp suất, triệt tiêu lực vuốt tay hoảng loạn.
-// 3. Asymmetric Snap-Lock: Lồng giam bất đối xứng (Dọc < 2.5 độ, Ngang < 6.0 độ).
-// 4. Aggressive Velocity Blending: 75% AI dẫn đường + 25% Lực cơ học.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.10 OMNI-CQC DOMINANCE)
+// Hợp thể toàn bộ thông số từ VIP 62 và Công nghệ Cận chiến (CQC):
+// 1. Dynamic Proximity Cage (NEW): Lồng giam tự động phình to ở cự ly < 3m.
+// 2. CQC Vertical Uppercut (NEW): Lực hất thăng long x3.0 phá vỡ lực hút ngực.
+// 3. ADS Decapitation Protocol: Quick-scope cướp quyền Camera tức thời.
+// 4. Long-Range Hipfire (> 8m): Suy hao gia tốc, Ép trục dọc, Xả van hoảng loạn.
+// 5. Aggressive Velocity Blending: 75% AI dẫn đường + 25% Lực cơ học.
+// 6. Siêu Trục X: Giữ nguyên AutoPull = 30.0 và Boost = 1.50 từ VIP 62.
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid (Gia tốc cơ bản)
+    // Hàm Đường cong Sigmoid (Gia tốc cơ bản) - Giữ nguyên MAX_THRUST = 10.0 từ VIP 62
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.15; 
@@ -569,24 +567,19 @@ class VectorThrustEngine {
         if (engine.wasADS === undefined) engine.wasADS = false;
         if (engine.adsCalmFrames === undefined) engine.adsCalmFrames = 0;
 
-        // Trạng thái bật ống ngắm hiện tại
         let isADS = engine.isADS;
 
         // ====================================================================
-        // [CÔNG NGHỆ ỐNG NGẮM]: ADS DECAPITATION PROTOCOL (GIAO THỨC ĐOẠT MẠNG)
-        // Nhận diện khoảnh khắc Edge-Trigger (Vừa mới bấm nút bật Scope)
+        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (EDGE-TRIGGER SENSOR)
         // ====================================================================
         if (isADS && !engine.wasADS && target.id !== null) {
-            // Kích hoạt Khiên chống giật ngược (Anti-Pullback Shield) trong 5 frames (khoảng 80ms)
             engine.adsCalmFrames = 5; 
         }
-        engine.wasADS = isADS; // Lưu lại lịch sử cho frame tiếp theo
+        engine.wasADS = isADS; 
 
-        // Nếu mất dấu mục tiêu -> Trả lại Payload
         if (!target.id) return payload; 
         if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
 
-        // Lực tay thô thực tế
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
         let currentMag = input.magnitude;
@@ -594,23 +587,40 @@ class VectorThrustEngine {
         let total2DError = target.distance2D; 
         let dist3D = target.distance3D;
 
-        // Tách sai số trục Dọc và trục Ngang
         let absPitchErr = Math.abs(target.pitchError);
         let absYawErr = Math.abs(target.yawError);
 
         // ====================================================================
-        // [CÔNG NGHỆ BẮN XA]: LONG-RANGE HIP-FIRE ISOLATION (Tầm > 8m, Không Scope)
+        // PHÂN TÍCH KHÔNG GIAN (LONG-RANGE vs CQC)
         // ====================================================================
         let isLongRangeHipFire = (!isADS && dist3D > 8.0);
-        
-        // 1. Dynamic Magnetic Expansion: Mở rộng vùng đệm phanh từ 8.0 lên 15.0 độ
+        let isCQC = (!isADS && dist3D <= 3.0); // Trạng thái Cận chiến
+
+        // [CÔNG NGHỆ 3 - NEW]: DYNAMIC PROXIMITY CAGE (LỒNG GIAM GIÃN NỞ)
+        // Thay vì fix cứng Pitch 3.0 và Yaw 6.0, lồng giam sẽ phình to ở cự ly gần
+        let pitchCageLimit = 3.0; // Thông số gốc VIP 62
+        let yawCageLimit = 6.0;   // Thông số gốc VIP 62
+
+        if (!isADS) {
+            if (isCQC) {
+                // Ở cự ly <= 3m, đầu địch rất to -> Há miệng lồng giam siêu rộng
+                pitchCageLimit = 10.0;
+                yawCageLimit = 12.0;
+            } else if (dist3D < 8.0) {
+                // Nội suy mượt mà thu hẹp Lồng giam từ 3m đến 8m
+                let progress = (dist3D - 3.0) / 5.0; 
+                pitchCageLimit = 10.0 - (7.0 * progress);
+                yawCageLimit = 12.0 - (6.0 * progress);
+            }
+        }
+
         let maxCushionLimit = isLongRangeHipFire ? 15.0 : 8.0;
 
+        // Xả Động Năng Dư Thừa (VIP 62)
         if (isLongRangeHipFire && currentMag > 0) {
-            // 2. Kinetic Energy Bleeding (Xả Động Năng Dư Thừa do hoảng loạn tay)
             if (currentMag > 10.0) {
                 let excess = currentMag - 10.0;
-                let bleedFactor = 10.0 / (10.0 + excess * 0.6); // Triệt tiêu mượt mà lực thừa
+                let bleedFactor = 10.0 / (10.0 + excess * 0.6); 
                 rawX *= bleedFactor;
                 rawY *= bleedFactor;
                 currentMag *= bleedFactor;
@@ -619,15 +629,14 @@ class VectorThrustEngine {
 
         let hasInput = input.isSwiping && currentMag > 0;
 
-        // Buông tay ngoài Lồng giam -> Giải phóng Camera
-        if (!hasInput && (absPitchErr >= 2.5 || absYawErr >= 6.0) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
+        // Buông tay ngoài Lồng giam -> Giải phóng Camera (Đã dùng Limit động)
+        if (!hasInput && (absPitchErr >= pitchCageLimit || absYawErr >= yawCageLimit) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
             return payload;
         }
 
-        // 3. Depth-Scaling Thrust: Tính toán suy hao gia tốc theo chiều sâu 3D
+        // Suy hao gia tốc theo chiều sâu (VIP 62)
         let baseThrust = this.calculateSigmoidThrust(total2DError);
         if (isLongRangeHipFire) {
-            // Địch càng xa (VD 24m), lực đẩy càng bị gọt giảm (8/24 = 33% lực gốc)
             let depthMultiplier = Math.max(0.35, 8.0 / dist3D); 
             baseThrust *= depthMultiplier;
         }
@@ -646,7 +655,7 @@ class VectorThrustEngine {
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // [CÔNG NGHỆ LÕI]: AGGRESSIVE VELOCITY BLENDING (75% AI - 25% HUMAN)
+        // PHA TRỘN VẬN TỐC (75% AI - 25% HUMAN) TỪ VIP 62
         // ====================================================================
         let blendedRawX = rawX;
         let blendedRawY = rawY;
@@ -659,17 +668,17 @@ class VectorThrustEngine {
             blendedRawY = (rawY * (1.0 - systemDomination)) + (idealVy * systemDomination);
         }
 
+        // SIÊU TRỤC X: Giữ nguyên AutoPull = 30.0 cực gắt từ VIP 62
         let autoPullX = target.enemyDeltaYaw * 30.0; 
         const X_AXIS_BOOST = 1.50; 
 
         // ====================================================================
-        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE HIJACKING)
+        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE)
         // ====================================================================
         if (engine.adsCalmFrames > 0) {
             engine.adsCalmFrames--;
             engine.isABSBraking = true;
             
-            // Cướp quyền Mỏ neo 3D: Dịch chuyển lập tức vào Sọ, bỏ qua cơ chế hút ngực của Game
             rawX = 0; rawY = 0;
             let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.1); 
 
@@ -681,14 +690,13 @@ class VectorThrustEngine {
                 payload.aim_yaw = absoluteBoneYaw; 
             }
             
-            // Khiên chống Lực hút Ngược: Tê liệt vật lý game trong chớp mắt
             if (payload.camera_constraints) {
                 payload.camera_constraints.friction = 0.0;
                 payload.camera_constraints.damping = 0.0;
             }
         }
         // ====================================================================
-        // PHA 1 & 3: TÂM BÃO TÀNG HÌNH & LỒNG GIAM BẤT ĐỐI XỨNG
+        // PHA 1 & 3: TÂM BÃO & LỒNG GIAM GIÃN NỞ (CQC DYNAMIC CAGE)
         // ====================================================================
         else if (total2DError < 0.5) {
             engine.isABSBraking = true; 
@@ -702,7 +710,8 @@ class VectorThrustEngine {
                 }
             }
         } 
-        else if (absPitchErr < 3.0 && absYawErr < 6.0) {
+        // [CÔNG NGHỆ 3 THỰC THI]: Khóa theo Lồng giam đã được giãn nở
+        else if (absPitchErr < pitchCageLimit && absYawErr < yawCageLimit) {
             engine.isABSBraking = true;
 
             if (hasInput && currentMag > 7.0 && dotProduct < -0.6) {
@@ -738,7 +747,6 @@ class VectorThrustEngine {
             engine.isABSBraking = false;
             
             if (dotProduct > 0.0) {
-                // Ranh giới phanh thay đổi linh hoạt tùy theo Hipfire xa hay gần
                 let brakeBoundary = isLongRangeHipFire ? 5.0 : 3.0;
                 let brakeFactor = 1.0 - ((total2DError - brakeBoundary) / (maxCushionLimit - brakeBoundary)); 
                 let cushion = 1.0 - (brakeFactor * 0.85); 
@@ -748,9 +756,16 @@ class VectorThrustEngine {
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
                 let thrustY = engine.thrustMultiplier;
 
-                // 4. Y-Axis Compression vs ADS Overdrive
-                if (isADS) thrustY = 3.0; // Xé gió khi bật ngắm
-                else if (isLongRangeHipFire) thrustY *= 0.45; // Ép xẹp trục dọc 55% khi Hipfire xa
+                // [CÔNG NGHỆ 2 - NEW]: CQC VERTICAL UPPERCUT (Lực Hất Thăng Long Cận Chiến)
+                if (isCQC && input.dirY < -0.1) {
+                    thrustY *= 3.0; // Bơm phản lực x3 bứt phá từ tính ngực
+                }
+                else if (isADS) {
+                    thrustY = 3.0; // Từ VIP 62
+                }
+                else if (isLongRangeHipFire) {
+                    thrustY *= 0.45; // Ép trục dọc bắn xa
+                }
                 
                 rawX = (blendedRawX * thrustX) + autoPullX;
                 rawY = (blendedRawY * thrustY);
@@ -776,9 +791,16 @@ class VectorThrustEngine {
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
                 let thrustY = engine.thrustMultiplier;
 
-                // 4. Y-Axis Compression vs ADS Overdrive
-                if (isADS) thrustY = 4.5;
-                else if (isLongRangeHipFire) thrustY *= 0.45; 
+                // [CÔNG NGHỆ 2 - NEW]: CQC VERTICAL UPPERCUT (Lực Hất Thăng Long Cận Chiến)
+                if (isCQC && input.dirY < -0.1) {
+                    thrustY *= 3.0; // Bơm phản lực x3 bứt phá từ tính ngực
+                }
+                else if (isADS) {
+                    thrustY = 4.5; // Từ VIP 62
+                }
+                else if (isLongRangeHipFire) {
+                    thrustY *= 0.45; // Ép trục dọc bắn xa
+                }
                 
                 rawX = (blendedRawX * thrustX) + autoPullX;
                 rawY = (blendedRawY * thrustY);
