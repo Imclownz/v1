@@ -463,7 +463,7 @@ class VectorThrustEngine {
     
     // Hàm Đường cong Sigmoid (Gia tốc đẩy cơ bản)
     static calculateSigmoidThrust(distance2D) {
-        const MAX_THRUST = 15.0; // Phục hồi gia tốc xé gió ở tầm xa
+        const MAX_THRUST = 10.0; // Phục hồi gia tốc xé gió ở tầm xa
         const MIN_THRUST = 0.15; 
         const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
@@ -603,7 +603,7 @@ class VectorThrustEngine {
             
             if (dotProduct > 0.0) {
                 let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
-                let cushion = 1.0 - (brakeFactor * 0.8); 
+                let cushion = 1.0 - (brakeFactor * 0.85); 
                 engine.thrustMultiplier = baseThrust * cushion; 
                 
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
