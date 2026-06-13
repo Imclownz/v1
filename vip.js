@@ -268,13 +268,15 @@ class SelfKinematicIsolator {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER 2D-3D (MẮT THẦN QUÉT ĐA LỚP V7.7)
-// Công nghệ: 
-// 1. Aspect Ratio Culling: Ma trận quét 2D hình Elip chuẩn tỷ lệ màn hình 16:9.
-// 2. Real Head Tracking: Bám đuổi tọa độ Sọ/Cổ thực tế, loại bỏ mỏ neo tĩnh.
-// 3. Dynamic Aim-Offset: Bù trừ trọng lực/gia tốc rơi của bản thân (Từ Bước 2.5).
-// 4. Ultra-Magnetism: Khử ma sát tứ chi (Zero-Friction), dồn từ tính vào Sọ.
-// 5. X-Axis Delta Tracking: Đo vận tốc lướt ngang của địch.
+// BƯỚC 2: TARGET SCANNER 2D-3D (MẮT THẦN QUÉT ĐA LỚP V7.8 - GHOST PROTOCOL)
+// Hợp thể 7 Công nghệ Hủy diệt Không gian:
+// 1. Absolute Target Persistence: Khóa chết mục tiêu bất tử khi đè cò (isFiring).
+// 2. Mechanical Circuit Breaker: Ngắt cầu chì (Đổi mục tiêu) bằng cú vuốt > 15px.
+// 3. Cross-Path Ghosting: Nội suy bóng ma 200ms khi mất dấu / bị che khuất.
+// 4. Aspect Ratio Culling: Ma trận quét 2D hình Elip chuẩn tỷ lệ 16:9 (Hệ số 1.77).
+// 5. Real Head Tracking: Bám đuổi tọa độ Sọ/Cổ thực tế, loại bỏ mỏ neo tĩnh.
+// 6. Dynamic Aim-Offset: Bù trừ trọng lực/gia tốc rơi của bản thân.
+// 7. Ultra-Magnetism: Khử ma sát tứ chi (Zero-Friction), dồn từ tính vào Sọ.
 // ============================================================================
 class TargetScanner2D3D {
     
@@ -296,25 +298,41 @@ class TargetScanner2D3D {
         let currentYaw = payload.aim_yaw !== undefined ? payload.aim_yaw : (payload.camera ? payload.camera.yaw : 0.0);
         let currentPitch = payload.aim_pitch !== undefined ? payload.aim_pitch : (payload.camera ? payload.camera.pitch : 0.0);
 
-        // ====================================================================
-        // NHẬN DIỆN ỐNG NGẮM (ADS SENSOR)
-        // ====================================================================
         let isADS = payload.is_ads || (payload.camera && payload.camera.fov && payload.camera.fov < 60.0);
         state.engine.isADS = isADS;
+
+        // Khởi tạo các biến nội suy Bóng Ma (Cross-Path Ghosting) nếu chưa có
+        if (state.target.ghostFrames === undefined) state.target.ghostFrames = 0;
+        if (!state.target.lastHeadPos) state.target.lastHeadPos = { x: 0, y: 0, z: 0 };
+        if (!state.target.lastVelocity) state.target.lastVelocity = { x: 0, y: 0, z: 0 };
 
         if (!state.target.scanFrame) state.target.scanFrame = 0;
         state.target.scanFrame++;
 
         let previousTargetId = state.target.id;
-        let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; // Lưu góc cũ để đo vận tốc ngang
+        let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; 
+
+        // ====================================================================
+        // [CÔNG NGHỆ 2]: MECHANICAL CIRCUIT BREAKER (NGẮT CẦU CHÌ CƠ HỌC)
+        // Nếu đang sấy, nhưng ngón tay miết một lực cực gắt (Magnitude > 15.0)
+        // Hệ thống sẽ lập tức xé bỏ bản hợp đồng khóa chết, cho phép đổi mục tiêu.
+        // ====================================================================
+        let isFiring = state.weapon.isFiring;
+        if (isFiring && state.target.id && state.input.magnitude > 15.0) {
+            state.target.id = null;             // Giải phóng mục tiêu hiện tại
+            state.target.ghostFrames = 0;       // Xóa bóng ma
+            previousTargetId = null;            // Trắng bộ nhớ cục bộ
+        }
+
+        // ====================================================================
+        // [CÔNG NGHỆ 1]: ABSOLUTE TARGET PERSISTENCE (KHÓA CHẾT MỤC TIÊU BẤT TỬ)
+        // Khi súng đang nổ, Bước 2 mù hoàn toàn với mọi kẻ địch khác, chỉ nhìn thằng bị khóa.
+        // ====================================================================
+        let lockedTargetId = (isFiring && state.target.id) ? state.target.id : null;
 
         let bestTarget = null;
         let lowest2DDistance = 999999.0; 
-
-        // [CÔNG NGHỆ V7.7]: TỈ LỆ KHUNG HÌNH MÀN HÌNH (ASPECT RATIO 16:9)
-        // 16/9 ≈ 1.77. Màn hình điện thoại rộng hơn cao, nên 1 độ góc ngang (Yaw)
-        // sẽ tốn ít pixel hơn 1 độ góc dọc (Pitch). Ta nhân Pitch với 1.77 để cân bằng.
-        const ASPECT_RATIO = 1.77; 
+        const ASPECT_RATIO = 1.77; // Tỷ lệ Elip 16:9
 
         // ====================================================================
         // A. AGGRESSIVE CULLING & ULTRA-MAGNETISM 
@@ -322,19 +340,22 @@ class TargetScanner2D3D {
         for (let i = 0; i < payload.players.length; i++) {
             let enemy = payload.players[i];
             
-            // 1. Lọc tử sĩ & Đồng đội
+            // Lọc tử sĩ & Đồng đội
             if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked || !enemy.pos) continue;
             if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
             if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
 
-            // 2. [REAL HEAD TRACKING]: Lấy tọa độ thật + Nhân bản (Clone) để không hỏng dữ liệu gốc
+            // XUYÊN THỦNG VÒNG LẶP: Nếu đã khóa chết thằng A, bỏ qua mọi tính toán với thằng B, C, D
+            if (lockedTargetId && enemy.id !== lockedTargetId) continue;
+
+            // Lấy tọa độ thật + Nhân bản (Clone)
             let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
             let headPos = { x: headRef.x, y: headRef.y, z: headRef.z };
 
-            // ====================================================================
-            // 3. DYNAMIC AIM-OFFSET (BÙ TRỪ GIA TỐC RƠI CỦA BẢN THÂN)
-            // Phương trình: Virtual_Head_Y = Real_Head_Y - (My_Velocity_Y * Time_Delta)
-            // ====================================================================
+            // Trích xuất vận tốc thực tế để phục vụ cho thuật toán Bóng Ma
+            let enemyVel = enemy.real_velocity || enemy.velocity || { x: 0, y: 0, z: 0 };
+
+            // [BÙ TRỪ GIA TỐC RƠI CỦA BẢN THÂN]
             let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
             headPos.y -= localDispY; 
 
@@ -343,46 +364,37 @@ class TargetScanner2D3D {
             let dz = headPos.z - origin.z;
             let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
             
-            // Lọc tầm cực xa (> 150m) để tiết kiệm CPU
             if (distance3D > 150.0) continue; 
 
-            // ====================================================================
-            // 4. ULTRA-MAGNETISM: Hủy diệt vật lý Tứ chi, dồn toàn bộ ma sát vào Sọ
-            // ====================================================================
+            // [ULTRA-MAGNETISM: KHỬ MA SÁT TỨ CHI]
             const allBones = Object.keys(enemy.hitboxes);
             for (let b = 0; b < allBones.length; b++) {
                 let boneName = allBones[b].toLowerCase();
                 let bone = enemy.hitboxes[allBones[b]];
 
                 if (boneName.includes('head') || boneName.includes('neck')) {
-                    if (bone.radius) bone.radius = 0.5; // Kích thước đầu x2 để dễ đón đạn
-                    bone.magnetism = 5.0;               // Lực hút Từ tính x500%
+                    if (bone.radius) bone.radius = 0.5; 
+                    bone.magnetism = 5.0;               
                     bone.snap_weight = 99999.0;
                 } else {
-                    // Tứ chi, Bụng, Ngực bị tước ma sát thành "Không khí" (Zero-Friction)
                     if (bone.radius !== undefined) bone.radius = 0.0001;
                     bone.magnetism = 0.0; bone.friction = 0.0; bone.snap_weight = -99999.0;
                     if (bone.pos && bone.pos.z) bone.pos.z -= 1.5; 
                 }
             }
 
-            // ====================================================================
-            // PHA 1: TÍNH TOÁN 3D EULER & CHIẾU LÊN MẶT PHẲNG 2D MÀN HÌNH (ELIP)
-            // ====================================================================
+            // TÍNH TOÁN 3D EULER & CHIẾU LÊN MẶT PHẲNG 2D MÀN HÌNH (ELIP)
             let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
             let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
             
-            // Tọa độ Không gian 3D thực tế
             let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
             let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
 
-            // [LÕI 2D ASPECT RATIO]: Nhân trục dọc (Pitch) với 1.77
-            // Biến vùng quét từ Hình tròn thành Hình Elip khớp 100% với màn hình điện thoại
+            // [ASPECT RATIO CULLING]
             let scaledDeltaPitch = rawDeltaPitch * ASPECT_RATIO;
             let fov2D = Math.sqrt(rawDeltaYaw**2 + scaledDeltaPitch**2);
 
-            // Cắt rìa màn hình (Bật Scope lấy địch khu vực giữa)
             let baseCapsule = (distance3D < 3.0) ? 180.0 : ((120.0 / distance3D) + 12.0);
             let capsuleFovLimit = isADS ? (baseCapsule * 0.35) : baseCapsule; 
             
@@ -391,7 +403,6 @@ class TargetScanner2D3D {
 
             if (fov2D > capsuleFovLimit) continue;
 
-            // Chấm điểm ưu tiên (Điểm fov2D càng nhỏ -> Địch càng gần Tâm chữ thập)
             let stancePenalty = 1.0;
             let heightDiff = origin.y - headPos.y; 
             if (heightDiff > 0.8) stancePenalty *= 2.0; 
@@ -400,15 +411,10 @@ class TargetScanner2D3D {
             let stickyBonus = isStickyTarget ? 0.50 : 1.0;
             let score2D = fov2D * stancePenalty * stickyBonus;
 
-            // Chốt hạ Mục tiêu tốt nhất
             if (score2D < lowest2DDistance) {
                 lowest2DDistance = score2D;
 
-                // ====================================================================
-                // PHA 2: THEO DÕI VẬN TỐC LƯỚT NGANG (STRAFE DELTA TRACKING)
-                // ====================================================================
                 let currentEnemyDeltaYaw = 0.0;
-                
                 if (isStickyTarget) {
                     currentEnemyDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - previousEnemyYaw);
                 }
@@ -416,19 +422,95 @@ class TargetScanner2D3D {
                 bestTarget = {
                     id: enemy.id, 
                     distance3D: distance3D,
-                    distance2D: fov2D,                   // Gửi 2D cho Trợ lực kéo
-                    deltaPitch: rawDeltaPitch,           // Gửi 3D cho Khóa cứng 
-                    deltaYaw: rawDeltaYaw,               // Gửi 3D cho Khóa cứng 
-                    enemyDeltaYaw: currentEnemyDeltaYaw, // Gửi Vận tốc ngang cho Auto-Pull
-                    absoluteEnemyYaw: enemyYaw           
+                    distance2D: fov2D,                   
+                    deltaPitch: rawDeltaPitch,           
+                    deltaYaw: rawDeltaYaw,               
+                    enemyDeltaYaw: currentEnemyDeltaYaw, 
+                    absoluteEnemyYaw: enemyYaw,
+                    // Lưu Trữ Dữ liệu Gốc phục vụ Bóng Ma
+                    rawHeadPos: { x: headRef.x, y: headRef.y, z: headRef.z },
+                    velocity: { x: enemyVel.x, y: enemyVel.y, z: enemyVel.z },
+                    isGhost: false
                 };
             }
         }
 
         // ====================================================================
-        // XUẤT BÁO CÁO CẬP NHẬT VÀO VORTEX STATE
+        // B. [CÔNG NGHỆ 3]: CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT)
+        // Nếu mục tiêu Bất tử (lockedTargetId) bị che khuất / đè tọa độ và biến mất 
+        // khỏi vòng lặp trên. Hệ thống mở cửa sổ nội suy tương lai trong 200ms.
+        // ====================================================================
+        if (lockedTargetId && !bestTarget) {
+            // Cửa sổ 15 frames (~240 mili-giây)
+            if (state.target.ghostFrames < 15) { 
+                state.target.ghostFrames++;
+
+                // Lấy tọa độ cũ + Vận tốc cũ * 16ms (Thời gian 1 frame)
+                let lastPos = state.target.lastHeadPos;
+                let lastVel = state.target.lastVelocity;
+                
+                let ghostHead = {
+                    x: lastPos.x + (lastVel.x * 0.016),
+                    y: lastPos.y + (lastVel.y * 0.016),
+                    z: lastPos.z + (lastVel.z * 0.016)
+                };
+
+                // Tiếp tục bù trừ gia tốc rơi của bản thân cho Bóng Ma
+                let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
+                ghostHead.y -= localDispY; 
+
+                // Tính toán ma trận cho Bóng Ma y hệt như người thật
+                let dx = ghostHead.x - origin.x;
+                let dy = ghostHead.y - origin.y;
+                let dz = ghostHead.z - origin.z;
+                let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                
+                let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
+                let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
+                let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
+                
+                let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
+                let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
+                let scaledDeltaPitch = rawDeltaPitch * ASPECT_RATIO;
+                let fov2D = Math.sqrt(rawDeltaYaw**2 + scaledDeltaPitch**2);
+
+                bestTarget = {
+                    id: lockedTargetId,
+                    distance3D: distance3D,
+                    distance2D: fov2D,
+                    deltaPitch: rawDeltaPitch,
+                    deltaYaw: rawDeltaYaw,
+                    enemyDeltaYaw: state.target.enemyDeltaYaw, // Giữ nguyên vận tốc cũ
+                    absoluteEnemyYaw: enemyYaw,
+                    isGhost: true
+                };
+
+                // Cập nhật lại tọa độ gốc bằng tọa độ ảo để frame sau tiếp tục tịnh tiến
+                state.target.lastHeadPos = { 
+                    x: ghostHead.x, 
+                    y: ghostHead.y + localDispY, // Trả lại y gốc chưa bù trừ để nội suy chuẩn
+                    z: ghostHead.z 
+                };
+
+            } else {
+                // Cửa sổ 200ms kết thúc, kẻ địch thực sự đã biến mất/chạy sau tường. Hủy cờ khóa.
+                state.target.id = null;
+                state.target.ghostFrames = 0;
+            }
+        }
+
+        // ====================================================================
+        // XUẤT BÁO CÁO CẬP NHẬT VÀO VORTEX STATE CHO BƯỚC 3 THỰC THI
         // ====================================================================
         if (bestTarget) {
+            
+            // Nếu là người thật (Không phải bóng ma), Reset cờ đếm và lưu lại Tọa độ Lịch sử
+            if (!bestTarget.isGhost) {
+                state.target.ghostFrames = 0;
+                state.target.lastHeadPos = bestTarget.rawHeadPos;
+                state.target.lastVelocity = bestTarget.velocity;
+            }
+
             state.target.id = bestTarget.id;
             state.target.distance3D = bestTarget.distance3D;
             state.target.distance2D = bestTarget.distance2D;
@@ -439,6 +521,7 @@ class TargetScanner2D3D {
             state.target.lastEnemyYaw = bestTarget.absoluteEnemyYaw;
         } else {
             state.target.id = null;
+            state.target.ghostFrames = 0;
             state.target.distance3D = 999.0;
             state.target.distance2D = 999.0;
             state.target.pitchError = 999.0;
