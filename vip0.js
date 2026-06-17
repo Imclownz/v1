@@ -10,6 +10,125 @@
 const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
 
 // ============================================================================
+// LỚP 6: DEEP DATA HIJACKER (MẠNG LƯỚI BẮT CÓC VÀ QUÉT DỮ LIỆU SÂU)
+// Nhiệm vụ: Xuyên thủng Sandbox, cướp quyền JSBridge, WebSocket và DOM để 
+// hớt tay trên gói tin tọa độ/máu của Server trước khi Game Engine kịp giấu đi.
+// ============================================================================
+class DeepDataHijacker {
+	static initialize() {
+		const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
+		
+		// Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
+		if (_vortex.__HijackerInitialized) return;
+		_vortex.__HijackerInitialized = true;
+
+		// --------------------------------------------------------------------
+		// 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
+		// Free Fire Web UI thường dùng WebSockets để đồng bộ vị trí địch ở xa
+		// --------------------------------------------------------------------
+		const OrigWebSocket = window.WebSocket;
+		if (OrigWebSocket) {
+			window.WebSocket = function(url, protocols) {
+				const ws = new OrigWebSocket(url, protocols);
+				
+				// Cắm ống nghe vào đường truyền nhận dữ liệu
+				ws.addEventListener('message', function(event) {
+					try {
+						if (event.data && typeof event.data === 'string') {
+							// Bộ lọc Regex siêu tốc: Chỉ bắt các gói tin nghi ngờ chứa tọa độ
+							if (event.data.includes("pos") || event.data.includes("players") || 
+								event.data.includes("enemy") || event.data.includes("hp")) {
+								
+								let secretData = JSON.parse(event.data);
+								if (secretData && _vortex.__VORTEX_ENGINE) {
+									// Ép hệ thống VORTEX xử lý ngay dữ liệu mật này
+									// Dữ liệu này "sạch" và "đầy đủ" hơn rất nhiều so với payload thông thường
+									_vortex.__VORTEX_ENGINE.processPayload(secretData);
+								}
+							}
+						}
+					} catch (e) {
+						// Im lặng bỏ qua lỗi parse JSON để không làm khựng khung hình
+					}
+				});
+				return ws;
+			};
+		}
+
+		// --------------------------------------------------------------------
+		// 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
+		// Trực tiếp đánh chặn hàm postMessage toàn cục
+		// --------------------------------------------------------------------
+		const originalPostMessage = window.postMessage;
+		window.postMessage = function(message, targetOrigin, transfer) {
+			try {
+				if (message && typeof message === 'object') {
+					// Bắt cóc gói tin chứa Entity List
+					if (message.players || message.enemy_list || message.hitboxes || message.entities) {
+						if (_vortex.__VORTEX_ENGINE) {
+							_vortex.__VORTEX_ENGINE.processPayload(message);
+						}
+					}
+				}
+			} catch (e) {}
+			// Trả lại luồng chạy cho UI Game để hình ảnh vẫn hiển thị bình thường
+			return originalPostMessage.apply(this, arguments);
+		};
+
+		// --------------------------------------------------------------------
+		// 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
+		// --------------------------------------------------------------------
+		if (window.webkit && window.webkit.messageHandlers) {
+			for (let handlerName in window.webkit.messageHandlers) {
+				if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
+					let handler = window.webkit.messageHandlers[handlerName];
+					let origPostMessage = handler.postMessage;
+					
+					handler.postMessage = function(msg) {
+						// [TIỀM NĂNG]: Tại đây có thể chặn các hàm Anti-Cheat gửi báo cáo 
+						// "Hành vi bất thường" lên server iOS Native.
+						// Tạm thời Proxy nguyên vẹn để bypass an toàn.
+						return origPostMessage.apply(this, arguments);
+					};
+				}
+			}
+		}
+
+		// --------------------------------------------------------------------
+		// 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (MEMORY SPIDER CRAWLER)
+		// Chạy ngầm 1 lần duy nhất để tìm các Mảng Tọa Độ bị giấu kín trong RAM
+		// --------------------------------------------------------------------
+		setTimeout(() => {
+			const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
+			const MAX_DEPTH = 3; // Giới hạn đào sâu 3 tầng để không làm tràn RAM
+
+			function crawlMemory(obj, currentDepth, path) {
+				if (currentDepth > MAX_DEPTH || !obj || typeof obj !== 'object') return;
+				
+				for (let key in obj) {
+					try {
+						let keyLower = key.toLowerCase();
+						// Nhận diện mảng chứa nhiều hơn 1 thực thể (Có thể là danh sách Địch)
+						if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(obj[key]) && obj[key].length > 0) {
+							// Lưu lại kho báu vào biến toàn cục để Mắt Thần (Bước 2) có thể gọi ra xài
+							_vortex.__HiddenEntitiesList = obj[key]; 
+						}
+						crawlMemory(obj[key], currentDepth + 1, path + "." + key);
+					} catch (e) {
+						// Bỏ qua vùng nhớ bị hệ điều hành khóa quyền (CORS/Private)
+					}
+				}
+			}
+			
+			crawlMemory(window, 0, "window");
+		}, 3500); // Trì hoãn 3.5 giây để chờ game load xong hoàn toàn 100% dữ liệu
+	}
+}
+
+// Khởi động Hệ thống Bắt cóc ngay lập tức
+DeepDataHijacker.initialize();
+
+// ============================================================================
 // 0. VORTEX STATE V7.0 (BỘ NHỚ TOÀN CỤC)
 // Đã mở rộng để hỗ trợ Ma trận 2D và Bám đuổi Trục X
 // ============================================================================
@@ -1214,121 +1333,3 @@ else _vortex.VORTEX = VORTEX_API;
 
 if (typeof module !== 'undefined') module.exports = VORTEX_API;
 
-// ============================================================================
-// LỚP 6: DEEP DATA HIJACKER (MẠNG LƯỚI BẮT CÓC VÀ QUÉT DỮ LIỆU SÂU)
-// Nhiệm vụ: Xuyên thủng Sandbox, cướp quyền JSBridge, WebSocket và DOM để 
-// hớt tay trên gói tin tọa độ/máu của Server trước khi Game Engine kịp giấu đi.
-// ============================================================================
-class DeepDataHijacker {
-	static initialize() {
-		const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-		
-		// Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
-		if (_vortex.__HijackerInitialized) return;
-		_vortex.__HijackerInitialized = true;
-
-		// --------------------------------------------------------------------
-		// 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
-		// Free Fire Web UI thường dùng WebSockets để đồng bộ vị trí địch ở xa
-		// --------------------------------------------------------------------
-		const OrigWebSocket = window.WebSocket;
-		if (OrigWebSocket) {
-			window.WebSocket = function(url, protocols) {
-				const ws = new OrigWebSocket(url, protocols);
-				
-				// Cắm ống nghe vào đường truyền nhận dữ liệu
-				ws.addEventListener('message', function(event) {
-					try {
-						if (event.data && typeof event.data === 'string') {
-							// Bộ lọc Regex siêu tốc: Chỉ bắt các gói tin nghi ngờ chứa tọa độ
-							if (event.data.includes("pos") || event.data.includes("players") || 
-								event.data.includes("enemy") || event.data.includes("hp")) {
-								
-								let secretData = JSON.parse(event.data);
-								if (secretData && _vortex.__VORTEX_ENGINE) {
-									// Ép hệ thống VORTEX xử lý ngay dữ liệu mật này
-									// Dữ liệu này "sạch" và "đầy đủ" hơn rất nhiều so với payload thông thường
-									_vortex.__VORTEX_ENGINE.processPayload(secretData);
-								}
-							}
-						}
-					} catch (e) {
-						// Im lặng bỏ qua lỗi parse JSON để không làm khựng khung hình
-					}
-				});
-				return ws;
-			};
-		}
-
-		// --------------------------------------------------------------------
-		// 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
-		// Trực tiếp đánh chặn hàm postMessage toàn cục
-		// --------------------------------------------------------------------
-		const originalPostMessage = window.postMessage;
-		window.postMessage = function(message, targetOrigin, transfer) {
-			try {
-				if (message && typeof message === 'object') {
-					// Bắt cóc gói tin chứa Entity List
-					if (message.players || message.enemy_list || message.hitboxes || message.entities) {
-						if (_vortex.__VORTEX_ENGINE) {
-							_vortex.__VORTEX_ENGINE.processPayload(message);
-						}
-					}
-				}
-			} catch (e) {}
-			// Trả lại luồng chạy cho UI Game để hình ảnh vẫn hiển thị bình thường
-			return originalPostMessage.apply(this, arguments);
-		};
-
-		// --------------------------------------------------------------------
-		// 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
-		// --------------------------------------------------------------------
-		if (window.webkit && window.webkit.messageHandlers) {
-			for (let handlerName in window.webkit.messageHandlers) {
-				if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
-					let handler = window.webkit.messageHandlers[handlerName];
-					let origPostMessage = handler.postMessage;
-					
-					handler.postMessage = function(msg) {
-						// [TIỀM NĂNG]: Tại đây có thể chặn các hàm Anti-Cheat gửi báo cáo 
-						// "Hành vi bất thường" lên server iOS Native.
-						// Tạm thời Proxy nguyên vẹn để bypass an toàn.
-						return origPostMessage.apply(this, arguments);
-					};
-				}
-			}
-		}
-
-		// --------------------------------------------------------------------
-		// 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (MEMORY SPIDER CRAWLER)
-		// Chạy ngầm 1 lần duy nhất để tìm các Mảng Tọa Độ bị giấu kín trong RAM
-		// --------------------------------------------------------------------
-		setTimeout(() => {
-			const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
-			const MAX_DEPTH = 3; // Giới hạn đào sâu 3 tầng để không làm tràn RAM
-
-			function crawlMemory(obj, currentDepth, path) {
-				if (currentDepth > MAX_DEPTH || !obj || typeof obj !== 'object') return;
-				
-				for (let key in obj) {
-					try {
-						let keyLower = key.toLowerCase();
-						// Nhận diện mảng chứa nhiều hơn 1 thực thể (Có thể là danh sách Địch)
-						if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(obj[key]) && obj[key].length > 0) {
-							// Lưu lại kho báu vào biến toàn cục để Mắt Thần (Bước 2) có thể gọi ra xài
-							_vortex.__HiddenEntitiesList = obj[key]; 
-						}
-						crawlMemory(obj[key], currentDepth + 1, path + "." + key);
-					} catch (e) {
-						// Bỏ qua vùng nhớ bị hệ điều hành khóa quyền (CORS/Private)
-					}
-				}
-			}
-			
-			crawlMemory(window, 0, "window");
-		}, 3500); // Trì hoãn 3.5 giây để chờ game load xong hoàn toàn 100% dữ liệu
-	}
-}
-
-// Khởi động Hệ thống Bắt cóc ngay lập tức
-DeepDataHijacker.initialize();
