@@ -58,7 +58,7 @@ try {
 					thrustMultiplier: 1.0, 
 					isABSBraking: false,
 					remX: 0, remY: 0       // Bộ nhớ đệm Sub-pixel
-				}
+				},
 
 				localPlayer: {
 					velocityY: 0.0,
