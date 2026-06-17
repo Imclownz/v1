@@ -916,42 +916,6 @@ try {
 			}
 		}
 
-		class MarksmanCore {
-			static execute(payload) {
-				const engine = _vortex.__VortexState.engine;
-				// [CÔNG NGHỆ MỚI]: PHANH NGHỊCH ĐẢO (INVERSE BRAKING)
-				// Dành cho DE, Woodpecker, SKS, AC80, M590
-				if (payload.weapon && engine.isABSBraking) {
-					// Khi tâm lọt vào vùng ABS, Phanh nghịch đảo sẽ triệt tiêu 100% 
-					// lực giật nảy nòng của súng gõ 1 viên.
-					payload.weapon.recoil_y = -0.5; // Bơm phản lực ngược để giữ tâm đứng yên
-					payload.weapon.recoil_accumulation = 0.0;
-					payload.weapon.recoil_recovery = 99999.0;
-					payload.weapon.base_spread = 0.0;
-				}
-				return payload;
-			}
-		}
-
-		// ============================================================================
-		// LỚP BẢO HIỂM: ABSOLUTE RAY-DIR LOCK (ĐỒNG BỘ TIA ĐẠN THỰC THỂ)
-		// ============================================================================
-		class BallisticsSynchronizer {
-			static execute(payload) {
-				const engine = _vortex.__VortexState.engine;
-				if (engine.isABSBraking) {
-					// Ép mọi tia đạn bay đúng vào mã xương Đầu (Head bone hash)
-					if (payload.damage_report || payload.hit_event) {
-						let report = payload.damage_report || payload.hit_event;
-						report.hit_bone = -2111735698; // BONE_HASH: Đầu
-						report.is_headshot = true;
-						report.damage_multiplier = 1.35; // Tăng sát thương headshot nhẹ
-					}
-				}
-				return payload;
-			}
-		}
-
 		// ============================================================================
 		// BƯỚC 5: BALLISTICS SYNCHRONIZER (Lớp Bảo Hiểm Tia Đạn V7.0)
 		// Công nghệ: Smart Bone Hijacking, Magnetic Bullet Bending, Anti-Falloff.
