@@ -68,6 +68,109 @@ try {
 		}
 
 		// ============================================================================
+		// BƯỚC 0.5: MEMORY AUTO-FLUSHER & SANITIZER (TỰ ĐỘNG DỌN DẸP & LỌC NHIỄU)
+		// Nhiệm vụ 1: Lọc bỏ các gói tin rác (NaN, Undefined) do lag mạng gây văng tâm.
+		// Nhiệm vụ 2: Tự động nhận diện trận đấu mới/sảnh chờ để xóa sạch "bóng ma" ván trước.
+		// Đảm bảo ván nào cũng có độ nhạy và lực kéo hoàn hảo như ván đầu tiên.
+		// ============================================================================
+		class MemoryAutoFlusher {
+			static execute(payload) {
+				const state = _vortex.__VortexState;
+
+				// --------------------------------------------------------------------
+				// [CÔNG NGHỆ BỔ SUNG] 1. SANITIZER: LỌC NHIỄU DỮ LIỆU ĐẦU VÀO (CHỐNG VĂNG TÂM)
+				// Bắt các trường hợp payload bị rách do mạng lag (Ping 999+) hoặc Game Engine lỗi
+				// --------------------------------------------------------------------
+				if (payload.touch_delta) {
+					if (isNaN(payload.touch_delta.x) || typeof payload.touch_delta.x !== 'number') payload.touch_delta.x = 0;
+					if (isNaN(payload.touch_delta.y) || typeof payload.touch_delta.y !== 'number') payload.touch_delta.y = 0;
+				}
+				if (payload.camera) {
+					// Nếu góc Camera bị mất dữ liệu, trả về số 0 để các phép tính toán học (Math.sqrt, atan2) ở Bước 2 không bị sập (Crash).
+					if (isNaN(payload.camera.pitch) || typeof payload.camera.pitch !== 'number') payload.camera.pitch = 0;
+					if (isNaN(payload.camera.yaw) || typeof payload.camera.yaw !== 'number') payload.camera.yaw = 0;
+				}
+
+				// --------------------------------------------------------------------
+				// 2. NHẬN DIỆN TÍN HIỆU TRẬN MỚI (MATCH RESTART SENSOR)
+				// --------------------------------------------------------------------
+				let isNewMatch = false;
+
+				// Cờ A: Nếu Game truyền thẳng trạng thái trận đấu (Sảnh chờ / Đang bay)
+				if (payload.match_state && (payload.match_state === "LOBBY" || payload.match_state === "START")) {
+					isNewMatch = true;
+				} 
+				// Cờ B: Nếu ID của trận đấu thay đổi
+				else if (payload.match_id && payload.match_id !== state.currentMatchId) {
+					isNewMatch = true;
+					state.currentMatchId = payload.match_id;
+				} 
+				// Cờ C (Quan trọng nhất): Nhận diện biến động qua số lượng người chơi
+				// Nếu đột ngột tụt về 0 (Ra sảnh) hoặc đột ngột tăng vọt lên 50 (Lên máy bay)
+				else {
+					let currentPlayerCount = payload.players ? payload.players.length : 0;
+					if (state.lastPlayerCount !== undefined) {
+						if ((currentPlayerCount === 0 && state.lastPlayerCount > 10) || 
+							(currentPlayerCount > 20 && state.lastPlayerCount < 5)) {
+							isNewMatch = true;
+						}
+					}
+					state.lastPlayerCount = currentPlayerCount;
+				}
+
+				// --------------------------------------------------------------------
+				// 3. KÍCH HOẠT QUY TRÌNH LỌC MÁU BỘ NHỚ (FLUSH)
+				// --------------------------------------------------------------------
+				if (isNewMatch) {
+					// Xóa sạch bộ nhớ Mục tiêu (Kẻ địch ván trước, bóng ma, tọa độ cũ)
+					state.target = { 
+						id: null, 
+						scanFrame: 0, 
+						distance3D: 999.0, 
+						distance2D: 999.0, 
+						pitchError: 999.0, 
+						yawError: 999.0, 
+						enemyDeltaYaw: 0.0,
+						lastHeadPos: { x: 0, y: 0, z: 0 },
+						lastVelocity: { x: 0, y: 0, z: 0 },
+						ghostFrames: 0
+					};
+					
+					// Xóa sạch lực tay dư thừa và cờ khóa của Động cơ Vật lý
+					state.engine = {
+						isADS: false, 
+						thrustMultiplier: 1.0, 
+						isABSBraking: false, 
+						remX: 0, 
+						remY: 0,
+						wasADS: false,
+						adsCalmFrames: 0
+					};
+					
+					// Xóa lực kéo cảm ứng và gia tốc EMA đang lưu trữ
+					state.input = { 
+						rawX: 0, rawY: 0, 
+						smoothX: 0, smoothY: 0,
+						magnitude: 0, 
+						isSwiping: false, 
+						dirX: 0, dirY: 0 
+					};
+
+					// Trả bộ đếm đạn và trạng thái bản thân về mặc định
+					state.weapon.bulletCount = 0;
+					state.weapon.isFiring = false;
+					
+					if (state.localPlayer) {
+						state.localPlayer.velocityY = 0.0;
+						state.localPlayer.displacementY = 0.0;
+					}
+				}
+
+				return payload;
+			}
+		}
+
+		// ============================================================================
 		// BƯỚC 1: INPUT INTERCEPTOR (Đọc lệnh ngón tay & Khử nhiễu)
 		// Nhiệm vụ: Đọc lực tay thô, làm mượt EMA, tính toán Vector Không Gian 2D.
 		// ============================================================================
@@ -1081,6 +1184,125 @@ try {
 		else _vortex.VORTEX = VORTEX_API;
 
 		if (typeof module !== 'undefined') module.exports = VORTEX_API;
+		
+		// ============================================================================
+        // LỚP 6: DEEP DATA HIJACKER (MẠNG LƯỚI BẮT CÓC VÀ QUÉT DỮ LIỆU SÂU)
+        // Nhiệm vụ: Xuyên thủng Sandbox, cướp quyền JSBridge, WebSocket và DOM để 
+        // hớt tay trên gói tin tọa độ/máu của Server trước khi Game Engine kịp giấu đi.
+        // ============================================================================
+        class DeepDataHijacker {
+            static initialize() {
+                const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
+                
+                // Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
+                if (_vortex.__HijackerInitialized) return;
+                _vortex.__HijackerInitialized = true;
+
+                // --------------------------------------------------------------------
+                // 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
+                // Free Fire Web UI thường dùng WebSockets để đồng bộ vị trí địch ở xa
+                // --------------------------------------------------------------------
+                const OrigWebSocket = window.WebSocket;
+                if (OrigWebSocket) {
+                    window.WebSocket = function(url, protocols) {
+                        const ws = new OrigWebSocket(url, protocols);
+                        
+                        // Cắm ống nghe vào đường truyền nhận dữ liệu
+                        ws.addEventListener('message', function(event) {
+                            try {
+                                if (event.data && typeof event.data === 'string') {
+                                    // Bộ lọc Regex siêu tốc: Chỉ bắt các gói tin nghi ngờ chứa tọa độ
+                                    if (event.data.includes("pos") || event.data.includes("players") || 
+                                        event.data.includes("enemy") || event.data.includes("hp")) {
+                                        
+                                        let secretData = JSON.parse(event.data);
+                                        if (secretData && _vortex.__VORTEX_ENGINE) {
+                                            // Ép hệ thống VORTEX xử lý ngay dữ liệu mật này
+                                            // Dữ liệu này "sạch" và "đầy đủ" hơn rất nhiều so với payload thông thường
+                                            _vortex.__VORTEX_ENGINE.processPayload(secretData);
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                // Im lặng bỏ qua lỗi parse JSON để không làm khựng khung hình
+                            }
+                        });
+                        return ws;
+                    };
+                }
+
+                // --------------------------------------------------------------------
+                // 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
+                // Trực tiếp đánh chặn hàm postMessage toàn cục
+                // --------------------------------------------------------------------
+                const originalPostMessage = window.postMessage;
+                window.postMessage = function(message, targetOrigin, transfer) {
+                    try {
+                        if (message && typeof message === 'object') {
+                            // Bắt cóc gói tin chứa Entity List
+                            if (message.players || message.enemy_list || message.hitboxes || message.entities) {
+                                if (_vortex.__VORTEX_ENGINE) {
+                                    _vortex.__VORTEX_ENGINE.processPayload(message);
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                    // Trả lại luồng chạy cho UI Game để hình ảnh vẫn hiển thị bình thường
+                    return originalPostMessage.apply(this, arguments);
+                };
+
+                // --------------------------------------------------------------------
+                // 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
+                // --------------------------------------------------------------------
+                if (window.webkit && window.webkit.messageHandlers) {
+                    for (let handlerName in window.webkit.messageHandlers) {
+                        if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
+                            let handler = window.webkit.messageHandlers[handlerName];
+                            let origPostMessage = handler.postMessage;
+                            
+                            handler.postMessage = function(msg) {
+                                // [TIỀM NĂNG]: Tại đây có thể chặn các hàm Anti-Cheat gửi báo cáo 
+                                // "Hành vi bất thường" lên server iOS Native.
+                                // Tạm thời Proxy nguyên vẹn để bypass an toàn.
+                                return origPostMessage.apply(this, arguments);
+                            };
+                        }
+                    }
+                }
+
+                // --------------------------------------------------------------------
+                // 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (MEMORY SPIDER CRAWLER)
+                // Chạy ngầm 1 lần duy nhất để tìm các Mảng Tọa Độ bị giấu kín trong RAM
+                // --------------------------------------------------------------------
+                setTimeout(() => {
+                    const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
+                    const MAX_DEPTH = 3; // Giới hạn đào sâu 3 tầng để không làm tràn RAM
+
+                    function crawlMemory(obj, currentDepth, path) {
+                        if (currentDepth > MAX_DEPTH || !obj || typeof obj !== 'object') return;
+                        
+                        for (let key in obj) {
+                            try {
+                                let keyLower = key.toLowerCase();
+                                // Nhận diện mảng chứa nhiều hơn 1 thực thể (Có thể là danh sách Địch)
+                                if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(obj[key]) && obj[key].length > 0) {
+                                    // Lưu lại kho báu vào biến toàn cục để Mắt Thần (Bước 2) có thể gọi ra xài
+                                    _vortex.__HiddenEntitiesList = obj[key]; 
+                                }
+                                crawlMemory(obj[key], currentDepth + 1, path + "." + key);
+                            } catch (e) {
+                                // Bỏ qua vùng nhớ bị hệ điều hành khóa quyền (CORS/Private)
+                            }
+                        }
+                    }
+                    
+                    crawlMemory(window, 0, "window");
+                }, 3500); // Trì hoãn 3.5 giây để chờ game load xong hoàn toàn 100% dữ liệu
+            }
+        }
+
+        // Khởi động Hệ thống Bắt cóc ngay lập tức
+        DeepDataHijacker.initialize();
 
     }, 0); 
     // ^-- Kết thúc Sandbox Escape
