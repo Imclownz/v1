@@ -10,6 +10,125 @@
 const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
 
 // ============================================================================
+// LỚP 6: DEEP DATA HIJACKER (MẠNG LƯỚI BẮT CÓC VÀ QUÉT DỮ LIỆU SÂU)
+// Nhiệm vụ: Xuyên thủng Sandbox, cướp quyền JSBridge, WebSocket và DOM để 
+// hớt tay trên gói tin tọa độ/máu của Server trước khi Game Engine kịp giấu đi.
+// ============================================================================
+class DeepDataHijacker {
+	static initialize() {
+		const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
+		
+		// Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
+		if (_vortex.__HijackerInitialized) return;
+		_vortex.__HijackerInitialized = true;
+
+		// --------------------------------------------------------------------
+		// 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
+		// Free Fire Web UI thường dùng WebSockets để đồng bộ vị trí địch ở xa
+		// --------------------------------------------------------------------
+		const OrigWebSocket = window.WebSocket;
+		if (OrigWebSocket) {
+			window.WebSocket = function(url, protocols) {
+				const ws = new OrigWebSocket(url, protocols);
+				
+				// Cắm ống nghe vào đường truyền nhận dữ liệu
+				ws.addEventListener('message', function(event) {
+					try {
+						if (event.data && typeof event.data === 'string') {
+							// Bộ lọc Regex siêu tốc: Chỉ bắt các gói tin nghi ngờ chứa tọa độ
+							if (event.data.includes("pos") || event.data.includes("players") || 
+								event.data.includes("enemy") || event.data.includes("hp")) {
+								
+								let secretData = JSON.parse(event.data);
+								if (secretData && _vortex.__VORTEX_ENGINE) {
+									// Ép hệ thống VORTEX xử lý ngay dữ liệu mật này
+									// Dữ liệu này "sạch" và "đầy đủ" hơn rất nhiều so với payload thông thường
+									_vortex.__VORTEX_ENGINE.processPayload(secretData);
+								}
+							}
+						}
+					} catch (e) {
+						// Im lặng bỏ qua lỗi parse JSON để không làm khựng khung hình
+					}
+				});
+				return ws;
+			};
+		}
+
+		// --------------------------------------------------------------------
+		// 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
+		// Trực tiếp đánh chặn hàm postMessage toàn cục
+		// --------------------------------------------------------------------
+		const originalPostMessage = window.postMessage;
+		window.postMessage = function(message, targetOrigin, transfer) {
+			try {
+				if (message && typeof message === 'object') {
+					// Bắt cóc gói tin chứa Entity List
+					if (message.players || message.enemy_list || message.hitboxes || message.entities) {
+						if (_vortex.__VORTEX_ENGINE) {
+							_vortex.__VORTEX_ENGINE.processPayload(message);
+						}
+					}
+				}
+			} catch (e) {}
+			// Trả lại luồng chạy cho UI Game để hình ảnh vẫn hiển thị bình thường
+			return originalPostMessage.apply(this, arguments);
+		};
+
+		// --------------------------------------------------------------------
+		// 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
+		// --------------------------------------------------------------------
+		if (window.webkit && window.webkit.messageHandlers) {
+			for (let handlerName in window.webkit.messageHandlers) {
+				if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
+					let handler = window.webkit.messageHandlers[handlerName];
+					let origPostMessage = handler.postMessage;
+					
+					handler.postMessage = function(msg) {
+						// [TIỀM NĂNG]: Tại đây có thể chặn các hàm Anti-Cheat gửi báo cáo 
+						// "Hành vi bất thường" lên server iOS Native.
+						// Tạm thời Proxy nguyên vẹn để bypass an toàn.
+						return origPostMessage.apply(this, arguments);
+					};
+				}
+			}
+		}
+
+		// --------------------------------------------------------------------
+		// 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (MEMORY SPIDER CRAWLER)
+		// Chạy ngầm 1 lần duy nhất để tìm các Mảng Tọa Độ bị giấu kín trong RAM
+		// --------------------------------------------------------------------
+		setTimeout(() => {
+			const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
+			const MAX_DEPTH = 3; // Giới hạn đào sâu 3 tầng để không làm tràn RAM
+
+			function crawlMemory(obj, currentDepth, path) {
+				if (currentDepth > MAX_DEPTH || !obj || typeof obj !== 'object') return;
+				
+				for (let key in obj) {
+					try {
+						let keyLower = key.toLowerCase();
+						// Nhận diện mảng chứa nhiều hơn 1 thực thể (Có thể là danh sách Địch)
+						if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(obj[key]) && obj[key].length > 0) {
+							// Lưu lại kho báu vào biến toàn cục để Mắt Thần (Bước 2) có thể gọi ra xài
+							_vortex.__HiddenEntitiesList = obj[key]; 
+						}
+						crawlMemory(obj[key], currentDepth + 1, path + "." + key);
+					} catch (e) {
+						// Bỏ qua vùng nhớ bị hệ điều hành khóa quyền (CORS/Private)
+					}
+				}
+			}
+			
+			crawlMemory(window, 0, "window");
+		}, 3500); // Trì hoãn 3.5 giây để chờ game load xong hoàn toàn 100% dữ liệu
+	}
+}
+
+// Khởi động Hệ thống Bắt cóc ngay lập tức
+DeepDataHijacker.initialize();
+
+// ============================================================================
 // 0. VORTEX STATE V7.0 (BỘ NHỚ TOÀN CỤC)
 // Đã mở rộng để hỗ trợ Ma trận 2D và Bám đuổi Trục X
 // ============================================================================
@@ -638,20 +757,18 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.9 OMNI-DIRECTIONAL DOMINANCE)
-// Hợp thể các công nghệ tối thượng:
-// 1. ADS Decapitation Protocol: Quick-scope cướp quyền Camera tức thời & Khiên chống giật.
-// 2. Long-Range Hipfire (Khoảng cách > 8m):
-//    - Depth-Scaling Thrust: Suy hao gia tốc theo chiều sâu 3D (Chống vọt lố).
-//    - Dynamic Magnetic Expansion: Mở rộng vùng đệm từ tính lên 15.0 độ.
-//    - Y-Axis Compression: Ép xẹp trục dọc (Y), giữ nguyên gia tốc trục ngang (X).
-//    - Kinetic Energy Bleeding: Xả van áp suất, triệt tiêu lực vuốt tay hoảng loạn.
-// 3. Asymmetric Snap-Lock: Lồng giam bất đối xứng (Dọc < 2.5 độ, Ngang < 6.0 độ).
-// 4. Aggressive Velocity Blending: 75% AI dẫn đường + 25% Lực cơ học.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.10 ANTI-OVERSHOOT DOMINANCE)
+// Hợp thể các công nghệ tối thượng từ VIP0 và Bộ đôi Chống Vọt Tâm:
+// 1. [NEW] Kinematic Vector Truncation (Guillotine): Chém đứt lực thừa, chống nhảy cóc.
+// 2. [NEW] The Glass Ceiling: Trần kính vô hình tầm xa, đập bẹp lực giật nảy súng.
+// 3. ADS Decapitation Protocol: Quick-scope cướp quyền Camera tức thời & Khiên chống giật.
+// 4. Long-Range Hipfire (> 8m): Suy hao gia tốc, Ép xẹp trục dọc, Xả van hoảng loạn.
+// 5. Asymmetric Snap-Lock: Lồng giam bất đối xứng (Dọc < 3.0 độ, Ngang < 6.0 độ).
+// 6. Siêu Trục X: Giữ nguyên AutoPull = 30.0 và Boost = 1.50 từ hệ thống trước.
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid (Gia tốc cơ bản)
+    // Hàm Đường cong Sigmoid (Gia tốc cơ bản) - Giữ nguyên MAX_THRUST = 10.0
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.15; 
@@ -676,20 +793,18 @@ class VectorThrustEngine {
         let isADS = engine.isADS;
 
         // ====================================================================
-        // [CÔNG NGHỆ ỐNG NGẮM]: ADS DECAPITATION PROTOCOL (GIAO THỨC ĐOẠT MẠNG)
-        // Nhận diện khoảnh khắc Edge-Trigger (Vừa mới bấm nút bật Scope)
+        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE EDGE-TRIGGER)
         // ====================================================================
         if (isADS && !engine.wasADS && target.id !== null) {
-            // Kích hoạt Khiên chống giật ngược (Anti-Pullback Shield) trong 5 frames (khoảng 80ms)
             engine.adsCalmFrames = 5; 
         }
-        engine.wasADS = isADS; // Lưu lại lịch sử cho frame tiếp theo
+        engine.wasADS = isADS; 
 
         // Nếu mất dấu mục tiêu -> Trả lại Payload
         if (!target.id) return payload; 
         if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
 
-        // Lực tay thô thực tế
+        // Lực tay thô thực tế + Phần dư frame trước
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
         let currentMag = input.magnitude;
@@ -702,18 +817,16 @@ class VectorThrustEngine {
         let absYawErr = Math.abs(target.yawError);
 
         // ====================================================================
-        // [CÔNG NGHỆ BẮN XA]: LONG-RANGE HIP-FIRE ISOLATION (Tầm > 8m, Không Scope)
+        // PHÂN TÍCH KHÔNG GIAN BẮN XA (LONG-RANGE HIP-FIRE > 8m)
         // ====================================================================
         let isLongRangeHipFire = (!isADS && dist3D > 8.0);
-        
-        // 1. Dynamic Magnetic Expansion: Mở rộng vùng đệm phanh từ 8.0 lên 15.0 độ
         let maxCushionLimit = isLongRangeHipFire ? 15.0 : 8.0;
 
+        // Xả Động Năng Dư Thừa do hoảng loạn tay (Kinetic Bleeding)
         if (isLongRangeHipFire && currentMag > 0) {
-            // 2. Kinetic Energy Bleeding (Xả Động Năng Dư Thừa do hoảng loạn tay)
             if (currentMag > 10.0) {
                 let excess = currentMag - 10.0;
-                let bleedFactor = 10.0 / (10.0 + excess * 0.6); // Triệt tiêu mượt mà lực thừa
+                let bleedFactor = 10.0 / (10.0 + excess * 0.6); 
                 rawX *= bleedFactor;
                 rawY *= bleedFactor;
                 currentMag *= bleedFactor;
@@ -723,14 +836,13 @@ class VectorThrustEngine {
         let hasInput = input.isSwiping && currentMag > 0;
 
         // Buông tay ngoài Lồng giam -> Giải phóng Camera
-        if (!hasInput && (absPitchErr >= 2.5 || absYawErr >= 6.0) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
+        if (!hasInput && (absPitchErr >= 3.0 || absYawErr >= 6.0) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
             return payload;
         }
 
-        // 3. Depth-Scaling Thrust: Tính toán suy hao gia tốc theo chiều sâu 3D
+        // Suy hao gia tốc theo chiều sâu 3D (Depth-Scaling Thrust)
         let baseThrust = this.calculateSigmoidThrust(total2DError);
         if (isLongRangeHipFire) {
-            // Địch càng xa (VD 24m), lực đẩy càng bị gọt giảm (8/24 = 33% lực gốc)
             let depthMultiplier = Math.max(0.35, 8.0 / dist3D); 
             baseThrust *= depthMultiplier;
         }
@@ -749,7 +861,7 @@ class VectorThrustEngine {
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // [CÔNG NGHỆ LÕI]: AGGRESSIVE VELOCITY BLENDING (75% AI - 25% HUMAN)
+        // PHA TRỘN VẬN TỐC ĐỘC TÀI (75% AI - 25% HUMAN)
         // ====================================================================
         let blendedRawX = rawX;
         let blendedRawY = rawY;
@@ -762,17 +874,19 @@ class VectorThrustEngine {
             blendedRawY = (rawY * (1.0 - systemDomination)) + (idealVy * systemDomination);
         }
 
+        // SIÊU TRỤC X (Giữ nguyên sức mạnh bám đuổi của VIP0)
         let autoPullX = target.enemyDeltaYaw * 30.0; 
         const X_AXIS_BOOST = 1.50; 
 
         // ====================================================================
-        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE HIJACKING)
+        // ĐIỀU HƯỚNG LỰC ĐẨY THEO CÁC VÙNG KHÔNG GIAN
         // ====================================================================
+        
+        // 1. KHIÊN ỐNG NGẮM (ADS)
         if (engine.adsCalmFrames > 0) {
             engine.adsCalmFrames--;
             engine.isABSBraking = true;
             
-            // Cướp quyền Mỏ neo 3D: Dịch chuyển lập tức vào Sọ, bỏ qua cơ chế hút ngực của Game
             rawX = 0; rawY = 0;
             let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.1); 
 
@@ -784,15 +898,12 @@ class VectorThrustEngine {
                 payload.aim_yaw = absoluteBoneYaw; 
             }
             
-            // Khiên chống Lực hút Ngược: Tê liệt vật lý game trong chớp mắt
             if (payload.camera_constraints) {
                 payload.camera_constraints.friction = 0.0;
                 payload.camera_constraints.damping = 0.0;
             }
         }
-        // ====================================================================
-        // PHA 1 & 3: TÂM BÃO TÀNG HÌNH & LỒNG GIAM BẤT ĐỐI XỨNG
-        // ====================================================================
+        // 2. TÂM BÃO TÀNG HÌNH (< 0.5 độ)
         else if (total2DError < 0.5) {
             engine.isABSBraking = true; 
             if (!hasInput) {
@@ -805,6 +916,7 @@ class VectorThrustEngine {
                 }
             }
         } 
+        // 3. LỒNG GIAM BẤT ĐỐI XỨNG (Pitch < 3.0, Yaw < 6.0)
         else if (absPitchErr < 3.0 && absYawErr < 6.0) {
             engine.isABSBraking = true;
 
@@ -834,14 +946,11 @@ class VectorThrustEngine {
                 }
             }
         } 
-        // ====================================================================
-        // PHA 2: TRỢ LỰC KÉO (MAGNETIC CUSHION & VECTOR THRUST)
-        // ====================================================================
+        // 4. TRỢ LỰC KÉO TỪ TÍNH
         else if (total2DError < maxCushionLimit && hasInput) {
             engine.isABSBraking = false;
             
             if (dotProduct > 0.0) {
-                // Ranh giới phanh thay đổi linh hoạt tùy theo Hipfire xa hay gần
                 let brakeBoundary = isLongRangeHipFire ? 5.0 : 3.0;
                 let brakeFactor = 1.0 - ((total2DError - brakeBoundary) / (maxCushionLimit - brakeBoundary)); 
                 let cushion = 1.0 - (brakeFactor * 0.85); 
@@ -851,9 +960,8 @@ class VectorThrustEngine {
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
                 let thrustY = engine.thrustMultiplier;
 
-                // 4. Y-Axis Compression vs ADS Overdrive
-                if (isADS) thrustY = 3.0; // Xé gió khi bật ngắm
-                else if (isLongRangeHipFire) thrustY *= 0.45; // Ép xẹp trục dọc 55% khi Hipfire xa
+                if (isADS) thrustY = 3.0; 
+                else if (isLongRangeHipFire) thrustY *= 0.45; 
                 
                 rawX = (blendedRawX * thrustX) + autoPullX;
                 rawY = (blendedRawY * thrustY);
@@ -861,6 +969,7 @@ class VectorThrustEngine {
                 rawX *= 0.25; rawY *= 0.25; 
             }
         } 
+        // 5. GIA TỐC NGOÀI VÙNG ĐỆM
         else if (hasInput) {
             engine.isABSBraking = false;
 
@@ -879,7 +988,6 @@ class VectorThrustEngine {
                 let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
                 let thrustY = engine.thrustMultiplier;
 
-                // 4. Y-Axis Compression vs ADS Overdrive
                 if (isADS) thrustY = 4.5;
                 else if (isLongRangeHipFire) thrustY *= 0.45; 
                 
@@ -888,6 +996,38 @@ class VectorThrustEngine {
             } else {
                 rawX *= engine.thrustMultiplier;
                 rawY *= engine.thrustMultiplier;
+            }
+        }
+
+        // ====================================================================
+        // [CÔNG NGHỆ MỚI]: BỘ ĐÔI CHỐNG VỌT LỐ KHUNG HÌNH (ANTI-OVERSHOOT)
+        // Áp dụng trước khi xuất lực ra màn hình, bảo vệ tuyệt đối hệ tọa độ.
+        // ====================================================================
+        
+        // CÔNG NGHỆ 1: KINEMATIC VECTOR TRUNCATION (Lưỡi dao Guillotine)
+        // Không bao giờ cho phép lực dọc (Y) đi xa hơn khoảng cách đến đầu địch
+        if (!engine.isABSBraking) {
+            const DEG_TO_PIXEL = 12.0; // Hằng số quy đổi tương đối Độ -> Pixel màn hình
+            let maxAllowedY = (absPitchErr * DEG_TO_PIXEL) + 2.0; // Cộng 2 pixel dung sai cho mượt
+            
+            // Nếu lực kéo vượt ngưỡng, chém đứt phần đuôi, giữ lại phần vừa đủ chạm sọ
+            if (Math.abs(rawY) > maxAllowedY) {
+                rawY = Math.sign(rawY) * maxAllowedY;
+            }
+        }
+
+        // CÔNG NGHỆ 4: THE GLASS CEILING (Trần kính vô hình tầm xa)
+        // Trị dứt điểm súng giật nảy vọt qua da đầu ở cự ly Hip-fire > 8m
+        if (isLongRangeHipFire && !engine.isABSBraking) {
+            let isMovingUp = rawY < 0; // Trên Mobile, Y âm (< 0) là hất tâm lên trên
+            
+            // Nếu tâm súng đang lọt vào khu vực Sọ (Góc lệch < 0.6 độ)
+            if (absPitchErr < 0.6) {
+                // VÀ nếu súng/ngón tay vẫn cố tình giật đẩy tâm lên trên
+                if (isMovingUp) {
+                    // Đập bẹp lực đi lên, bơm phản lực hướng xuống nhẹ (Positive Y) để dội về vùng cổ
+                    rawY = 1.0; 
+                }
             }
         }
 
@@ -903,41 +1043,6 @@ class VectorThrustEngine {
         payload.touch_delta.x = finalX;
         payload.touch_delta.y = finalY;
 
-        return payload;
-    }
-}
-
-// ============================================================================
-// [NEW] LÕI VŨ KHÍ: MARKSMAN CORE (SÚNG GÕ 1 VIÊN DE, WOODPECKER, SKS)
-// ============================================================================
-class MarksmanCore {
-    static execute(payload) {
-        const weaponState = _vortex.__VortexState.weapon;
-        const engine = _vortex.__VortexState.engine;
-
-        if (payload.weapon) {
-            // [CÔNG NGHỆ]: INVERSE BRAKING (PHANH NGHỊCH ĐẢO CHỐNG VỌT LỐ)
-            if (engine.isABSBraking) {
-                // Tâm đã khóa vào sọ. Triệt tiêu 100% độ giật nảy lên của dòng Marksman.
-                // Điều này giúp DE/Woodpecker không bị nảy vọt qua da đầu ở viên đầu tiên.
-                payload.weapon.recoil_y = 0.0;
-                payload.weapon.recoil_x = 0.0;
-                payload.weapon.recoil_accumulation = 0.0;
-                
-                // Thu gọn hồng tâm đến mức tối đa để đạn ghim thẳng 1 điểm
-                payload.weapon.base_spread = 0.0001;
-                payload.weapon.dynamic_spread = 0.0;
-                payload.weapon.spread_add_per_shot = 0.0;
-
-                // Phục hồi tâm ngay lập tức sau viên đạn
-                if (payload.weapon.recoil_recovery) {
-                    payload.weapon.recoil_recovery = 99999.0; 
-                }
-            } else {
-                // Khi ở ngoài Vùng Khóa, giữ nguyên độ nảy tự nhiên để Anti-cheat không phát hiện
-                payload.weapon.dynamic_spread *= 0.5; // Chỉ giảm 50% độ tản mát
-            }
-        }
         return payload;
     }
 }
@@ -1177,122 +1282,3 @@ else if (typeof globalThis !== 'undefined') globalThis.VORTEX = VORTEX_API;
 else _vortex.VORTEX = VORTEX_API;
 
 if (typeof module !== 'undefined') module.exports = VORTEX_API;
-
-// ============================================================================
-// LỚP 6: DEEP DATA HIJACKER (MẠNG LƯỚI BẮT CÓC VÀ QUÉT DỮ LIỆU SÂU)
-// Nhiệm vụ: Xuyên thủng Sandbox, cướp quyền JSBridge, WebSocket và DOM để 
-// hớt tay trên gói tin tọa độ/máu của Server trước khi Game Engine kịp giấu đi.
-// ============================================================================
-class DeepDataHijacker {
-	static initialize() {
-		const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-		
-		// Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
-		if (_vortex.__HijackerInitialized) return;
-		_vortex.__HijackerInitialized = true;
-
-		// --------------------------------------------------------------------
-		// 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
-		// Free Fire Web UI thường dùng WebSockets để đồng bộ vị trí địch ở xa
-		// --------------------------------------------------------------------
-		const OrigWebSocket = window.WebSocket;
-		if (OrigWebSocket) {
-			window.WebSocket = function(url, protocols) {
-				const ws = new OrigWebSocket(url, protocols);
-				
-				// Cắm ống nghe vào đường truyền nhận dữ liệu
-				ws.addEventListener('message', function(event) {
-					try {
-						if (event.data && typeof event.data === 'string') {
-							// Bộ lọc Regex siêu tốc: Chỉ bắt các gói tin nghi ngờ chứa tọa độ
-							if (event.data.includes("pos") || event.data.includes("players") || 
-								event.data.includes("enemy") || event.data.includes("hp")) {
-								
-								let secretData = JSON.parse(event.data);
-								if (secretData && _vortex.__VORTEX_ENGINE) {
-									// Ép hệ thống VORTEX xử lý ngay dữ liệu mật này
-									// Dữ liệu này "sạch" và "đầy đủ" hơn rất nhiều so với payload thông thường
-									_vortex.__VORTEX_ENGINE.processPayload(secretData);
-								}
-							}
-						}
-					} catch (e) {
-						// Im lặng bỏ qua lỗi parse JSON để không làm khựng khung hình
-					}
-				});
-				return ws;
-			};
-		}
-
-		// --------------------------------------------------------------------
-		// 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
-		// Trực tiếp đánh chặn hàm postMessage toàn cục
-		// --------------------------------------------------------------------
-		const originalPostMessage = window.postMessage;
-		window.postMessage = function(message, targetOrigin, transfer) {
-			try {
-				if (message && typeof message === 'object') {
-					// Bắt cóc gói tin chứa Entity List
-					if (message.players || message.enemy_list || message.hitboxes || message.entities) {
-						if (_vortex.__VORTEX_ENGINE) {
-							_vortex.__VORTEX_ENGINE.processPayload(message);
-						}
-					}
-				}
-			} catch (e) {}
-			// Trả lại luồng chạy cho UI Game để hình ảnh vẫn hiển thị bình thường
-			return originalPostMessage.apply(this, arguments);
-		};
-
-		// --------------------------------------------------------------------
-		// 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
-		// --------------------------------------------------------------------
-		if (window.webkit && window.webkit.messageHandlers) {
-			for (let handlerName in window.webkit.messageHandlers) {
-				if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
-					let handler = window.webkit.messageHandlers[handlerName];
-					let origPostMessage = handler.postMessage;
-					
-					handler.postMessage = function(msg) {
-						// [TIỀM NĂNG]: Tại đây có thể chặn các hàm Anti-Cheat gửi báo cáo 
-						// "Hành vi bất thường" lên server iOS Native.
-						// Tạm thời Proxy nguyên vẹn để bypass an toàn.
-						return origPostMessage.apply(this, arguments);
-					};
-				}
-			}
-		}
-
-		// --------------------------------------------------------------------
-		// 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (MEMORY SPIDER CRAWLER)
-		// Chạy ngầm 1 lần duy nhất để tìm các Mảng Tọa Độ bị giấu kín trong RAM
-		// --------------------------------------------------------------------
-		setTimeout(() => {
-			const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
-			const MAX_DEPTH = 3; // Giới hạn đào sâu 3 tầng để không làm tràn RAM
-
-			function crawlMemory(obj, currentDepth, path) {
-				if (currentDepth > MAX_DEPTH || !obj || typeof obj !== 'object') return;
-				
-				for (let key in obj) {
-					try {
-						let keyLower = key.toLowerCase();
-						// Nhận diện mảng chứa nhiều hơn 1 thực thể (Có thể là danh sách Địch)
-						if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(obj[key]) && obj[key].length > 0) {
-							// Lưu lại kho báu vào biến toàn cục để Mắt Thần (Bước 2) có thể gọi ra xài
-							_vortex.__HiddenEntitiesList = obj[key]; 
-						}
-						crawlMemory(obj[key], currentDepth + 1, path + "." + key);
-					} catch (e) {
-						// Bỏ qua vùng nhớ bị hệ điều hành khóa quyền (CORS/Private)
-					}
-				}
-			}
-			
-			crawlMemory(window, 0, "window");
-		}, 3500); // Trì hoãn 3.5 giây để chờ game load xong hoàn toàn 100% dữ liệu
-	}
-}
-
-// Khởi động Hệ thống Bắt cóc ngay lập tức
-DeepDataHijacker.initialize();
