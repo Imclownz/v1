@@ -771,7 +771,7 @@ class VectorThrustEngine {
     // Hàm Đường cong Sigmoid (Gia tốc cơ bản) - Giữ nguyên MAX_THRUST = 10.0
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
-        const MIN_THRUST = 0.15; 
+        const MIN_THRUST = 0.05; 
         const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance2D - MID_POINT) / SLOPE));
@@ -876,7 +876,7 @@ class VectorThrustEngine {
 
         // SIÊU TRỤC X (Giữ nguyên sức mạnh bám đuổi của VIP0)
         let autoPullX = target.enemyDeltaYaw * 30.0; 
-        const X_AXIS_BOOST = 1.50; 
+        const X_AXIS_BOOST = 1.40; 
 
         // ====================================================================
         // ĐIỀU HƯỚNG LỰC ĐẨY THEO CÁC VÙNG KHÔNG GIAN
