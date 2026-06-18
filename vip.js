@@ -757,21 +757,19 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.10 ANTI-OVERSHOOT DOMINANCE)
-// Hợp thể các công nghệ tối thượng từ VIP0 và Bộ đôi Chống Vọt Tâm:
-// 1. [NEW] Kinematic Vector Truncation (Guillotine): Chém đứt lực thừa, chống nhảy cóc.
-// 2. [NEW] The Glass Ceiling: Trần kính vô hình tầm xa, đập bẹp lực giật nảy súng.
-// 3. ADS Decapitation Protocol: Quick-scope cướp quyền Camera tức thời & Khiên chống giật.
-// 4. Long-Range Hipfire (> 8m): Suy hao gia tốc, Ép xẹp trục dọc, Xả van hoảng loạn.
-// 5. Asymmetric Snap-Lock: Lồng giam bất đối xứng (Dọc < 3.0 độ, Ngang < 6.0 độ).
-// 6. Siêu Trục X: Giữ nguyên AutoPull = 30.0 và Boost = 1.50 từ hệ thống trước.
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.15 LONG-RANGE LEGIT SYNERGY)
+// Hợp thể 2 Thái cực Không gian:
+// [1] BẮN XA (>8m Hipfire): Dẫn hướng thuần túy (Không gia tốc), Ngắt trục X,
+//     Vùng chân không 4.0 độ nuốt độ giật và nhường quyền kết liễu cho Bước 5.
+// [2] CẬN/TRUNG CHIẾN (<=8m hoặc ADS): Giữ nguyên 100% bạo lực của VIP 64 gốc 
+//     (AutoPull 30.0, Boost 1.50, Khóa cứng Lồng giam 3.0x6.0).
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid (Gia tốc cơ bản) - Giữ nguyên MAX_THRUST = 10.0
+    // Hàm Đường cong Sigmoid (Dành riêng cho Cận/Trung chiến)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
-        const MIN_THRUST = 0.05; 
+        const MIN_THRUST = 0.15; 
         const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance2D - MID_POINT) / SLOPE));
@@ -784,27 +782,21 @@ class VectorThrustEngine {
         const target = state.target;
         const engine = state.engine;
 
-        // Khởi tạo Bộ nhớ đệm Sub-pixel & Biến trạng thái Ống ngắm
         if (engine.remX === undefined) { engine.remX = 0; engine.remY = 0; }
         if (engine.wasADS === undefined) engine.wasADS = false;
         if (engine.adsCalmFrames === undefined) engine.adsCalmFrames = 0;
 
-        // Trạng thái bật ống ngắm hiện tại
         let isADS = engine.isADS;
 
-        // ====================================================================
         // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE EDGE-TRIGGER)
-        // ====================================================================
         if (isADS && !engine.wasADS && target.id !== null) {
             engine.adsCalmFrames = 5; 
         }
         engine.wasADS = isADS; 
 
-        // Nếu mất dấu mục tiêu -> Trả lại Payload
         if (!target.id) return payload; 
         if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
 
-        // Lực tay thô thực tế + Phần dư frame trước
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
         let currentMag = input.magnitude;
@@ -812,40 +804,11 @@ class VectorThrustEngine {
         let total2DError = target.distance2D; 
         let dist3D = target.distance3D;
 
-        // Tách sai số trục Dọc và trục Ngang
         let absPitchErr = Math.abs(target.pitchError);
         let absYawErr = Math.abs(target.yawError);
 
-        // ====================================================================
-        // PHÂN TÍCH KHÔNG GIAN BẮN XA (LONG-RANGE HIP-FIRE > 8m)
-        // ====================================================================
-        let isLongRangeHipFire = (!isADS && dist3D > 8.0);
-        let maxCushionLimit = isLongRangeHipFire ? 15.0 : 8.0;
-
-        // Xả Động Năng Dư Thừa do hoảng loạn tay (Kinetic Bleeding)
-        if (isLongRangeHipFire && currentMag > 0) {
-            if (currentMag > 10.0) {
-                let excess = currentMag - 10.0;
-                let bleedFactor = 10.0 / (10.0 + excess * 0.6); 
-                rawX *= bleedFactor;
-                rawY *= bleedFactor;
-                currentMag *= bleedFactor;
-            }
-        }
-
         let hasInput = input.isSwiping && currentMag > 0;
-
-        // Buông tay ngoài Lồng giam -> Giải phóng Camera
-        if (!hasInput && (absPitchErr >= 3.0 || absYawErr >= 6.0) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
-            return payload;
-        }
-
-        // Suy hao gia tốc theo chiều sâu 3D (Depth-Scaling Thrust)
-        let baseThrust = this.calculateSigmoidThrust(total2DError);
-        if (isLongRangeHipFire) {
-            let depthMultiplier = Math.max(0.35, 8.0 / dist3D); 
-            baseThrust *= depthMultiplier;
-        }
+        let isLongRangeHipFire = (!isADS && dist3D > 8.0);
 
         let errMag = Math.sqrt(target.yawError**2 + target.pitchError**2) || 0.0001;
         let targetDirX = target.yawError / errMag; 
@@ -861,175 +824,186 @@ class VectorThrustEngine {
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // PHA TRỘN VẬN TỐC ĐỘC TÀI (75% AI - 25% HUMAN)
+        // PHÂN NHÁNH 1: CHIẾN DỊCH TẦM XA (>8M KHÔNG NGẮM) - LEGIT BOT
         // ====================================================================
-        let blendedRawX = rawX;
-        let blendedRawY = rawY;
-
-        if (hasInput && dotProduct > 0.0) {
-            let idealVx = currentMag * targetDirX;
-            let idealVy = currentMag * targetDirY;
-            let systemDomination = 0.75; 
-            blendedRawX = (rawX * (1.0 - systemDomination)) + (idealVx * systemDomination);
-            blendedRawY = (rawY * (1.0 - systemDomination)) + (idealVy * systemDomination);
-        }
-
-        // SIÊU TRỤC X (Giữ nguyên sức mạnh bám đuổi của VIP0)
-        let autoPullX = target.enemyDeltaYaw * 30.0; 
-        const X_AXIS_BOOST = 1.40; 
-
-        // ====================================================================
-        // ĐIỀU HƯỚNG LỰC ĐẨY THEO CÁC VÙNG KHÔNG GIAN
-        // ====================================================================
-        
-        // 1. KHIÊN ỐNG NGẮM (ADS)
-        if (engine.adsCalmFrames > 0) {
-            engine.adsCalmFrames--;
-            engine.isABSBraking = true;
+        if (isLongRangeHipFire) {
             
-            rawX = 0; rawY = 0;
-            let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.1); 
+            // X-AXIS DECOUPLING: Ngắt hoàn toàn trục X tự động để chống văng lố
+            let autoPullX = 0.0; 
 
-            if (payload.camera) { 
-                payload.camera.pitch = perfectPitch; 
-                payload.camera.yaw = absoluteBoneYaw; 
-            } else { 
-                payload.aim_pitch = perfectPitch; 
-                payload.aim_yaw = absoluteBoneYaw; 
-            }
-            
-            if (payload.camera_constraints) {
-                payload.camera_constraints.friction = 0.0;
-                payload.camera_constraints.damping = 0.0;
-            }
-        }
-        // 2. TÂM BÃO TÀNG HÌNH (< 0.5 độ)
-        else if (total2DError < 0.5) {
-            engine.isABSBraking = true; 
-            if (!hasInput) {
-                if (payload.camera) { 
-                    payload.camera.pitch = absoluteBonePitch; 
-                    payload.camera.yaw = absoluteBoneYaw; 
-                } else { 
-                    payload.aim_pitch = absoluteBonePitch; 
-                    payload.aim_yaw = absoluteBoneYaw; 
+            // CÔNG NGHỆ: THE "HALO" RECOIL TRAP (Vùng hào quang 4.0 độ)
+            if (total2DError <= 4.0) {
+                // ĐÁNH LỪA BƯỚC 5: Bật cờ ABS Braking để Bước 5 kích hoạt Magic Bullet.
+                // NHƯNG Bước 3 sẽ KHÔNG ép tọa độ Camera (Không snap), giữ cảm giác bắn mượt 100% người thật.
+                engine.isABSBraking = true; 
+
+                // Nuốt 100% lực nảy nòng súng hướng lên trên
+                if (rawY < 0) {
+                    rawY = 0; 
+                }
+                
+                // Làm đầm trục ngang để tâm lơ lửng bám đầu mà không bị giật
+                if (hasInput) {
+                    rawX *= 0.6; 
+                    rawY *= 0.6; // Cho phép vuốt nhẹ xuống
+                } else {
+                    rawX = 0;
+                }
+            } 
+            // CÔNG NGHỆ: PURE VECTOR STEERING (Dẫn hướng ngoài vùng Halo)
+            else {
+                engine.isABSBraking = false; 
+
+                if (hasInput) {
+                    // GIỮ NGUYÊN 100% ĐỘ LỚN LỰC TAY CỦA NGƯỜI CHƠI (Không Sigmoid Thrust)
+                    // Chỉ nắn quỹ đạo (Vector) hướng thẳng về phía kẻ địch.
+                    let steeringPower = 0.85; // Bẻ góc 85% sức mạnh
+                    let idealVx = currentMag * targetDirX;
+                    let idealVy = currentMag * targetDirY;
+                    
+                    rawX = (rawX * (1.0 - steeringPower)) + (idealVx * steeringPower);
+                    rawY = (rawY * (1.0 - steeringPower)) + (idealVy * steeringPower);
+                } else {
+                    // Buông tay thì thả trôi
+                    rawX *= 0.5;
+                    rawY *= 0.5;
                 }
             }
         } 
-        // 3. LỒNG GIAM BẤT ĐỐI XỨNG (Pitch < 3.0, Yaw < 6.0)
-        else if (absPitchErr < 3.0 && absYawErr < 6.0) {
-            engine.isABSBraking = true;
+        // ====================================================================
+        // PHÂN NHÁNH 2: CẬN/TRUNG CHIẾN VÀ ỐNG NGẮM - BẠO LỰC CỦA VIP 64
+        // ====================================================================
+        else {
+            let autoPullX = target.enemyDeltaYaw * 30.0; 
+            const X_AXIS_BOOST = 1.50; 
+            let maxCushionLimit = 8.0;
 
-            if (hasInput && currentMag > 7.0 && dotProduct < -0.6) {
-                engine.isABSBraking = false;
-                rawX *= 0.8; rawY *= 0.8; 
-            } 
-            else {
+            let baseThrust = this.calculateSigmoidThrust(total2DError);
+            let blendedRawX = rawX;
+            let blendedRawY = rawY;
+
+            // Pha trộn vận tốc (AI & Tay)
+            if (hasInput && dotProduct > 0.0) {
+                let idealVx = currentMag * targetDirX;
+                let idealVy = currentMag * targetDirY;
+                let systemDomination = 0.75; 
+                blendedRawX = (rawX * (1.0 - systemDomination)) + (idealVx * systemDomination);
+                blendedRawY = (rawY * (1.0 - systemDomination)) + (idealVy * systemDomination);
+            }
+
+            // Giải phóng lồng giam
+            if (!hasInput && (absPitchErr >= 3.0 || absYawErr >= 6.0) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
+                return payload;
+            }
+
+            // Giao thức ống ngắm
+            if (engine.adsCalmFrames > 0) {
+                engine.adsCalmFrames--;
+                engine.isABSBraking = true;
                 rawX = 0; rawY = 0;
-                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.15); 
-                let perfectYaw = absoluteBoneYaw;
+                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.1); 
 
                 if (payload.camera) { 
                     payload.camera.pitch = perfectPitch; 
-                    payload.camera.yaw = perfectYaw; 
+                    payload.camera.yaw = absoluteBoneYaw; 
                 } else { 
                     payload.aim_pitch = perfectPitch; 
-                    payload.aim_yaw = perfectYaw; 
+                    payload.aim_yaw = absoluteBoneYaw; 
                 }
-                
                 if (payload.camera_constraints) {
-                    payload.camera_constraints.max_pitch_speed = 99999.0;
-                    payload.camera_constraints.max_yaw_speed = 99999.0;
                     payload.camera_constraints.friction = 0.0;
                     payload.camera_constraints.damping = 0.0;
-                    payload.camera_constraints.recoil_recovery_scale = 0.0;
                 }
             }
-        } 
-        // 4. TRỢ LỰC KÉO TỪ TÍNH
-        else if (total2DError < maxCushionLimit && hasInput) {
-            engine.isABSBraking = false;
-            
-            if (dotProduct > 0.0) {
-                let brakeBoundary = isLongRangeHipFire ? 5.0 : 3.0;
-                let brakeFactor = 1.0 - ((total2DError - brakeBoundary) / (maxCushionLimit - brakeBoundary)); 
-                let cushion = 1.0 - (brakeFactor * 0.85); 
-                
-                engine.thrustMultiplier = baseThrust * cushion; 
-                
-                let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
-                let thrustY = engine.thrustMultiplier;
-
-                if (isADS) thrustY = 3.0; 
-                else if (isLongRangeHipFire) thrustY *= 0.45; 
-                
-                rawX = (blendedRawX * thrustX) + autoPullX;
-                rawY = (blendedRawY * thrustY);
-            } else {
-                rawX *= 0.25; rawY *= 0.25; 
-            }
-        } 
-        // 5. GIA TỐC NGOÀI VÙNG ĐỆM
-        else if (hasInput) {
-            engine.isABSBraking = false;
-
-            if (dotProduct > 0.5) {
-                engine.thrustMultiplier = baseThrust * 0.90; 
+            // Tâm bão tàng hình
+            else if (total2DError < 0.5) {
+                engine.isABSBraking = true; 
+                if (!hasInput) {
+                    if (payload.camera) { 
+                        payload.camera.pitch = absoluteBonePitch; 
+                        payload.camera.yaw = absoluteBoneYaw; 
+                    } else { 
+                        payload.aim_pitch = absoluteBonePitch; 
+                        payload.aim_yaw = absoluteBoneYaw; 
+                    }
+                }
             } 
-            else if (dotProduct > 0.0) {
-                engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
-                engine.thrustMultiplier *= 0.90;
-            }
-            else {
-                engine.thrustMultiplier = 0.25; 
-            }
+            // Lồng giam bất đối xứng
+            else if (absPitchErr < 3.0 && absYawErr < 6.0) {
+                engine.isABSBraking = true;
 
-            if (dotProduct > 0.0) {
-                let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
-                let thrustY = engine.thrustMultiplier;
+                if (hasInput && currentMag > 7.0 && dotProduct < -0.6) {
+                    engine.isABSBraking = false;
+                    rawX *= 0.8; rawY *= 0.8; 
+                } 
+                else {
+                    rawX = 0; rawY = 0;
+                    let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.15); 
+                    let perfectYaw = absoluteBoneYaw;
 
-                if (isADS) thrustY = 4.5;
-                else if (isLongRangeHipFire) thrustY *= 0.45; 
+                    if (payload.camera) { 
+                        payload.camera.pitch = perfectPitch; 
+                        payload.camera.yaw = perfectYaw; 
+                    } else { 
+                        payload.aim_pitch = perfectPitch; 
+                        payload.aim_yaw = perfectYaw; 
+                    }
+                    
+                    if (payload.camera_constraints) {
+                        payload.camera_constraints.max_pitch_speed = 99999.0;
+                        payload.camera_constraints.max_yaw_speed = 99999.0;
+                        payload.camera_constraints.friction = 0.0;
+                        payload.camera_constraints.damping = 0.0;
+                        payload.camera_constraints.recoil_recovery_scale = 0.0;
+                    }
+                }
+            } 
+            // Trợ lực từ tính
+            else if (total2DError < maxCushionLimit && hasInput) {
+                engine.isABSBraking = false;
                 
-                rawX = (blendedRawX * thrustX) + autoPullX;
-                rawY = (blendedRawY * thrustY);
-            } else {
-                rawX *= engine.thrustMultiplier;
-                rawY *= engine.thrustMultiplier;
-            }
-        }
+                if (dotProduct > 0.0) {
+                    let brakeBoundary = 3.0;
+                    let brakeFactor = 1.0 - ((total2DError - brakeBoundary) / (maxCushionLimit - brakeBoundary)); 
+                    let cushion = 1.0 - (brakeFactor * 0.85); 
+                    
+                    engine.thrustMultiplier = baseThrust * cushion; 
+                    let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
+                    let thrustY = isADS ? 3.0 : engine.thrustMultiplier;
+                    
+                    rawX = (blendedRawX * thrustX) + autoPullX;
+                    rawY = (blendedRawY * thrustY);
+                } else {
+                    rawX *= 0.25; rawY *= 0.25; 
+                }
+            } 
+            // Vùng ngoại vi
+            else if (hasInput) {
+                engine.isABSBraking = false;
 
-        // ====================================================================
-        // [CÔNG NGHỆ MỚI]: BỘ ĐÔI CHỐNG VỌT LỐ KHUNG HÌNH (ANTI-OVERSHOOT)
-        // Áp dụng trước khi xuất lực ra màn hình, bảo vệ tuyệt đối hệ tọa độ.
-        // ====================================================================
-        
-        // CÔNG NGHỆ 1: KINEMATIC VECTOR TRUNCATION (Lưỡi dao Guillotine)
-        // Không bao giờ cho phép lực dọc (Y) đi xa hơn khoảng cách đến đầu địch
-        if (!engine.isABSBraking) {
-            const DEG_TO_PIXEL = 12.0; // Hằng số quy đổi tương đối Độ -> Pixel màn hình
-            let maxAllowedY = (absPitchErr * DEG_TO_PIXEL) + 2.0; // Cộng 2 pixel dung sai cho mượt
-            
-            // Nếu lực kéo vượt ngưỡng, chém đứt phần đuôi, giữ lại phần vừa đủ chạm sọ
-            if (Math.abs(rawY) > maxAllowedY) {
-                rawY = Math.sign(rawY) * maxAllowedY;
-            }
-        }
+                if (dotProduct > 0.5) {
+                    engine.thrustMultiplier = baseThrust * 0.90; 
+                } 
+                else if (dotProduct > 0.0) {
+                    engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
+                    engine.thrustMultiplier *= 0.90;
+                }
+                else {
+                    engine.thrustMultiplier = 0.25; 
+                }
 
-        // CÔNG NGHỆ 4: THE GLASS CEILING (Trần kính vô hình tầm xa)
-        // Trị dứt điểm súng giật nảy vọt qua da đầu ở cự ly Hip-fire > 8m
-        if (isLongRangeHipFire && !engine.isABSBraking) {
-            let isMovingUp = rawY < 0; // Trên Mobile, Y âm (< 0) là hất tâm lên trên
-            
-            // Nếu tâm súng đang lọt vào khu vực Sọ (Góc lệch < 0.6 độ)
-            if (absPitchErr < 0.6) {
-                // VÀ nếu súng/ngón tay vẫn cố tình giật đẩy tâm lên trên
-                if (isMovingUp) {
-                    // Đập bẹp lực đi lên, bơm phản lực hướng xuống nhẹ (Positive Y) để dội về vùng cổ
-                    rawY = 1.0; 
+                if (dotProduct > 0.0) {
+                    let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
+                    let thrustY = isADS ? 4.5 : engine.thrustMultiplier;
+                    
+                    rawX = (blendedRawX * thrustX) + autoPullX;
+                    rawY = (blendedRawY * thrustY);
+                } else {
+                    rawX *= engine.thrustMultiplier;
+                    rawY *= engine.thrustMultiplier;
                 }
             }
-        }
+        } // HẾT PHÂN NHÁNH 2 (Cận Chiến)
 
         // ====================================================================
         // BỘ ĐỆM PHẦN DƯ SUB-PIXEL
