@@ -757,17 +757,20 @@ class TargetScanner2D3D {
 }
 
 // ============================================================================
-// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.11 LEGIT-BOT TẦM XA)
-// Hợp thể các công nghệ tối thượng từ VIP 64 và Bộ 4 Lõi Tầm Xa:
-// 1. [NEW] Pure Vector Steering: Bỏ bơm lực tầm xa, giữ 100% cảm giác vuốt thật.
-// 2. [NEW] X-Axis Decoupling: Tắt nhạy ngang (AutoPullX = 0) khi xa > 8m.
-// 3. [NEW] The Halo Recoil Trap: Bẫy chân không 4.0 độ nuốt chửng độ nảy súng.
-// 4. [NEW] Magic Bullet Handover: Chuyển giao quyền kết liễu cho Bước 5.
-// 5. Cận chiến (<=8m) & ADS: Giữ nguyên bạo lực cơ học (Guillotine, Lồng giam).
+// BƯỚC 3: VECTOR THRUST & GUIDANCE ENGINE (V7.9 OMNI-DIRECTIONAL DOMINANCE)
+// Hợp thể các công nghệ tối thượng:
+// 1. ADS Decapitation Protocol: Quick-scope cướp quyền Camera tức thời & Khiên chống giật.
+// 2. Long-Range Hipfire (Khoảng cách > 8m):
+//    - Depth-Scaling Thrust: Suy hao gia tốc theo chiều sâu 3D (Chống vọt lố).
+//    - Dynamic Magnetic Expansion: Mở rộng vùng đệm từ tính lên 15.0 độ.
+//    - Y-Axis Compression: Ép xẹp trục dọc (Y), giữ nguyên gia tốc trục ngang (X).
+//    - Kinetic Energy Bleeding: Xả van áp suất, triệt tiêu lực vuốt tay hoảng loạn.
+// 3. Asymmetric Snap-Lock: Lồng giam bất đối xứng (Dọc < 2.5 độ, Ngang < 6.0 độ).
+// 4. Aggressive Velocity Blending: 75% AI dẫn đường + 25% Lực cơ học.
 // ============================================================================
 class VectorThrustEngine {
     
-    // Hàm Đường cong Sigmoid (Gia tốc cơ bản) - Chỉ dùng cho Cận chiến / ADS
+    // Hàm Đường cong Sigmoid (Gia tốc cơ bản)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
         const MIN_THRUST = 0.15; 
@@ -788,59 +791,84 @@ class VectorThrustEngine {
         if (engine.wasADS === undefined) engine.wasADS = false;
         if (engine.adsCalmFrames === undefined) engine.adsCalmFrames = 0;
 
+        // Trạng thái bật ống ngắm hiện tại
         let isADS = engine.isADS;
 
         // ====================================================================
-        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE EDGE-TRIGGER)
+        // [CÔNG NGHỆ ỐNG NGẮM]: ADS DECAPITATION PROTOCOL (GIAO THỨC ĐOẠT MẠNG)
+        // Nhận diện khoảnh khắc Edge-Trigger (Vừa mới bấm nút bật Scope)
         // ====================================================================
         if (isADS && !engine.wasADS && target.id !== null) {
+            // Kích hoạt Khiên chống giật ngược (Anti-Pullback Shield) trong 5 frames (khoảng 80ms)
             engine.adsCalmFrames = 5; 
         }
-        engine.wasADS = isADS; 
+        engine.wasADS = isADS; // Lưu lại lịch sử cho frame tiếp theo
 
+        // Nếu mất dấu mục tiêu -> Trả lại Payload
         if (!target.id) return payload; 
         if (!payload.touch_delta) payload.touch_delta = { x: 0, y: 0 };
 
-        // Lực tay thô thực tế + Phần dư frame trước
+        // Lực tay thô thực tế
         let rawX = payload.touch_delta.x + engine.remX;
         let rawY = payload.touch_delta.y + engine.remY;
         let currentMag = input.magnitude;
 
         let total2DError = target.distance2D; 
         let dist3D = target.distance3D;
+
+        // Tách sai số trục Dọc và trục Ngang
         let absPitchErr = Math.abs(target.pitchError);
         let absYawErr = Math.abs(target.yawError);
 
-        // Nhận diện trạng thái Hipfire Tầm Xa
+        // ====================================================================
+        // [CÔNG NGHỆ BẮN XA]: LONG-RANGE HIP-FIRE ISOLATION (Tầm > 8m, Không Scope)
+        // ====================================================================
         let isLongRangeHipFire = (!isADS && dist3D > 8.0);
+        
+        // 1. Dynamic Magnetic Expansion: Mở rộng vùng đệm phanh từ 8.0 lên 15.0 độ
+        let maxCushionLimit = isLongRangeHipFire ? 15.0 : 8.0;
 
-        // Xả Động Năng Dư Thừa do hoảng loạn tay (Kinetic Bleeding)
         if (isLongRangeHipFire && currentMag > 0) {
+            // 2. Kinetic Energy Bleeding (Xả Động Năng Dư Thừa do hoảng loạn tay)
             if (currentMag > 10.0) {
                 let excess = currentMag - 10.0;
-                let bleedFactor = 10.0 / (10.0 + excess * 0.6); 
+                let bleedFactor = 10.0 / (10.0 + excess * 0.6); // Triệt tiêu mượt mà lực thừa
                 rawX *= bleedFactor;
                 rawY *= bleedFactor;
                 currentMag *= bleedFactor;
             }
         }
 
-        // Vector Toán học Không gian
+        let hasInput = input.isSwiping && currentMag > 0;
+
+        // Buông tay ngoài Lồng giam -> Giải phóng Camera
+        if (!hasInput && (absPitchErr >= 2.5 || absYawErr >= 6.0) && total2DError >= 0.5 && engine.adsCalmFrames === 0) {
+            return payload;
+        }
+
+        // 3. Depth-Scaling Thrust: Tính toán suy hao gia tốc theo chiều sâu 3D
+        let baseThrust = this.calculateSigmoidThrust(total2DError);
+        if (isLongRangeHipFire) {
+            // Địch càng xa (VD 24m), lực đẩy càng bị gọt giảm (8/24 = 33% lực gốc)
+            let depthMultiplier = Math.max(0.35, 8.0 / dist3D); 
+            baseThrust *= depthMultiplier;
+        }
+
         let errMag = Math.sqrt(target.yawError**2 + target.pitchError**2) || 0.0001;
         let targetDirX = target.yawError / errMag; 
         let targetDirY = target.pitchError / errMag;
         
-        let hasInput = input.isSwiping && currentMag > 0;
         let dotProduct = 0;
         if (hasInput) dotProduct = (input.dirX * targetDirX) + (input.dirY * targetDirY);
 
         let currentPitch = payload.camera ? payload.camera.pitch : (payload.aim_pitch || 0);
         let currentYaw = payload.camera ? payload.camera.yaw : (payload.aim_yaw || 0);
+        
         let absoluteBonePitch = currentPitch + target.pitchError;
         let absoluteBoneYaw = currentYaw + target.yawError;
 
         // ====================================================================
-        // PHA TRỘN VẬN TỐC (STEERING - Bẻ cong quỹ đạo về phía Sọ)
+        // [CÔNG NGHỆ LÕI]: AGGRESSIVE VELOCITY BLENDING (75% AI - 25% HUMAN)
         // ====================================================================
         let blendedRawX = rawX;
         let blendedRawY = rawY;
@@ -853,15 +881,17 @@ class VectorThrustEngine {
             blendedRawY = (rawY * (1.0 - systemDomination)) + (idealVy * systemDomination);
         }
 
-        // ====================================================================
-        // PHÂN NHÁNH XỬ LÝ THEO KHÔNG GIAN
-        // ====================================================================
+        let autoPullX = target.enemyDeltaYaw * 30.0; 
+        const X_AXIS_BOOST = 1.50; 
 
-        // 1. KHIÊN ỐNG NGẮM (ADS) - Tê liệt lực giật khi vừa bật scope
+        // ====================================================================
+        // GIAO THỨC ĐOẠT MẠNG ỐNG NGẮM (QUICK-SCOPE HIJACKING)
+        // ====================================================================
         if (engine.adsCalmFrames > 0) {
             engine.adsCalmFrames--;
             engine.isABSBraking = true;
             
+            // Cướp quyền Mỏ neo 3D: Dịch chuyển lập tức vào Sọ, bỏ qua cơ chế hút ngực của Game
             rawX = 0; rawY = 0;
             let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.1 : 0.1); 
 
@@ -873,137 +903,110 @@ class VectorThrustEngine {
                 payload.aim_yaw = absoluteBoneYaw; 
             }
             
+            // Khiên chống Lực hút Ngược: Tê liệt vật lý game trong chớp mắt
             if (payload.camera_constraints) {
                 payload.camera_constraints.friction = 0.0;
                 payload.camera_constraints.damping = 0.0;
             }
         }
-        // 2. LONG-RANGE HIP-FIRE (>8m) - NEW LEGIT-BOT CORES
-        else if (isLongRangeHipFire) {
-            // [LÕI 4]: Nhường quyền hoàn toàn cho Bước 5 xử lý
-            engine.isABSBraking = false; 
-
-            // [LÕI 2]: X-Axis Decoupling (Ngắt ly hợp trục ngang)
-            let autoPullX = 0.0; 
-            let X_AXIS_BOOST = 1.0; 
-
-            // [LÕI 3]: Halo Recoil Trap (Bẫy chân không 4.0 độ)
-            if (total2DError < 4.0) {
-                // Nuốt chửng lực giật nảy lên (rawY < 0 là vuốt lên / súng đẩy màn hình lên)
-                if (blendedRawY < 0) {
-                    blendedRawY = 0; // Triệt tiêu hoàn toàn, giữ tâm lơ lửng ổn định
+        // ====================================================================
+        // PHA 1 & 3: TÂM BÃO TÀNG HÌNH & LỒNG GIAM BẤT ĐỐI XỨNG
+        // ====================================================================
+        else if (total2DError < 0.5) {
+            engine.isABSBraking = true; 
+            if (!hasInput) {
+                if (payload.camera) { 
+                    payload.camera.pitch = absoluteBonePitch; 
+                    payload.camera.yaw = absoluteBoneYaw; 
+                } else { 
+                    payload.aim_pitch = absoluteBonePitch; 
+                    payload.aim_yaw = absoluteBoneYaw; 
                 }
             }
+        } 
+        else if (absPitchErr < 3.0 && absYawErr < 6.0) {
+            engine.isABSBraking = true;
 
-            // [LÕI 1]: Pure Vector Steering
-            // Giữ nguyên 100% lực tay, không bơm Thrust. Chỉ dùng quỹ đạo đã được bẻ cong.
-            if (hasInput) {
-                rawX = (blendedRawX * X_AXIS_BOOST) + autoPullX;
-                rawY = blendedRawY; 
-            } else {
+            if (hasInput && currentMag > 7.0 && dotProduct < -0.6) {
+                engine.isABSBraking = false;
+                rawX *= 0.8; rawY *= 0.8; 
+            } 
+            else {
                 rawX = 0; rawY = 0;
+                let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.15); 
+                let perfectYaw = absoluteBoneYaw;
+
+                if (payload.camera) { 
+                    payload.camera.pitch = perfectPitch; 
+                    payload.camera.yaw = perfectYaw; 
+                } else { 
+                    payload.aim_pitch = perfectPitch; 
+                    payload.aim_yaw = perfectYaw; 
+                }
+                
+                if (payload.camera_constraints) {
+                    payload.camera_constraints.max_pitch_speed = 99999.0;
+                    payload.camera_constraints.max_yaw_speed = 99999.0;
+                    payload.camera_constraints.friction = 0.0;
+                    payload.camera_constraints.damping = 0.0;
+                    payload.camera_constraints.recoil_recovery_scale = 0.0;
+                }
             }
-        }
-        // 3. CẬN CHIẾN (<=8m) & BẮN SCOPE - SỨC MẠNH VIP 64 GỐC
-        else {
-            let autoPullX = target.enemyDeltaYaw * 30.0; 
-            const X_AXIS_BOOST = 1.40; 
-            let baseThrust = this.calculateSigmoidThrust(total2DError);
+        } 
+        // ====================================================================
+        // PHA 2: TRỢ LỰC KÉO (MAGNETIC CUSHION & VECTOR THRUST)
+        // ====================================================================
+        else if (total2DError < maxCushionLimit && hasInput) {
+            engine.isABSBraking = false;
             
-            // Nếu buông tay ngoài Lồng giam -> Giải phóng
-            if (!hasInput && (absPitchErr >= 3.0 || absYawErr >= 6.0) && total2DError >= 0.5) {
-                return payload;
+            if (dotProduct > 0.0) {
+                // Ranh giới phanh thay đổi linh hoạt tùy theo Hipfire xa hay gần
+                let brakeBoundary = isLongRangeHipFire ? 5.0 : 3.0;
+                let brakeFactor = 1.0 - ((total2DError - brakeBoundary) / (maxCushionLimit - brakeBoundary)); 
+                let cushion = 1.0 - (brakeFactor * 0.85); 
+                
+                engine.thrustMultiplier = baseThrust * cushion; 
+                
+                let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
+                let thrustY = engine.thrustMultiplier;
+
+                // 4. Y-Axis Compression vs ADS Overdrive
+                if (isADS) thrustY = 3.0; // Xé gió khi bật ngắm
+                else if (isLongRangeHipFire) thrustY *= 0.45; // Ép xẹp trục dọc 55% khi Hipfire xa
+                
+                rawX = (blendedRawX * thrustX) + autoPullX;
+                rawY = (blendedRawY * thrustY);
+            } else {
+                rawX *= 0.25; rawY *= 0.25; 
+            }
+        } 
+        else if (hasInput) {
+            engine.isABSBraking = false;
+
+            if (dotProduct > 0.5) {
+                engine.thrustMultiplier = baseThrust * 0.90; 
+            } 
+            else if (dotProduct > 0.0) {
+                engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5));
+                engine.thrustMultiplier *= 0.90;
+            }
+            else {
+                engine.thrustMultiplier = 0.25; 
             }
 
-            // TÂM BÃO TÀNG HÌNH (< 0.5 độ)
-            if (total2DError < 0.5) {
-                engine.isABSBraking = true; 
-                if (!hasInput) {
-                    if (payload.camera) { 
-                        payload.camera.pitch = absoluteBonePitch; 
-                        payload.camera.yaw = absoluteBoneYaw; 
-                    } else { 
-                        payload.aim_pitch = absoluteBonePitch; 
-                        payload.aim_yaw = absoluteBoneYaw; 
-                    }
-                }
-            } 
-            // LỒNG GIAM BẤT ĐỐI XỨNG
-            else if (absPitchErr < 3.0 && absYawErr < 6.0) {
-                engine.isABSBraking = true;
+            if (dotProduct > 0.0) {
+                let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
+                let thrustY = engine.thrustMultiplier;
 
-                // Mở khóa nếu vuốt gắt thoát ra
-                if (hasInput && currentMag > 7.0 && dotProduct < -0.6) {
-                    engine.isABSBraking = false;
-                    rawX *= 0.8; rawY *= 0.8; 
-                } 
-                else {
-                    rawX = 0; rawY = 0;
-                    let perfectPitch = absoluteBonePitch + (target.pitchError > 0 ? -0.2 : 0.15); 
-                    
-                    if (payload.camera) { 
-                        payload.camera.pitch = perfectPitch; 
-                        payload.camera.yaw = absoluteBoneYaw; 
-                    } else { 
-                        payload.aim_pitch = perfectPitch; 
-                        payload.aim_yaw = absoluteBoneYaw; 
-                    }
-                    if (payload.camera_constraints) {
-                        payload.camera_constraints.max_pitch_speed = 99999.0;
-                        payload.camera_constraints.max_yaw_speed = 99999.0;
-                        payload.camera_constraints.friction = 0.0;
-                        payload.camera_constraints.damping = 0.0;
-                        payload.camera_constraints.recoil_recovery_scale = 0.0;
-                    }
-                }
-            } 
-            // TRỢ LỰC KÉO TỪ TÍNH (Magnetic Cushion)
-            else if (total2DError < 8.0 && hasInput) {
-                engine.isABSBraking = false;
-                if (dotProduct > 0.0) {
-                    let brakeFactor = 1.0 - ((total2DError - 3.0) / 5.0); 
-                    let cushion = 1.0 - (brakeFactor * 0.85); 
-                    
-                    engine.thrustMultiplier = baseThrust * cushion; 
-                    let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
-                    let thrustY = engine.thrustMultiplier;
-
-                    if (isADS) thrustY = 3.0; 
-                    
-                    rawX = (blendedRawX * thrustX) + autoPullX;
-                    rawY = (blendedRawY * thrustY);
-                } else {
-                    rawX *= 0.25; rawY *= 0.25; 
-                }
-            } 
-            // GIA TỐC NGOÀI VÙNG ĐỆM
-            else if (hasInput) {
-                engine.isABSBraking = false;
-                if (dotProduct > 0.5) engine.thrustMultiplier = baseThrust * 0.90; 
-                else if (dotProduct > 0.0) engine.thrustMultiplier = 1.0 + ((baseThrust - 1.0) * (dotProduct / 0.5)) * 0.90;
-                else engine.thrustMultiplier = 0.25; 
-
-                if (dotProduct > 0.0) {
-                    let thrustX = engine.thrustMultiplier * X_AXIS_BOOST;
-                    let thrustY = engine.thrustMultiplier;
-
-                    if (isADS) thrustY = 4.5;
-                    
-                    rawX = (blendedRawX * thrustX) + autoPullX;
-                    rawY = (blendedRawY * thrustY);
-                } else {
-                    rawX *= engine.thrustMultiplier;
-                    rawY *= engine.thrustMultiplier;
-                }
-            }
-
-            // KINEMATIC VECTOR TRUNCATION (GUILLOTINE) - Chỉ áp dụng khi Cận chiến / ADS
-            if (!engine.isABSBraking) {
-                const DEG_TO_PIXEL = 12.0; 
-                let maxAllowedY = (absPitchErr * DEG_TO_PIXEL) + 2.0; 
-                if (Math.abs(rawY) > maxAllowedY) {
-                    rawY = Math.sign(rawY) * maxAllowedY;
-                }
+                // 4. Y-Axis Compression vs ADS Overdrive
+                if (isADS) thrustY = 4.5;
+                else if (isLongRangeHipFire) thrustY *= 0.45; 
+                
+                rawX = (blendedRawX * thrustX) + autoPullX;
+                rawY = (blendedRawY * thrustY);
+            } else {
+                rawX *= engine.thrustMultiplier;
+                rawY *= engine.thrustMultiplier;
             }
         }
 
@@ -1019,6 +1022,41 @@ class VectorThrustEngine {
         payload.touch_delta.x = finalX;
         payload.touch_delta.y = finalY;
 
+        return payload;
+    }
+}
+
+// ============================================================================
+// [NEW] LÕI VŨ KHÍ: MARKSMAN CORE (SÚNG GÕ 1 VIÊN DE, WOODPECKER, SKS)
+// ============================================================================
+class MarksmanCore {
+    static execute(payload) {
+        const weaponState = _vortex.__VortexState.weapon;
+        const engine = _vortex.__VortexState.engine;
+
+        if (payload.weapon) {
+            // [CÔNG NGHỆ]: INVERSE BRAKING (PHANH NGHỊCH ĐẢO CHỐNG VỌT LỐ)
+            if (engine.isABSBraking) {
+                // Tâm đã khóa vào sọ. Triệt tiêu 100% độ giật nảy lên của dòng Marksman.
+                // Điều này giúp DE/Woodpecker không bị nảy vọt qua da đầu ở viên đầu tiên.
+                payload.weapon.recoil_y = 0.0;
+                payload.weapon.recoil_x = 0.0;
+                payload.weapon.recoil_accumulation = 0.0;
+                
+                // Thu gọn hồng tâm đến mức tối đa để đạn ghim thẳng 1 điểm
+                payload.weapon.base_spread = 0.0001;
+                payload.weapon.dynamic_spread = 0.0;
+                payload.weapon.spread_add_per_shot = 0.0;
+
+                // Phục hồi tâm ngay lập tức sau viên đạn
+                if (payload.weapon.recoil_recovery) {
+                    payload.weapon.recoil_recovery = 99999.0; 
+                }
+            } else {
+                // Khi ở ngoài Vùng Khóa, giữ nguyên độ nảy tự nhiên để Anti-cheat không phát hiện
+                payload.weapon.dynamic_spread *= 0.5; // Chỉ giảm 50% độ tản mát
+            }
+        }
         return payload;
     }
 }
@@ -1258,3 +1296,4 @@ else if (typeof globalThis !== 'undefined') globalThis.VORTEX = VORTEX_API;
 else _vortex.VORTEX = VORTEX_API;
 
 if (typeof module !== 'undefined') module.exports = VORTEX_API;
+
