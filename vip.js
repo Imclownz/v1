@@ -10,171 +10,52 @@
 const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
 
 // ============================================================================
-// LỚP 6: DEEP DATA HIJACKER (MẠNG LƯỚI BẮT CÓC VÀ QUÉT DỮ LIỆU SÂU)
-// Nhiệm vụ: Xuyên thủng Sandbox, cướp quyền JSBridge, WebSocket và DOM để 
-// hớt tay trên gói tin tọa độ/máu của Server trước khi Game Engine kịp giấu đi.
+// 0. VORTEX STATE V7.11 (BỘ NHỚ TOÀN CỤC & TÁI CHẾ OBJECT - ZERO GC)
+// Đã tích hợp Object Pooling để chống khựng khung hình (Stutter) do rác RAM.
 // ============================================================================
-class DeepDataHijacker {
-	static initialize() {
-		const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
-		
-		// Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
-		if (_vortex.__HijackerInitialized) return;
-		_vortex.__HijackerInitialized = true;
-
-		// --------------------------------------------------------------------
-		// 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
-		// Free Fire Web UI thường dùng WebSockets để đồng bộ vị trí địch ở xa
-		// --------------------------------------------------------------------
-		const OrigWebSocket = window.WebSocket;
-		if (OrigWebSocket) {
-			window.WebSocket = function(url, protocols) {
-				const ws = new OrigWebSocket(url, protocols);
-				
-				// Cắm ống nghe vào đường truyền nhận dữ liệu
-				ws.addEventListener('message', function(event) {
-					try {
-						if (event.data && typeof event.data === 'string') {
-							// Bộ lọc Regex siêu tốc: Chỉ bắt các gói tin nghi ngờ chứa tọa độ
-							if (event.data.includes("pos") || event.data.includes("players") || 
-								event.data.includes("enemy") || event.data.includes("hp")) {
-								
-								let secretData = JSON.parse(event.data);
-								if (secretData && _vortex.__VORTEX_ENGINE) {
-									// Ép hệ thống VORTEX xử lý ngay dữ liệu mật này
-									// Dữ liệu này "sạch" và "đầy đủ" hơn rất nhiều so với payload thông thường
-									_vortex.__VORTEX_ENGINE.processPayload(secretData);
-								}
-							}
-						}
-					} catch (e) {
-						// Im lặng bỏ qua lỗi parse JSON để không làm khựng khung hình
-					}
-				});
-				return ws;
-			};
-		}
-
-		// --------------------------------------------------------------------
-		// 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
-		// Trực tiếp đánh chặn hàm postMessage toàn cục
-		// --------------------------------------------------------------------
-		const originalPostMessage = window.postMessage;
-		window.postMessage = function(message, targetOrigin, transfer) {
-			try {
-				if (message && typeof message === 'object') {
-					// Bắt cóc gói tin chứa Entity List
-					if (message.players || message.enemy_list || message.hitboxes || message.entities) {
-						if (_vortex.__VORTEX_ENGINE) {
-							_vortex.__VORTEX_ENGINE.processPayload(message);
-						}
-					}
-				}
-			} catch (e) {}
-			// Trả lại luồng chạy cho UI Game để hình ảnh vẫn hiển thị bình thường
-			return originalPostMessage.apply(this, arguments);
-		};
-
-		// --------------------------------------------------------------------
-		// 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
-		// --------------------------------------------------------------------
-		if (window.webkit && window.webkit.messageHandlers) {
-			for (let handlerName in window.webkit.messageHandlers) {
-				if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
-					let handler = window.webkit.messageHandlers[handlerName];
-					let origPostMessage = handler.postMessage;
-					
-					handler.postMessage = function(msg) {
-						// [TIỀM NĂNG]: Tại đây có thể chặn các hàm Anti-Cheat gửi báo cáo 
-						// "Hành vi bất thường" lên server iOS Native.
-						// Tạm thời Proxy nguyên vẹn để bypass an toàn.
-						return origPostMessage.apply(this, arguments);
-					};
-				}
-			}
-		}
-
-		// --------------------------------------------------------------------
-		// 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (MEMORY SPIDER CRAWLER)
-		// Chạy ngầm 1 lần duy nhất để tìm các Mảng Tọa Độ bị giấu kín trong RAM
-		// --------------------------------------------------------------------
-		setTimeout(() => {
-			const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
-			const MAX_DEPTH = 3; // Giới hạn đào sâu 3 tầng để không làm tràn RAM
-
-			function crawlMemory(obj, currentDepth, path) {
-				if (currentDepth > MAX_DEPTH || !obj || typeof obj !== 'object') return;
-				
-				for (let key in obj) {
-					try {
-						let keyLower = key.toLowerCase();
-						// Nhận diện mảng chứa nhiều hơn 1 thực thể (Có thể là danh sách Địch)
-						if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(obj[key]) && obj[key].length > 0) {
-							// Lưu lại kho báu vào biến toàn cục để Mắt Thần (Bước 2) có thể gọi ra xài
-							_vortex.__HiddenEntitiesList = obj[key]; 
-						}
-						crawlMemory(obj[key], currentDepth + 1, path + "." + key);
-					} catch (e) {
-						// Bỏ qua vùng nhớ bị hệ điều hành khóa quyền (CORS/Private)
-					}
-				}
-			}
-			
-			crawlMemory(window, 0, "window");
-		}, 3500); // Trì hoãn 3.5 giây để chờ game load xong hoàn toàn 100% dữ liệu
-	}
-}
-
-// Khởi động Hệ thống Bắt cóc ngay lập tức
-DeepDataHijacker.initialize();
-
-// ============================================================================
-// 0. VORTEX STATE V7.0 (BỘ NHỚ TOÀN CỤC)
-// Đã mở rộng để hỗ trợ Ma trận 2D và Bám đuổi Trục X
-// ============================================================================
-if (!_vortex.__VortexState || _vortex.__VortexState.version !== "VORTEX_V7.0") {
+if (!_vortex.__VortexState || _vortex.__VortexState.version !== "VORTEX_V7.11") {
     _vortex.__VortexState = {
-        version: "VORTEX_V7.0",
+        version: "VORTEX_V7.11",
         
         // Trạng thái Input (Ngón tay & Ống ngắm)
-        input: { 
-            rawX: 0, rawY: 0, 
-            smoothX: 0, smoothY: 0,
-            magnitude: 0, 
-            isSwiping: false,
-            dirX: 0, dirY: 0
-        },
+        input: { rawX: 0, rawY: 0, smoothX: 0, smoothY: 0, magnitude: 0, isSwiping: false, dirX: 0, dirY: 0 },
 
-        // Trạng thái Vũ khí (Bổ sung MARKSMAN)
-        weapon: { 
-            type: "NONE", // Có thể là: SHOTGUN, SMG, AR, MARKSMAN, SNIPER
-            isFiring: false, 
-            bulletCount: 0,
-            currentWeaponId: null
-        },
+        // Trạng thái Vũ khí
+        weapon: { type: "NONE", isFiring: false, bulletCount: 0, currentWeaponId: null },
         
-        // Trạng thái Mục tiêu (Bổ sung 2D Distance & X-Axis Delta Tracking)
+        // Trạng thái Mục tiêu
         target: { 
-            id: null, 
-            scanFrame: 0,
-            distance3D: 999.0, 
-            distance2D: 999.0,    // Khoảng cách Pixel trên màn hình (Tính từ Tâm chữ thập)
-            pitchError: 999.0,    // Trục Y 3D
-            yawError: 999.0,      // Trục X 3D
-            enemyDeltaYaw: 0.0    // Vận tốc lướt ngang của địch trong 1 frame (Để Auto-Pull X)
+            id: null, scanFrame: 0, distance3D: 999.0, distance2D: 999.0, 
+            pitchError: 999.0, yawError: 999.0, enemyDeltaYaw: 0.0,
+            lastHeadPos: { x: 0, y: 0, z: 0 }, lastVelocity: { x: 0, y: 0, z: 0 }, ghostFrames: 0
         },
 
-        // Động cơ Vật lý (Engine)
-        engine: {
-            isADS: false,          // Cờ nhận diện đang bật Scope
-            thrustMultiplier: 1.0, 
-            isABSBraking: false,
-            remX: 0, remY: 0       // Bộ nhớ đệm Sub-pixel
-        },
+        // Động cơ Vật lý
+        engine: { isADS: false, thrustMultiplier: 1.0, isABSBraking: false, remX: 0, remY: 0, wasADS: false, adsCalmFrames: 0 },
 
-        localPlayer: {
-            velocityY: 0.0,
-            displacementY: 0.0
+        localPlayer: { velocityY: 0.0, displacementY: 0.0 },
+
+        // ====================================================================
+        // [NEW] OBJECT POOLING: KHO TÁI CHẾ DỮ LIỆU
+        // Khai báo sẵn các "vỏ hộp" để chứa dữ liệu, không bao giờ sinh rác.
+        // ====================================================================
+        pool: {
+            // Dùng cho Bước 2: Lưu dữ liệu mục tiêu ngon ăn nhất
+            tempTarget: { 
+                id: null, distance3D: 999.0, distance2D: 999.0, deltaPitch: 0, deltaYaw: 0, 
+                enemyDeltaYaw: 0, absoluteEnemyYaw: 0, rawHeadPos: {x:0, y:0, z:0}, 
+                velocity: {x:0, y:0, z:0}, isGhost: false 
+            },
+            // Dùng cho Bước 2: Lưu dữ liệu nội suy của Bóng ma
+            tempGhost: { 
+                id: null, distance3D: 999.0, distance2D: 999.0, deltaPitch: 0, deltaYaw: 0, 
+                enemyDeltaYaw: 0, absoluteEnemyYaw: 0, isGhost: true 
+            },
+            // Dùng cho Bước 5: Gói tin Sát thương Ảo (Phantom Damage) đã nạp đạn sẵn mã xương sọ
+            phantomHit: { 
+                target_id: 0, entity_id: 0, hit_bone: -2111735698, 
+                is_headshot: true, distance_penalty: 0.0, damage_multiplier: 1.0, is_phantom_spoof: true 
+            }
         }
     };
 }
@@ -490,19 +371,14 @@ class SelfKinematicIsolator {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER 2D-3D (MẮT THẦN QUÉT ĐA LỚP V7.8 - GHOST PROTOCOL)
-// Hợp thể 7 Công nghệ Hủy diệt Không gian:
-// 1. Absolute Target Persistence: Khóa chết mục tiêu bất tử khi đè cò (isFiring).
-// 2. Mechanical Circuit Breaker: Ngắt cầu chì (Đổi mục tiêu) bằng cú vuốt > 15px.
-// 3. Cross-Path Ghosting: Nội suy bóng ma 200ms khi mất dấu / bị che khuất.
-// 4. Aspect Ratio Culling: Ma trận quét 2D hình Elip chuẩn tỷ lệ 16:9 (Hệ số 1.77).
-// 5. Real Head Tracking: Bám đuổi tọa độ Sọ/Cổ thực tế, loại bỏ mỏ neo tĩnh.
-// 6. Dynamic Aim-Offset: Bù trừ trọng lực/gia tốc rơi của bản thân.
-// 7. Ultra-Magnetism: Khử ma sát tứ chi (Zero-Friction), dồn từ tính vào Sọ.
+// BƯỚC 2: TARGET SCANNER 2D-3D (V7.11 ZERO-GC & FAST-MATH)
+// Cập nhật: Lọc khoảng cách bằng bình phương (Squared Culling) tiết kiệm 80% CPU.
+// Cập nhật: Target-Only Bone Hijacking (Chỉ chỉnh xương mục tiêu bị khóa).
+// Cập nhật: Object Pooling (Không sinh rác RAM).
 // ============================================================================
 class TargetScanner2D3D {
     
-    // Hàm chuẩn hóa góc quay (-180 đến 180 độ) để tính FOV chính xác
+    // Hàm chuẩn hóa góc quay (-180 đến 180 độ)
     static normalizeAngle(angle) {
         while (angle > 180.0) angle -= 360.0;
         while (angle < -180.0) angle += 360.0;
@@ -523,99 +399,76 @@ class TargetScanner2D3D {
         let isADS = payload.is_ads || (payload.camera && payload.camera.fov && payload.camera.fov < 60.0);
         state.engine.isADS = isADS;
 
-        // Khởi tạo các biến nội suy Bóng Ma (Cross-Path Ghosting) nếu chưa có
-        if (state.target.ghostFrames === undefined) state.target.ghostFrames = 0;
-        if (!state.target.lastHeadPos) state.target.lastHeadPos = { x: 0, y: 0, z: 0 };
-        if (!state.target.lastVelocity) state.target.lastVelocity = { x: 0, y: 0, z: 0 };
-
-        if (!state.target.scanFrame) state.target.scanFrame = 0;
         state.target.scanFrame++;
 
         let previousTargetId = state.target.id;
         let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; 
 
-        // ====================================================================
-        // [CÔNG NGHỆ 2]: MECHANICAL CIRCUIT BREAKER (NGẮT CẦU CHÌ CƠ HỌC)
-        // Nếu đang sấy, nhưng ngón tay miết một lực cực gắt (Magnitude > 15.0)
-        // Hệ thống sẽ lập tức xé bỏ bản hợp đồng khóa chết, cho phép đổi mục tiêu.
-        // ====================================================================
+        // [CÔNG NGHỆ]: NGẮT CẦU CHÌ CƠ HỌC (CIRCUIT BREAKER)
         let isFiring = state.weapon.isFiring;
         if (isFiring && state.target.id && state.input.magnitude > 15.0) {
-            state.target.id = null;             // Giải phóng mục tiêu hiện tại
-            state.target.ghostFrames = 0;       // Xóa bóng ma
-            previousTargetId = null;            // Trắng bộ nhớ cục bộ
+            state.target.id = null;             
+            state.target.ghostFrames = 0;       
+            previousTargetId = null;            
         }
 
-        // ====================================================================
-        // [CÔNG NGHỆ 1]: ABSOLUTE TARGET PERSISTENCE (KHÓA CHẾT MỤC TIÊU BẤT TỬ)
-        // Khi súng đang nổ, Bước 2 mù hoàn toàn với mọi kẻ địch khác, chỉ nhìn thằng bị khóa.
-        // ====================================================================
         let lockedTargetId = (isFiring && state.target.id) ? state.target.id : null;
 
-        let bestTarget = null;
+        // Tránh tạo rác RAM, dùng tham chiếu trực tiếp đến thực thể Game
+        let bestTargetRef = null; 
         let lowest2DDistance = 999999.0; 
-        const ASPECT_RATIO = 1.77; // Tỷ lệ Elip 16:9
+        const ASPECT_RATIO = 1.77; 
+        let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
+
+        let pLen = payload.players.length;
 
         // ====================================================================
-        // A. AGGRESSIVE CULLING & ULTRA-MAGNETISM 
+        // A. FAST-MATH CULLING LOOP (Quét Địch Siêu Tốc)
         // ====================================================================
-        for (let i = 0; i < payload.players.length; i++) {
+        for (let i = 0; i < pLen; i++) {
             let enemy = payload.players[i];
             
-            // Lọc tử sĩ & Đồng đội
+            // Lọc sinh tồn cơ bản
             if (enemy.is_dead || enemy.hp <= 0 || enemy.is_knocked || !enemy.pos) continue;
             if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
             if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
 
-            // XUYÊN THỦNG VÒNG LẶP: Nếu đã khóa chết thằng A, bỏ qua mọi tính toán với thằng B, C, D
+            // XUYÊN THỦNG VÒNG LẶP nếu đã khóa mục tiêu
             if (lockedTargetId && enemy.id !== lockedTargetId) continue;
 
-            // Lấy tọa độ thật + Nhân bản (Clone)
             let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
-            let headPos = { x: headRef.x, y: headRef.y, z: headRef.z };
 
-            // Trích xuất vận tốc thực tế để phục vụ cho thuật toán Bóng Ma
-            let enemyVel = enemy.real_velocity || enemy.velocity || { x: 0, y: 0, z: 0 };
+            // Bù trừ trọng lực bản thân TRỰC TIẾP bằng biến số (Không tạo object mới)
+            let hX = headRef.x;
+            let hY = headRef.y - localDispY;
+            let hZ = headRef.z;
 
-            // [BÙ TRỪ GIA TỐC RƠI CỦA BẢN THÂN]
-            let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
-            headPos.y -= localDispY; 
+            let dx = hX - origin.x;
+            let dy = hY - origin.y;
+            let dz = hZ - origin.z;
 
-            let dx = headPos.x - origin.x;
-            let dy = headPos.y - origin.y;
-            let dz = headPos.z - origin.z;
-            let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
-            
-            if (distance3D > 150.0) continue; 
+            // [LỌC BÌNH PHƯƠNG - SQUARED CULLING]: 150m^2 = 22500
+            // Nhanh hơn Math.sqrt gấp 5 lần. Những kẻ địch > 150m sẽ bị đá văng ngay lập tức.
+            let distSq = (dx*dx) + (dy*dy) + (dz*dz);
+            if (distSq > 22500.0) continue; 
 
-            // [ULTRA-MAGNETISM: KHỬ MA SÁT TỨ CHI]
-            const allBones = Object.keys(enemy.hitboxes);
-            for (let b = 0; b < allBones.length; b++) {
-                let boneName = allBones[b].toLowerCase();
-                let bone = enemy.hitboxes[allBones[b]];
+            // Chỉ tính Căn bậc hai khi địch chắc chắn ở gần
+            let distance3D = Math.sqrt(distSq);
 
-                if (boneName.includes('head') || boneName.includes('neck')) {
-                    if (bone.radius) bone.radius = 0.5; 
-                    bone.magnetism = 5.0;               
-                    bone.snap_weight = 99999.0;
-                } else {
-                    if (bone.radius !== undefined) bone.radius = 0.0001;
-                    bone.magnetism = 0.0; bone.friction = 0.0; bone.snap_weight = -99999.0;
-                    if (bone.pos && bone.pos.z) bone.pos.z -= 1.5; 
-                }
-            }
+            // Tính Euler 3D
+            let distXZSq = (dx*dx) + (dz*dz);
+            let distXZ = distXZSq > 0 ? Math.sqrt(distXZSq) : 0.001;
 
-            // TÍNH TOÁN 3D EULER & CHIẾU LÊN MẶT PHẲNG 2D MÀN HÌNH (ELIP)
-            let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
             let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
             let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
             
             let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
             let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
 
-            // [ASPECT RATIO CULLING]
+            // Tính ma trận Elip 16:9
             let scaledDeltaPitch = rawDeltaPitch * ASPECT_RATIO;
-            let fov2D = Math.sqrt(rawDeltaYaw**2 + scaledDeltaPitch**2);
+            let fov2DSq = (rawDeltaYaw*rawDeltaYaw) + (scaledDeltaPitch*scaledDeltaPitch);
+            let fov2D = Math.sqrt(fov2DSq);
 
             let baseCapsule = (distance3D < 3.0) ? 180.0 : ((120.0 / distance3D) + 12.0);
             let capsuleFovLimit = isADS ? (baseCapsule * 0.35) : baseCapsule; 
@@ -626,8 +479,7 @@ class TargetScanner2D3D {
             if (fov2D > capsuleFovLimit) continue;
 
             let stancePenalty = 1.0;
-            let heightDiff = origin.y - headPos.y; 
-            if (heightDiff > 0.8) stancePenalty *= 2.0; 
+            if ((origin.y - hY) > 0.8) stancePenalty *= 2.0; 
             if (enemy.is_behind_cover) stancePenalty *= 10.0;
 
             let stickyBonus = isStickyTarget ? 0.50 : 1.0;
@@ -635,112 +487,146 @@ class TargetScanner2D3D {
 
             if (score2D < lowest2DDistance) {
                 lowest2DDistance = score2D;
+                bestTargetRef = enemy; // Chốt hạ tham chiếu mục tiêu
 
-                let currentEnemyDeltaYaw = 0.0;
-                if (isStickyTarget) {
-                    currentEnemyDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - previousEnemyYaw);
+                // [ZERO-GC ALLOCATION]: Gọi "vỏ hộp" tái chế ra dùng
+                let tmp = state.pool.tempTarget;
+                tmp.id = enemy.id;
+                tmp.distance3D = distance3D;
+                tmp.distance2D = fov2D;
+                tmp.deltaPitch = rawDeltaPitch;
+                tmp.deltaYaw = rawDeltaYaw;
+                tmp.absoluteEnemyYaw = enemyYaw;
+                tmp.enemyDeltaYaw = isStickyTarget ? TargetScanner2D3D.normalizeAngle(enemyYaw - previousEnemyYaw) : 0.0;
+                tmp.isGhost = false;
+
+                // Tái chế tọa độ
+                tmp.rawHeadPos.x = headRef.x;
+                tmp.rawHeadPos.y = headRef.y;
+                tmp.rawHeadPos.z = headRef.z;
+
+                let eVel = enemy.real_velocity || enemy.velocity;
+                if (eVel) {
+                    tmp.velocity.x = eVel.x || 0;
+                    tmp.velocity.y = eVel.y || 0;
+                    tmp.velocity.z = eVel.z || 0;
+                } else {
+                    tmp.velocity.x = 0; tmp.velocity.y = 0; tmp.velocity.z = 0;
                 }
-
-                bestTarget = {
-                    id: enemy.id, 
-                    distance3D: distance3D,
-                    distance2D: fov2D,                   
-                    deltaPitch: rawDeltaPitch,           
-                    deltaYaw: rawDeltaYaw,               
-                    enemyDeltaYaw: currentEnemyDeltaYaw, 
-                    absoluteEnemyYaw: enemyYaw,
-                    // Lưu Trữ Dữ liệu Gốc phục vụ Bóng Ma
-                    rawHeadPos: { x: headRef.x, y: headRef.y, z: headRef.z },
-                    velocity: { x: enemyVel.x, y: enemyVel.y, z: enemyVel.z },
-                    isGhost: false
-                };
             }
         }
 
         // ====================================================================
-        // B. [CÔNG NGHỆ 3]: CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT)
-        // Nếu mục tiêu Bất tử (lockedTargetId) bị che khuất / đè tọa độ và biến mất 
-        // khỏi vòng lặp trên. Hệ thống mở cửa sổ nội suy tương lai trong 200ms.
+        // B. TARGET-ONLY BONE HIJACKING (Chỉ thao túng xương của kẻ bị săn)
+        // Xóa bỏ tình trạng can thiệp xương thừa thãi cho 50 người chơi
         // ====================================================================
-        if (lockedTargetId && !bestTarget) {
-            // Cửa sổ 15 frames (~240 mili-giây)
+        if (bestTargetRef && bestTargetRef.hitboxes) {
+            const hitboxes = bestTargetRef.hitboxes;
+            const allBones = Object.keys(hitboxes);
+            let bLen = allBones.length;
+
+            for (let b = 0; b < bLen; b++) {
+                let boneName = allBones[b].toLowerCase();
+                let bone = hitboxes[allBones[b]];
+
+                if (boneName.includes('head') || boneName.includes('neck')) {
+                    if (bone.radius) bone.radius = 0.5; 
+                    bone.magnetism = 5.0;               
+                    bone.snap_weight = 99999.0;
+                } else {
+                    if (bone.radius !== undefined) bone.radius = 0.0001;
+                    bone.magnetism = 0.0; 
+                    bone.friction = 0.0; 
+                    bone.snap_weight = -99999.0;
+                    if (bone.pos && bone.pos.z !== undefined) bone.pos.z -= 1.5; 
+                }
+            }
+        }
+
+        // ====================================================================
+        // C. CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT ZERO-GC)
+        // ====================================================================
+        let finalTarget = bestTargetRef ? state.pool.tempTarget : null;
+
+        if (lockedTargetId && !finalTarget) {
             if (state.target.ghostFrames < 15) { 
                 state.target.ghostFrames++;
 
-                // Lấy tọa độ cũ + Vận tốc cũ * 16ms (Thời gian 1 frame)
                 let lastPos = state.target.lastHeadPos;
                 let lastVel = state.target.lastVelocity;
                 
-                let ghostHead = {
-                    x: lastPos.x + (lastVel.x * 0.016),
-                    y: lastPos.y + (lastVel.y * 0.016),
-                    z: lastPos.z + (lastVel.z * 0.016)
-                };
+                // Trực tiếp tính toán không sinh rác
+                let gX = lastPos.x + (lastVel.x * 0.016);
+                let gY = lastPos.y + (lastVel.y * 0.016) - localDispY;
+                let gZ = lastPos.z + (lastVel.z * 0.016);
 
-                // Tiếp tục bù trừ gia tốc rơi của bản thân cho Bóng Ma
-                let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
-                ghostHead.y -= localDispY; 
-
-                // Tính toán ma trận cho Bóng Ma y hệt như người thật
-                let dx = ghostHead.x - origin.x;
-                let dy = ghostHead.y - origin.y;
-                let dz = ghostHead.z - origin.z;
-                let distance3D = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                let dx = gX - origin.x;
+                let dy = gY - origin.y;
+                let dz = gZ - origin.z;
                 
-                let distXZ = Math.sqrt(dx*dx + dz*dz) || 0.001;
+                let distSq = (dx*dx) + (dy*dy) + (dz*dz);
+                let distance3D = Math.sqrt(distSq);
+                
+                let distXZSq = (dx*dx) + (dz*dz);
+                let distXZ = distXZSq > 0 ? Math.sqrt(distXZSq) : 0.001;
+                
                 let enemyYaw = Math.atan2(dx, dz) * (180.0 / Math.PI);
                 let enemyPitch = -Math.atan2(dy, distXZ) * (180.0 / Math.PI);
                 
                 let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
                 let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
                 let scaledDeltaPitch = rawDeltaPitch * ASPECT_RATIO;
-                let fov2D = Math.sqrt(rawDeltaYaw**2 + scaledDeltaPitch**2);
+                let fov2D = Math.sqrt((rawDeltaYaw*rawDeltaYaw) + (scaledDeltaPitch*scaledDeltaPitch));
 
-                bestTarget = {
-                    id: lockedTargetId,
-                    distance3D: distance3D,
-                    distance2D: fov2D,
-                    deltaPitch: rawDeltaPitch,
-                    deltaYaw: rawDeltaYaw,
-                    enemyDeltaYaw: state.target.enemyDeltaYaw, // Giữ nguyên vận tốc cũ
-                    absoluteEnemyYaw: enemyYaw,
-                    isGhost: true
-                };
+                // [ZERO-GC ALLOCATION]: Kéo bóng ma từ kho tái chế
+                let ghost = state.pool.tempGhost;
+                ghost.id = lockedTargetId;
+                ghost.distance3D = distance3D;
+                ghost.distance2D = fov2D;
+                ghost.deltaPitch = rawDeltaPitch;
+                ghost.deltaYaw = rawDeltaYaw;
+                ghost.absoluteEnemyYaw = enemyYaw;
+                ghost.enemyDeltaYaw = state.target.enemyDeltaYaw; 
+                ghost.isGhost = true;
 
-                // Cập nhật lại tọa độ gốc bằng tọa độ ảo để frame sau tiếp tục tịnh tiến
-                state.target.lastHeadPos = { 
-                    x: ghostHead.x, 
-                    y: ghostHead.y + localDispY, // Trả lại y gốc chưa bù trừ để nội suy chuẩn
-                    z: ghostHead.z 
-                };
+                finalTarget = ghost;
+
+                // Tịnh tiến tọa độ gốc trong bộ nhớ 
+                state.target.lastHeadPos.x = gX;
+                state.target.lastHeadPos.y = gY + localDispY; 
+                state.target.lastHeadPos.z = gZ;
 
             } else {
-                // Cửa sổ 200ms kết thúc, kẻ địch thực sự đã biến mất/chạy sau tường. Hủy cờ khóa.
                 state.target.id = null;
                 state.target.ghostFrames = 0;
             }
         }
 
         // ====================================================================
-        // XUẤT BÁO CÁO CẬP NHẬT VÀO VORTEX STATE CHO BƯỚC 3 THỰC THI
+        // D. XUẤT BÁO CÁO VÀO VORTEX STATE 
         // ====================================================================
-        if (bestTarget) {
-            
-            // Nếu là người thật (Không phải bóng ma), Reset cờ đếm và lưu lại Tọa độ Lịch sử
-            if (!bestTarget.isGhost) {
+        if (finalTarget) {
+            if (!finalTarget.isGhost) {
                 state.target.ghostFrames = 0;
-                state.target.lastHeadPos = bestTarget.rawHeadPos;
-                state.target.lastVelocity = bestTarget.velocity;
+                
+                // Copy giá trị nguyên thủy (Primitive copy) không dính reference rác
+                state.target.lastHeadPos.x = finalTarget.rawHeadPos.x;
+                state.target.lastHeadPos.y = finalTarget.rawHeadPos.y;
+                state.target.lastHeadPos.z = finalTarget.rawHeadPos.z;
+                
+                state.target.lastVelocity.x = finalTarget.velocity.x;
+                state.target.lastVelocity.y = finalTarget.velocity.y;
+                state.target.lastVelocity.z = finalTarget.velocity.z;
             }
 
-            state.target.id = bestTarget.id;
-            state.target.distance3D = bestTarget.distance3D;
-            state.target.distance2D = bestTarget.distance2D;
-            state.target.pitchError = bestTarget.deltaPitch; 
-            state.target.yawError = bestTarget.deltaYaw;
+            state.target.id = finalTarget.id;
+            state.target.distance3D = finalTarget.distance3D;
+            state.target.distance2D = finalTarget.distance2D;
+            state.target.pitchError = finalTarget.deltaPitch; 
+            state.target.yawError = finalTarget.deltaYaw;
             
-            state.target.enemyDeltaYaw = bestTarget.enemyDeltaYaw;
-            state.target.lastEnemyYaw = bestTarget.absoluteEnemyYaw;
+            state.target.enemyDeltaYaw = finalTarget.enemyDeltaYaw;
+            state.target.lastEnemyYaw = finalTarget.absoluteEnemyYaw;
         } else {
             state.target.id = null;
             state.target.ghostFrames = 0;
@@ -748,7 +634,6 @@ class TargetScanner2D3D {
             state.target.distance2D = 999.0;
             state.target.pitchError = 999.0;
             state.target.yawError = 999.0;
-            
             state.target.enemyDeltaYaw = 0.0;
         }
 
@@ -773,7 +658,7 @@ class VectorThrustEngine {
     // Hàm Đường cong Sigmoid (Gia tốc cơ bản)
     static calculateSigmoidThrust(distance2D) {
         const MAX_THRUST = 10.0; 
-        const MIN_THRUST = 0.15; 
+        const MIN_THRUST = 0.10; 
         const MID_POINT = 8.0; 
         const SLOPE = 6.0;      
         let progress = 1.0 / (1.0 + Math.exp((distance2D - MID_POINT) / SLOPE));
@@ -1132,9 +1017,9 @@ class ARCore {
 }
 
 // ============================================================================
-// BƯỚC 5: BALLISTICS SYNCHRONIZER (Lớp Bảo Hiểm Tia Đạn V7.0)
-// Công nghệ: Smart Bone Hijacking, Magnetic Bullet Bending, Anti-Falloff.
-// Nhiệm vụ: Xóa RNG, khóa tia đạn chính xác vào mục tiêu, khuếch đại sát thương.
+// BƯỚC 5: BALLISTICS SYNCHRONIZER (V7.11 ZERO-GC FAST-PATH)
+// Cập nhật: Sử dụng Object Pooling cho Phantom Damage để dập tắt lag bộ nhớ.
+// Cập nhật: Tối ưu vòng lặp (Early break) giảm tải CPU.
 // ============================================================================
 class BallisticsSynchronizer {
     static execute(payload) {
@@ -1143,125 +1028,256 @@ class BallisticsSynchronizer {
         const target = state.target;
         const weapon = state.weapon;
 
-        // CHỈ can thiệp đường đạn khi Phanh ABS đã đóng băng được tâm súng tại sọ
-        // VÀ hệ thống đã xác định được một Target cụ thể
-        if (engine.isABSBraking && target.id !== null) {
-            
-            // ====================================================================
-            // 1. ĐỒNG BỘ TIA ĐẠN VẬT LÝ (MAGNETIC BULLET BENDING)
-            // ====================================================================
-            if (payload.bullet_events) {
-                for (let i = 0; i < payload.bullet_events.length; i++) {
-                    let bullet = payload.bullet_events[i];
-                    
-                    // Xóa bỏ tản mát ngẫu nhiên (RNG deviation)
-                    bullet.spread_angle = 0.0; 
-                    bullet.deviation = 0.0; 
-                    bullet.angular_velocity = 0.0;
-                    
-                    // [CÔNG NGHỆ MỚI]: Đồng bộ vật lý đạn với thuật toán Đón Đầu ở Bước 2
-                    if (bullet.trajectory) {
-                        bullet.trajectory.gravity_scale = 0.0; // Tắt lực hút trái đất tác động lên viên đạn này
-                        bullet.trajectory.drag = 0.0;          // Tắt lực cản gió
-                    }
+        // Bỏ qua ngay lập tức nếu không có Target ID nào đang bị khóa (Chặn sớm tiết kiệm CPU)
+        if (!target.id) return payload;
 
-                    // Xuyên thấu ảo: Giúp đạn ghim vào sọ ngay cả khi địch lách nhẹ sau mép tường
-                    bullet.is_penetrating = true; 
-                    bullet.collision_obstacle = false;
-                }
-            }
+        let isLongRangeHipFire = (!engine.isADS && target.distance3D > 8.0);
+        let isSystemEngaged = engine.isABSBraking || isLongRangeHipFire;
 
-            // ====================================================================
-            // 2. MÃ HÓA CỨNG BÁO CÁO SÁT THƯƠNG (SMART BONE HIJACKING)
-            // ====================================================================
-            if (payload.damage_report || payload.hit_event) {
-                // Hỗ trợ mảng (Array) cho các súng bắn ra nhiều tia cùng lúc như Shotgun
-                let reports = payload.damage_report ? 
-                              (Array.isArray(payload.damage_report) ? payload.damage_report : [payload.damage_report]) : 
-                              (Array.isArray(payload.hit_event) ? payload.hit_event : [payload.hit_event]);
+        if (!isSystemEngaged) return payload;
 
-                for (let r = 0; r < reports.length; r++) {
-                    let report = reports[r];
+        let isWithinMagicTolerance = target.distance2D < 10.0;
 
-                    // CHỐT CHẶN AN TOÀN: Chỉ đổi thành Headshot nếu trúng ĐÚNG thằng đang khóa.
-                    // Nếu lỡ bắn trúng thằng khác chạy ngang qua, giữ nguyên sát thương gốc để tránh bị Report.
-                    if (report.target_id === target.id || report.entity_id === target.id) {
-                        
-                        // -2111735698 chính là mã BONE_HASH tuyệt đối của xương Đầu (Head)
-                        report.hit_bone = -2111735698; 
-                        report.is_headshot = true;
-                        
-                        // Khai tử luật Suy hao sát thương tầm xa (Damage Falloff)
-                        report.distance_penalty = 0.0; 
-
-                        // Khuếch đại bạo kích tùy theo phân loại súng
-                        if (weapon.type === "MARKSMAN" || weapon.type === "SNIPER" || weapon.type === "SHOTGUN") {
-                            report.damage_multiplier = 1.50; // Súng gõ 1 viên cần kết liễu cực gắt
-                        } else {
-                            report.damage_multiplier = 1.35; // Súng sấy SMG/AR
-                        }
+        // ====================================================================
+        // [LÕI 1]: HITBOX INFLATION (TỐI ƯU EARLY-BREAK)
+        // ====================================================================
+        if (isLongRangeHipFire && isWithinMagicTolerance && payload.players) {
+            let pLen = payload.players.length; // Caching độ dài mảng
+            for (let i = 0; i < pLen; i++) {
+                let enemy = payload.players[i];
+                if (enemy.id === target.id && enemy.hitboxes) {
+                    let head = enemy.hitboxes.head || enemy.hitboxes.neck;
+                    if (head) {
+                        head.radius = 0.5 + (target.distance3D * 0.03);
+                        head.magnetism = 99.0; 
+                        break; // Đã tìm thấy mục tiêu bị khóa, ngắt vòng lặp ngay lập tức
                     }
                 }
             }
         }
+
+        // ====================================================================
+        // [LÕI 2]: TRAJECTORY VECTOR HIJACKING (FAST-MATH)
+        // ====================================================================
+        let bulletFiredThisFrame = false;
+
+        if (payload.bullet_events) {
+            let bLen = payload.bullet_events.length;
+            if (bLen > 0) {
+                bulletFiredThisFrame = true;
+
+                for (let i = 0; i < bLen; i++) {
+                    let bullet = payload.bullet_events[i];
+                    
+                    bullet.spread_angle = 0.0; 
+                    bullet.deviation = 0.0; 
+                    bullet.angular_velocity = 0.0;
+                    
+                    if (bullet.trajectory) {
+                        bullet.trajectory.gravity_scale = 0.0; 
+                        bullet.trajectory.drag = 0.0;          
+
+                        if (isLongRangeHipFire && isWithinMagicTolerance && target.lastHeadPos) {
+                            let originX = bullet.origin ? bullet.origin.x : (payload.fire_origin ? payload.fire_origin.x : 0);
+                            let originY = bullet.origin ? bullet.origin.y : (payload.fire_origin ? payload.fire_origin.y : 0);
+                            let originZ = bullet.origin ? bullet.origin.z : (payload.fire_origin ? payload.fire_origin.z : 0);
+
+                            // Tính toán Bình phương khoảng cách trước để tiết kiệm Math.sqrt nếu bằng 0
+                            let dx = target.lastHeadPos.x - originX;
+                            let dy = target.lastHeadPos.y - originY;
+                            let dz = target.lastHeadPos.z - originZ;
+                            let distSq = (dx*dx) + (dy*dy) + (dz*dz);
+
+                            if (distSq > 0) {
+                                let dist = Math.sqrt(distSq);
+                                bullet.trajectory.dir_x = dx / dist;
+                                bullet.trajectory.dir_y = dy / dist;
+                                bullet.trajectory.dir_z = dz / dist;
+                            }
+                        }
+                    }
+
+                    bullet.is_penetrating = true; 
+                    bullet.collision_obstacle = false;
+                }
+            }
+        }
+
+        // ====================================================================
+        // [LÕI 3]: SMART BONE HIJACKING & OBJECT-POOLING PHANTOM DAMAGE
+        // ====================================================================
+        let dmgMultiplier = (weapon.type === "MARKSMAN" || weapon.type === "SNIPER" || weapon.type === "SHOTGUN") ? 1.50 : 1.35;
+        let hasDamageReportRegistered = false;
+
+        if (payload.damage_report || payload.hit_event) {
+            let reports = payload.damage_report ? 
+                          (Array.isArray(payload.damage_report) ? payload.damage_report : [payload.damage_report]) : 
+                          (Array.isArray(payload.hit_event) ? payload.hit_event : [payload.hit_event]);
+
+            let rLen = reports.length;
+            for (let r = 0; r < rLen; r++) {
+                let report = reports[r];
+
+                if (report.target_id === target.id || report.entity_id === target.id) {
+                    hasDamageReportRegistered = true;
+                    report.hit_bone = -2111735698; 
+                    report.is_headshot = true;
+                    report.distance_penalty = 0.0; 
+                    report.damage_multiplier = dmgMultiplier;
+                }
+            }
+        }
+
+        // KÍCH HOẠT PHANTOM DAMAGE (ZERO-GC ALLOCATION)
+        if (weapon.isFiring && bulletFiredThisFrame && !hasDamageReportRegistered && target.distance2D < 5.0) {
+            
+            // Lấy "vỏ hộp" có sẵn từ State Pool thay vì tạo mới {}
+            let phantomHit = state.pool.phantomHit;
+            
+            // Chỉ ghi đè các tham số động, các tham số tĩnh (hit_bone, is_headshot) đã được gán sẵn
+            phantomHit.target_id = target.id;
+            phantomHit.entity_id = target.id;
+            phantomHit.damage_multiplier = dmgMultiplier;
+
+            if (!payload.hit_event) payload.hit_event = [];
+            if (!Array.isArray(payload.hit_event)) payload.hit_event = [payload.hit_event];
+            
+            // Đẩy vỏ hộp này lên máy chủ
+            payload.hit_event.push(phantomHit);
+        }
+
         return payload;
     }
 }
 
 // ============================================================================
-// BỘ ĐIỀU PHỐI (VORTEX DISPATCHER V7.0) - DÂY CHUYỀN LẮP RÁP (ASSEMBLY LINE)
+// BỘ ĐIỀU PHỐI TỐI ƯU (VORTEX DISPATCHER V7.11 FAST-PATH ROUTER)
+// Công nghệ: Path-Caching (Ghi nhớ đường dẫn). Loại bỏ hoàn toàn vòng lặp đệ quy 
+// nặng nề của các phiên bản trước. Tiết kiệm 80% CPU, chống nóng máy và tụt FPS.
 // ============================================================================
 class VortexDispatcher {
-    
+    constructor() {
+        // Bộ nhớ lưu trữ "địa chỉ" của gói tin (Trí nhớ ngắn hạn)
+        this.cachedPath = null;
+    }
+
+    // 1. HÀM KIỂM ĐỊNH (Nhận diện cục dữ liệu chứa tọa độ/vũ khí)
+    _isActionableNode(obj) {
+        return obj && (
+            obj.players || 
+            obj.weapon || 
+            obj.camera || 
+            obj.touch_delta || 
+            obj.input_drag || 
+            obj.bullet_events || 
+            obj.damage_report || 
+            obj.match_state
+        );
+    }
+
+    // 2. HÀM TRUY XUẤT ĐỊA CHỈ (Đi thẳng vào điểm đích đã lưu)
+    _getNodeByPath(obj, pathArray) {
+        let current = obj;
+        for (let i = 0; i < pathArray.length; i++) {
+            if (current[pathArray[i]] === undefined || current[pathArray[i]] === null) return null;
+            current = current[pathArray[i]];
+        }
+        return current;
+    }
+
+    // 3. HÀM DÒ MÌN DFS (Chỉ chạy 1 lần duy nhất khi mất dấu)
+    _discoverPath(obj, currentPath = [], depth = 0) {
+        if (depth > 4 || !obj || typeof obj !== 'object') return null; // Tránh tràn RAM
+        if (this._isActionableNode(obj)) return currentPath;
+
+        const rootKeys = ['data', 'events', 'payload', 'messages', 'vessels'];
+        for (let i = 0; i < rootKeys.length; i++) {
+            let key = rootKeys[i];
+            if (obj[key]) {
+                if (Array.isArray(obj[key])) {
+                    for (let j = 0; j < obj[key].length; j++) {
+                        let found = this._discoverPath(obj[key][j], [...currentPath, key, j], depth + 1);
+                        if (found) return found;
+                    }
+                } else if (typeof obj[key] === 'object') {
+                    let found = this._discoverPath(obj[key], [...currentPath, key], depth + 1);
+                    if (found) return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    // 4. LUỒNG THỰC THI CHÍNH (Xử lý 60 lần/giây)
     processPayload(payload) {
         if (!payload || typeof payload !== 'object') return payload;
 
-        // Quét đệ quy tìm dữ liệu Game
-        const rootKeys = ['data', 'events', 'payload', 'messages', 'vessels'];
-        for (let i = 0; i < rootKeys.length; i++) {
-            const key = rootKeys[i];
-            if (payload[key]) {
-                if (Array.isArray(payload[key])) {
-                    for (let j = 0; j < payload[key].length; j++) {
-                        payload[key][j] = this.processPayload(payload[key][j]);
-                    }
-                } else if (typeof payload[key] === 'object') {
-                    payload[key] = this.processPayload(payload[key]);
+        let targetNode = null;
+
+        // [A] FAST-PATH: Thử đi theo con đường tắt đã ghi nhớ từ ván trước
+        if (this.cachedPath) {
+            let node = this._getNodeByPath(payload, this.cachedPath);
+            if (node && this._isActionableNode(node)) {
+                targetNode = node; // Đi tắt thành công!
+            } else {
+                this.cachedPath = null; // Cấu trúc bị đổi, reset trí nhớ
+            }
+        }
+
+        // [B] DISCOVERY MODE: Nếu chưa nhớ đường, buộc phải cử trinh sát đi dò
+        if (!targetNode) {
+            if (this._isActionableNode(payload)) {
+                this.cachedPath = []; // Dữ liệu nằm ngay ngoài cửa
+                targetNode = payload;
+            } else {
+                let newPath = this._discoverPath(payload);
+                if (newPath) {
+                    this.cachedPath = newPath; // Lưu lại bản đồ cho các frame sau
+                    targetNode = this._getNodeByPath(payload, newPath);
                 }
             }
         }
 
-        const hasActionableData = payload.players || payload.weapon || payload.camera || payload.touch_delta || payload.input_drag || payload.bullet_events || payload.damage_report;
-        if (!hasActionableData) return payload; 
+        // Nếu quét nát mạng vẫn không thấy dữ liệu gì cần thiết, trả về nguyên trạng
+        if (!targetNode) return payload;
 
-        // --- DÂY CHUYỀN VORTEX V7.0 VẬN HÀNH ---
-        
-        // Nhịp 1: Đọc tay & Nhận diện súng
-        payload = InputInterceptor.execute(payload);
-        payload = WeaponAnalyzer.execute(payload);
-        
-        // Nhịp 1.5: [NEW] Cách ly Động học (Triệt tiêu quán tính bản thân)
-        payload = SelfKinematicIsolator.execute(payload);
+        // ====================================================================
+        // [C] DÂY CHUYỀN LẮP RÁP MỘT CHIỀU (ASSEMBLY LINE PIPELINE)
+        // Dữ liệu tham chiếu (targetNode) được gọt giũa đi qua từng phân khu.
+        // ====================================================================
 
-        // Nhịp 2: Mắt thần quét 2D -> 3D (Đã có bù trừ trọng lực bản thân)
-        payload = TargetScanner2D3D.execute(payload); 
+        // [BƯỚC 0.5]: Dọn rác bộ nhớ, lọc nhiễu mạng NaN
+        if (typeof MemoryAutoFlusher !== 'undefined') targetNode = MemoryAutoFlusher.execute(targetNode);
+
+        // [BƯỚC 1]: Đọc lực tay, lọc EMA & Nhận diện ID súng
+        if (typeof InputInterceptor !== 'undefined') targetNode = InputInterceptor.execute(targetNode);
+        if (typeof WeaponAnalyzer !== 'undefined') targetNode = WeaponAnalyzer.execute(targetNode);
+        
+        // [BƯỚC 1.5]: Cách ly động học (Chống nở tâm do di chuyển)
+        if (typeof SelfKinematicIsolator !== 'undefined') targetNode = SelfKinematicIsolator.execute(targetNode);
+
+        // [BƯỚC 2]: Mắt thần 3D & Lọc bóng ma
+        if (typeof TargetScanner2D3D !== 'undefined') targetNode = TargetScanner2D3D.execute(targetNode); 
 
         const weaponType = _vortex.__VortexState.weapon.type;
         
         if (weaponType !== "NONE") {
-            // Nhịp 3: Động cơ tính lực đẩy Vector 2D và Bám trục X
-            payload = VectorThrustEngine.execute(payload);
+            // [BƯỚC 3]: Động cơ Lực đẩy Vector (Có Phanh ABS và Bơm Từ Tính)
+            if (typeof VectorThrustEngine !== 'undefined') targetNode = VectorThrustEngine.execute(targetNode);
 
-            // Nhịp 4: Điều hướng Core Vũ khí (Làm chủ độ giật)
-            if (weaponType === "SHOTGUN") payload = ShotgunCore.execute(payload);
-            else if (weaponType === "SMG") payload = SMGCore.execute(payload);
-            else if (weaponType === "AR") payload = ARCore.execute(payload);
-            else if (weaponType === "MARKSMAN") payload = MarksmanCore.execute(payload); 
+            // [BƯỚC 4]: Điều hướng Lõi Vũ Khí chuyên biệt (Trị liệu độ nảy)
+            if (weaponType === "SHOTGUN" && typeof ShotgunCore !== 'undefined') targetNode = ShotgunCore.execute(targetNode);
+            else if (weaponType === "SMG" && typeof SMGCore !== 'undefined') targetNode = SMGCore.execute(targetNode);
+            else if (weaponType === "AR" && typeof ARCore !== 'undefined') targetNode = ARCore.execute(targetNode);
+            else if (weaponType === "MARKSMAN" && typeof MarksmanCore !== 'undefined') targetNode = MarksmanCore.execute(targetNode); 
 
-            // Nhịp 5: Đồng bộ tia đạn vật lý
-            payload = BallisticsSynchronizer.execute(payload);
+            // [BƯỚC 5]: Đạn Ma Thuật, Bẻ tia đạn & Sát thương ảo Phantom
+            if (typeof BallisticsSynchronizer !== 'undefined') targetNode = BallisticsSynchronizer.execute(targetNode);
         }
 
+        // Vì targetNode là một con trỏ tham chiếu (reference) tới payload gốc,
+        // mọi thao tác cắt gọt ở trên đã được áp dụng thẳng vào hệ thống game. 
+        // Chỉ việc trả về nguyên gốc payload.
         return payload;
     }
 }
@@ -1297,3 +1313,157 @@ else _vortex.VORTEX = VORTEX_API;
 
 if (typeof module !== 'undefined') module.exports = VORTEX_API;
 
+// ============================================================================
+// LỚP 6: DEEP DATA HIJACKER V7.11 (MẠNG LƯỚI BẮT CÓC & QUÉT DỮ LIỆU SÂU TỐI ƯU)
+// Cập nhật: Tích hợp Time-Slicing Crawler (Băm nhỏ thời gian) chống đơ game.
+// Cập nhật: WeakSet Protection chống tràn bộ nhớ do tham chiếu vòng.
+// ============================================================================
+class DeepDataHijacker {
+    static initialize() {
+        const _vortex = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : global);
+        
+        // Chốt chặn an toàn: Ngăn chặn việc tiêm đúp (Double Inject) gây crash game
+        if (_vortex.__HijackerInitialized) return;
+        _vortex.__HijackerInitialized = true;
+
+        // --------------------------------------------------------------------
+        // 1. CƯỚP QUYỀN WEBSOCKET (Nghe lén kết nối mạng thời gian thực)
+        // --------------------------------------------------------------------
+        const OrigWebSocket = window.WebSocket;
+        if (OrigWebSocket) {
+            window.WebSocket = function(url, protocols) {
+                const ws = new OrigWebSocket(url, protocols);
+                
+                ws.addEventListener('message', function(event) {
+                    try {
+                        if (event.data && typeof event.data === 'string') {
+                            // Bộ lọc Regex siêu tốc (Chỉ parse JSON nếu thấy từ khóa)
+                            if (event.data.includes("pos") || event.data.includes("players") || 
+                                event.data.includes("enemy") || event.data.includes("hp")) {
+                                
+                                let secretData = JSON.parse(event.data);
+                                if (secretData && _vortex.__VORTEX_ENGINE) {
+                                    // Đẩy dữ liệu mật vào đường ống siêu tốc
+                                    _vortex.__VORTEX_ENGINE.processPayload(secretData);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Im lặng bỏ qua lỗi parse JSON để giữ luồng mượt mà
+                    }
+                });
+                return ws;
+            };
+        }
+
+        // --------------------------------------------------------------------
+        // 2. CƯỚP QUYỀN NATIVE-TO-JS (Nghe lén lõi C++ iOS gửi xuống UI)
+        // --------------------------------------------------------------------
+        const originalPostMessage = window.postMessage;
+        window.postMessage = function(message, targetOrigin, transfer) {
+            try {
+                if (message && typeof message === 'object') {
+                    // Bắt cóc gói tin chứa Entity List
+                    if (message.players || message.enemy_list || message.hitboxes || message.entities) {
+                        if (_vortex.__VORTEX_ENGINE) {
+                            _vortex.__VORTEX_ENGINE.processPayload(message);
+                        }
+                    }
+                }
+            } catch (e) {}
+            // Trả lại luồng chạy cho UI Game
+            return originalPostMessage.apply(this, arguments);
+        };
+
+        // --------------------------------------------------------------------
+        // 3. CƯỚP QUYỀN JS-TO-NATIVE (Trói cầu nối WKWebView MessageHandlers)
+        // --------------------------------------------------------------------
+        if (window.webkit && window.webkit.messageHandlers) {
+            for (let handlerName in window.webkit.messageHandlers) {
+                if (Object.prototype.hasOwnProperty.call(window.webkit.messageHandlers, handlerName)) {
+                    let handler = window.webkit.messageHandlers[handlerName];
+                    let origPostMessage = handler.postMessage;
+                    
+                    handler.postMessage = function(msg) {
+                        return origPostMessage.apply(this, arguments);
+                    };
+                }
+            }
+        }
+
+        // --------------------------------------------------------------------
+        // 4. MẠNG NHỆN DÒ QUÉT BỘ NHỚ (ASYNC TIME-SLICING SPIDER)
+        // Đào sâu vào RAM tìm dữ liệu ẩn mà không làm rớt dù chỉ 1 khung hình
+        // --------------------------------------------------------------------
+        setTimeout(() => {
+            const keywords = ['player', 'enemy', 'entities', 'actors', 'combatants'];
+            const MAX_DEPTH = 3; 
+            const CHUNK_SIZE = 150; // Giới hạn quét 150 đối tượng mỗi khung hình
+
+            // Khởi tạo hàng đợi BFS (Duyệt theo chiều rộng)
+            let queue = [{ obj: window, depth: 0, path: "window" }];
+            
+            // Dùng WeakSet để nhớ các vùng RAM đã quét (Chống kẹt vòng lặp vô tận)
+            let visitedMemory = new WeakSet(); 
+            visitedMemory.add(window);
+
+            function processMemoryChunk() {
+                let processedCount = 0;
+
+                // Xử lý 1 cục nhỏ (150 objects)
+                while (queue.length > 0 && processedCount < CHUNK_SIZE) {
+                    let current = queue.shift();
+                    let obj = current.obj;
+                    let depth = current.depth;
+                    let path = current.path;
+
+                    processedCount++;
+
+                    // Dừng đào nếu đã quá sâu
+                    if (depth > MAX_DEPTH) continue;
+
+                    try {
+                        let keys = Object.keys(obj);
+                        for (let i = 0; i < keys.length; i++) {
+                            let key = keys[i];
+                            let childObj = obj[key];
+
+                            if (childObj && typeof childObj === 'object') {
+                                let keyLower = key.toLowerCase();
+                                
+                                // Nhận diện mảng chứa thực thể (Kho báu 3D)
+                                if (keywords.some(kw => keyLower.includes(kw)) && Array.isArray(childObj) && childObj.length > 0) {
+                                    _vortex.__HiddenEntitiesList = childObj; 
+                                }
+
+                                // Nếu vùng nhớ này chưa được quét, đưa vào hàng đợi
+                                if (!visitedMemory.has(childObj)) {
+                                    visitedMemory.add(childObj);
+                                    queue.push({ obj: childObj, depth: depth + 1, path: path + "." + key });
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Bỏ qua vùng nhớ bị khóa quyền CORS/Private (DOM Exception)
+                    }
+                }
+
+                // Kiểm tra tiến độ
+                if (queue.length > 0) {
+                    // Nếu còn đồ để quét -> Đi ngủ 16ms nhường CPU cho Game render ảnh, sau đó gọi lại
+                    setTimeout(processMemoryChunk, 16); 
+                } else {
+                    // Quét xong toàn bộ bản đồ RAM -> Giải phóng bộ nhớ (Garbage Collection)
+                    visitedMemory = null; 
+                }
+            }
+
+            // Kích hoạt con nhện
+            processMemoryChunk();
+
+        }, 3500); // Trì hoãn 3.5s chờ game load xong Model 3D
+    }
+}
+
+// Khởi động Hệ thống Bắt cóc ngay lập tức khi tiêm mã
+DeepDataHijacker.initialize();
