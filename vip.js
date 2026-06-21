@@ -372,16 +372,13 @@ class SelfKinematicIsolator {
 
 // ============================================================================
 // BƯỚC 2: TARGET SCANNER 2D-3D (V7.12 TWO-TIER FUNNEL & ZERO-GC)
-// Cập nhật: Phễu lọc 2 tầng - Chỉ tính toán lượng giác cho 4 kẻ địch gần nhất.
-// Cập nhật: Target Hysteresis (Keo Dính 50%) chống Ping-Pong văng tâm qua lại.
-// Cập nhật: Mảng tĩnh Zero-GC tối ưu hoàn toàn hiện tượng khựng khung hình.
+// Công nghệ 1: Radar Không gian 360 Độ (Lọc Top 4 cự ly gần nhất bằng Bình phương).
+// Công nghệ 2: Ống kính Quang học 2D (Chỉ giải lượng giác cho 4 kẻ địch đã lọc).
+// Công nghệ 3: Target Hysteresis (Keo dính 50% chống Ping-pong tâm súng).
+// Công nghệ 4: Mechanical Circuit Breaker (Ngắt cầu chì đổi mục tiêu > 15px).
 // ============================================================================
 class TargetScanner2D3D {
     
-    // Khởi tạo mảng tĩnh chứa Top 4 Kẻ địch (Tránh tạo rác RAM mỗi frame)
-    static topEnemies = [null, null, null, null];
-    static topDistSq = [99999999.0, 99999999.0, 99999999.0, 99999999.0];
-
     // Hàm chuẩn hóa góc quay (-180 đến 180 độ)
     static normalizeAngle(angle) {
         while (angle > 180.0) angle -= 360.0;
@@ -402,15 +399,15 @@ class TargetScanner2D3D {
 
         let isADS = payload.is_ads || (payload.camera && payload.camera.fov && payload.camera.fov < 60.0);
         state.engine.isADS = isADS;
+
         state.target.scanFrame++;
 
         let previousTargetId = state.target.id;
         let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; 
 
         // ====================================================================
-        // [NGẮT CẦU CHÌ MỞ RỘNG]: CIRCUIT BREAKER
-        // Cho phép người chơi chủ động vẩy tay cực gắt (>15px) để xé hợp đồng 
-        // khóa mục tiêu cũ, chuyển sang bắn mục tiêu mới.
+        // [TẦNG CƯỠNG CHẾ]: NGẮT CẦU CHÌ CƠ HỌC (CIRCUIT BREAKER)
+        // Lực vuốt tay > 15px trong lúc đang sấy sẽ xé bỏ hợp đồng khóa mục tiêu.
         // ====================================================================
         let isFiring = state.weapon.isFiring;
         if (isFiring && state.target.id && state.input.magnitude > 15.0) {
@@ -423,16 +420,19 @@ class TargetScanner2D3D {
         let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
         let pLen = payload.players.length;
 
-        // Reset Radar Top 4
-        for (let i = 0; i < 4; i++) {
-            TargetScanner2D3D.topEnemies[i] = null;
-            TargetScanner2D3D.topDistSq[i] = 99999999.0;
+        // Khởi tạo Mảng Tái Chế Top 4 (Zero-GC Array) nếu chưa có
+        if (!state.pool.top4Refs) {
+            state.pool.top4Refs = [null, null, null, null];
+            state.pool.top4DistSq = [999999.0, 999999.0, 999999.0, 999999.0];
         }
 
+        // Reset Mảng Radar cho Frame hiện tại
+        state.pool.top4Refs[0] = state.pool.top4Refs[1] = state.pool.top4Refs[2] = state.pool.top4Refs[3] = null;
+        state.pool.top4DistSq[0] = state.pool.top4DistSq[1] = state.pool.top4DistSq[2] = state.pool.top4DistSq[3] = 999999.0;
+
         // ====================================================================
-        // TẦNG 1: RADAR 360 ĐỘ (SQUARED CULLING & THREAT SORTING)
-        // Quét toàn bản đồ cực nhẹ bằng Bình Phương để tìm 4 kẻ địch gần nhất.
-        // Tuyệt đối không dùng Math.sqrt hay Math.atan2 ở tầng này.
+        // TẦNG 1: RADAR KHÔNG GIAN 360 ĐỘ (SQUARED CULLING)
+        // Tìm 4 kẻ địch gần nhất trong bán kính 150m (Chỉ dùng phép cộng/nhân siêu nhẹ)
         // ====================================================================
         for (let i = 0; i < pLen; i++) {
             let enemy = payload.players[i];
@@ -442,58 +442,64 @@ class TargetScanner2D3D {
             if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
             if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
 
-            // Nếu đang đè cò khóa 1 mục tiêu, bỏ qua tất cả những kẻ khác
+            // XUYÊN THỦNG VÒNG LẶP: Nếu đã khóa chết mục tiêu khi đè cò, bỏ qua mọi kẻ khác
             if (lockedTargetId && enemy.id !== lockedTargetId) continue;
 
             let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
 
-            let dx = headRef.x - origin.x;
-            let dy = (headRef.y - localDispY) - origin.y;
-            let dz = headRef.z - origin.z;
+            let hX = headRef.x;
+            let hY = headRef.y - localDispY; // Bù trừ rơi tự do
+            let hZ = headRef.z;
 
-            // Khoảng cách bình phương (150m^2 = 22500)
+            let dx = hX - origin.x;
+            let dy = hY - origin.y;
+            let dz = hZ - origin.z;
+
+            // 150m^2 = 22500
             let distSq = (dx*dx) + (dy*dy) + (dz*dz);
             if (distSq > 22500.0) continue; 
 
-            // Thuật toán chèn (Insertion Sort) vào Top 4 nhanh nhất
-            if (distSq < TargetScanner2D3D.topDistSq[0]) {
-                TargetScanner2D3D.topDistSq[3] = TargetScanner2D3D.topDistSq[2]; TargetScanner2D3D.topEnemies[3] = TargetScanner2D3D.topEnemies[2];
-                TargetScanner2D3D.topDistSq[2] = TargetScanner2D3D.topDistSq[1]; TargetScanner2D3D.topEnemies[2] = TargetScanner2D3D.topEnemies[1];
-                TargetScanner2D3D.topDistSq[1] = TargetScanner2D3D.topDistSq[0]; TargetScanner2D3D.topEnemies[1] = TargetScanner2D3D.topEnemies[0];
-                TargetScanner2D3D.topDistSq[0] = distSq; TargetScanner2D3D.topEnemies[0] = enemy;
-            } else if (distSq < TargetScanner2D3D.topDistSq[1]) {
-                TargetScanner2D3D.topDistSq[3] = TargetScanner2D3D.topDistSq[2]; TargetScanner2D3D.topEnemies[3] = TargetScanner2D3D.topEnemies[2];
-                TargetScanner2D3D.topDistSq[2] = TargetScanner2D3D.topDistSq[1]; TargetScanner2D3D.topEnemies[2] = TargetScanner2D3D.topEnemies[1];
-                TargetScanner2D3D.topDistSq[1] = distSq; TargetScanner2D3D.topEnemies[1] = enemy;
-            } else if (distSq < TargetScanner2D3D.topDistSq[2]) {
-                TargetScanner2D3D.topDistSq[3] = TargetScanner2D3D.topDistSq[2]; TargetScanner2D3D.topEnemies[3] = TargetScanner2D3D.topEnemies[2];
-                TargetScanner2D3D.topDistSq[2] = distSq; TargetScanner2D3D.topEnemies[2] = enemy;
-            } else if (distSq < TargetScanner2D3D.topDistSq[3]) {
-                TargetScanner2D3D.topDistSq[3] = distSq; TargetScanner2D3D.topEnemies[3] = enemy;
+            // Thuật toán Chèn Phân loại (Insertion Sort) vào Mảng Top 4 không sinh rác
+            if (distSq < state.pool.top4DistSq[0]) {
+                state.pool.top4DistSq[3] = state.pool.top4DistSq[2]; state.pool.top4Refs[3] = state.pool.top4Refs[2];
+                state.pool.top4DistSq[2] = state.pool.top4DistSq[1]; state.pool.top4Refs[2] = state.pool.top4Refs[1];
+                state.pool.top4DistSq[1] = state.pool.top4DistSq[0]; state.pool.top4Refs[1] = state.pool.top4Refs[0];
+                state.pool.top4DistSq[0] = distSq; state.pool.top4Refs[0] = enemy;
+            } else if (distSq < state.pool.top4DistSq[1]) {
+                state.pool.top4DistSq[3] = state.pool.top4DistSq[2]; state.pool.top4Refs[3] = state.pool.top4Refs[2];
+                state.pool.top4DistSq[2] = state.pool.top4DistSq[1]; state.pool.top4Refs[2] = state.pool.top4Refs[1];
+                state.pool.top4DistSq[1] = distSq; state.pool.top4Refs[1] = enemy;
+            } else if (distSq < state.pool.top4DistSq[2]) {
+                state.pool.top4DistSq[3] = state.pool.top4DistSq[2]; state.pool.top4Refs[3] = state.pool.top4Refs[2];
+                state.pool.top4DistSq[2] = distSq; state.pool.top4Refs[2] = enemy;
+            } else if (distSq < state.pool.top4DistSq[3]) {
+                state.pool.top4DistSq[3] = distSq; state.pool.top4Refs[3] = enemy;
             }
         }
 
         // ====================================================================
-        // TẦNG 2: ỐNG KÍNH QUANG HỌC 2D & TARGET HYSTERESIS
-        // Chỉ tính toán Lượng Giác cho tối đa 4 mục tiêu.
+        // TẦNG 2: ỐNG KÍNH QUANG HỌC 2D & KEO DÍNH (TARGET HYSTERESIS)
+        // Chỉ chạy phương trình Lượng giác nặng nề cho tối đa 4 mục tiêu.
         // ====================================================================
         let bestTargetRef = null; 
-        let lowest2DScore = 999999.0; 
+        let lowest2DDistance = 999999.0; 
         const ASPECT_RATIO = 1.77; 
 
         for (let i = 0; i < 4; i++) {
-            let enemy = TargetScanner2D3D.topEnemies[i];
-            if (!enemy) continue; // Nếu mảng trống (Ít hơn 4 địch) thì bỏ qua
+            let enemy = state.pool.top4Refs[i];
+            if (!enemy) continue; // Bỏ qua khe trống nếu có ít hơn 4 địch
 
             let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
-            let dx = headRef.x - origin.x;
-            let dy = (headRef.y - localDispY) - origin.y;
-            let dz = headRef.z - origin.z;
+            let hX = headRef.x;
+            let hY = headRef.y - localDispY;
+            let hZ = headRef.z;
 
-            let distSq = TargetScanner2D3D.topDistSq[i];
-            let distance3D = Math.sqrt(distSq);
+            let dx = hX - origin.x;
+            let dy = hY - origin.y;
+            let dz = hZ - origin.z;
 
-            // Tính Euler 3D
+            // Giải toán 3D
+            let distance3D = Math.sqrt(state.pool.top4DistSq[i]); // Tái sử dụng bình phương đã tính
             let distXZSq = (dx*dx) + (dz*dz);
             let distXZ = distXZSq > 0 ? Math.sqrt(distXZSq) : 0.001;
 
@@ -503,7 +509,7 @@ class TargetScanner2D3D {
             let rawDeltaYaw = TargetScanner2D3D.normalizeAngle(enemyYaw - currentYaw);
             let rawDeltaPitch = TargetScanner2D3D.normalizeAngle(enemyPitch - currentPitch);
 
-            // Tính ma trận Elip 16:9
+            // Chiếu lên màn hình Elip 2D
             let scaledDeltaPitch = rawDeltaPitch * ASPECT_RATIO;
             let fov2DSq = (rawDeltaYaw*rawDeltaYaw) + (scaledDeltaPitch*scaledDeltaPitch);
             let fov2D = Math.sqrt(fov2DSq);
@@ -511,31 +517,31 @@ class TargetScanner2D3D {
             let baseCapsule = (distance3D < 3.0) ? 180.0 : ((120.0 / distance3D) + 12.0);
             let capsuleFovLimit = isADS ? (baseCapsule * 0.35) : baseCapsule; 
             
+            // [CÔNG NGHỆ KEO DÍNH]: Mở rộng Lồng giam 1.5x cho mục tiêu cũ
             let isStickyTarget = (enemy.id === previousTargetId);
             if (isStickyTarget) capsuleFovLimit *= 1.5; 
 
-            // Loại bỏ nếu nằm ngoài ranh giới tầm nhìn
+            // Loại bỏ những kẻ nằm ngoài Lồng giam hoặc sau lưng
             if (fov2D > capsuleFovLimit) continue;
 
             let stancePenalty = 1.0;
-            if ((origin.y - (headRef.y - localDispY)) > 0.8) stancePenalty *= 2.0; 
+            if ((origin.y - hY) > 0.8) stancePenalty *= 2.0; 
             if (enemy.is_behind_cover) stancePenalty *= 10.0;
 
-            // [CÔNG NGHỆ KEO DÍNH - HYSTERESIS]: Chống Ping-Pong văng tâm
-            // Nếu đây là kẻ địch đang bắn từ frame trước, giảm 50% điểm số 2D của nó.
-            // Ép những kẻ địch khác muốn giành target phải đứng sát tâm hơn nó gấp 2 lần.
-            let stickyBonus = isStickyTarget ? 0.50 : 1.0;
-            let score2D = fov2D * stancePenalty * stickyBonus;
+            // [CÔNG NGHỆ KEO DÍNH 50%]: Giảm ảo khoảng cách 2D để chống Ping-pong tâm súng
+            let stickyDiscount = isStickyTarget ? 0.50 : 1.0;
+            let score2D = fov2D * stancePenalty * stickyDiscount;
 
-            if (score2D < lowest2DScore) {
-                lowest2DScore = score2D;
+            // Tuyển chọn Mục Tiêu Chính
+            if (score2D < lowest2DDistance) {
+                lowest2DDistance = score2D;
                 bestTargetRef = enemy; 
 
-                // Lôi vỏ hộp tái chế ra nạp dữ liệu
+                // Lôi vỏ hộp tái chế ra nạp đạn (Zero-GC)
                 let tmp = state.pool.tempTarget;
                 tmp.id = enemy.id;
                 tmp.distance3D = distance3D;
-                tmp.distance2D = fov2D;
+                tmp.distance2D = fov2D; // Lưu khoảng cách thực, không lưu điểm ảo
                 tmp.deltaPitch = rawDeltaPitch;
                 tmp.deltaYaw = rawDeltaYaw;
                 tmp.absoluteEnemyYaw = enemyYaw;
@@ -556,7 +562,8 @@ class TargetScanner2D3D {
         }
 
         // ====================================================================
-        // TẦNG 3: TARGET-ONLY BONE HIJACKING (Chỉ thao túng xương Kẻ Bị Săn)
+        // C. TARGET-ONLY BONE HIJACKING (Chỉ thao túng xương của kẻ bị săn)
+        // Xóa bỏ tình trạng can thiệp xương lãng phí tài nguyên máy
         // ====================================================================
         if (bestTargetRef && bestTargetRef.hitboxes) {
             const hitboxes = bestTargetRef.hitboxes;
@@ -582,7 +589,7 @@ class TargetScanner2D3D {
         }
 
         // ====================================================================
-        // TẦNG 4: CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT ZERO-GC)
+        // D. CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT ZERO-GC)
         // ====================================================================
         let finalTarget = bestTargetRef ? state.pool.tempTarget : null;
 
@@ -597,9 +604,7 @@ class TargetScanner2D3D {
                 let gY = lastPos.y + (lastVel.y * 0.016) - localDispY;
                 let gZ = lastPos.z + (lastVel.z * 0.016);
 
-                let dx = gX - origin.x;
-                let dy = gY - origin.y;
-                let dz = gZ - origin.z;
+                let dx = gX - origin.x; let dy = gY - origin.y; let dz = gZ - origin.z;
                 
                 let distSq = (dx*dx) + (dy*dy) + (dz*dz);
                 let distance3D = Math.sqrt(distSq);
@@ -638,7 +643,7 @@ class TargetScanner2D3D {
         }
 
         // ====================================================================
-        // TẦNG 5: XUẤT BÁO CÁO VÀO VORTEX STATE 
+        // E. XUẤT BÁO CÁO VÀO VORTEX STATE 
         // ====================================================================
         if (finalTarget) {
             if (!finalTarget.isGhost) {
