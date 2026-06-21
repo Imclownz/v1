@@ -371,13 +371,17 @@ class SelfKinematicIsolator {
 }
 
 // ============================================================================
-// BƯỚC 2: TARGET SCANNER 2D-3D (V7.11 ZERO-GC & FAST-MATH)
-// Cập nhật: Lọc khoảng cách bằng bình phương (Squared Culling) tiết kiệm 80% CPU.
-// Cập nhật: Target-Only Bone Hijacking (Chỉ chỉnh xương mục tiêu bị khóa).
-// Cập nhật: Object Pooling (Không sinh rác RAM).
+// BƯỚC 2: TARGET SCANNER 2D-3D (V7.12 TWO-TIER FUNNEL & ZERO-GC)
+// Cập nhật: Phễu lọc 2 tầng - Chỉ tính toán lượng giác cho 4 kẻ địch gần nhất.
+// Cập nhật: Target Hysteresis (Keo Dính 50%) chống Ping-Pong văng tâm qua lại.
+// Cập nhật: Mảng tĩnh Zero-GC tối ưu hoàn toàn hiện tượng khựng khung hình.
 // ============================================================================
 class TargetScanner2D3D {
     
+    // Khởi tạo mảng tĩnh chứa Top 4 Kẻ địch (Tránh tạo rác RAM mỗi frame)
+    static topEnemies = [null, null, null, null];
+    static topDistSq = [99999999.0, 99999999.0, 99999999.0, 99999999.0];
+
     // Hàm chuẩn hóa góc quay (-180 đến 180 độ)
     static normalizeAngle(angle) {
         while (angle > 180.0) angle -= 360.0;
@@ -398,13 +402,16 @@ class TargetScanner2D3D {
 
         let isADS = payload.is_ads || (payload.camera && payload.camera.fov && payload.camera.fov < 60.0);
         state.engine.isADS = isADS;
-
         state.target.scanFrame++;
 
         let previousTargetId = state.target.id;
         let previousEnemyYaw = state.target.lastEnemyYaw || 0.0; 
 
-        // [CÔNG NGHỆ]: NGẮT CẦU CHÌ CƠ HỌC (CIRCUIT BREAKER)
+        // ====================================================================
+        // [NGẮT CẦU CHÌ MỞ RỘNG]: CIRCUIT BREAKER
+        // Cho phép người chơi chủ động vẩy tay cực gắt (>15px) để xé hợp đồng 
+        // khóa mục tiêu cũ, chuyển sang bắn mục tiêu mới.
+        // ====================================================================
         let isFiring = state.weapon.isFiring;
         if (isFiring && state.target.id && state.input.magnitude > 15.0) {
             state.target.id = null;             
@@ -413,17 +420,19 @@ class TargetScanner2D3D {
         }
 
         let lockedTargetId = (isFiring && state.target.id) ? state.target.id : null;
-
-        // Tránh tạo rác RAM, dùng tham chiếu trực tiếp đến thực thể Game
-        let bestTargetRef = null; 
-        let lowest2DDistance = 999999.0; 
-        const ASPECT_RATIO = 1.77; 
         let localDispY = state.localPlayer ? state.localPlayer.displacementY : 0.0;
-
         let pLen = payload.players.length;
 
+        // Reset Radar Top 4
+        for (let i = 0; i < 4; i++) {
+            TargetScanner2D3D.topEnemies[i] = null;
+            TargetScanner2D3D.topDistSq[i] = 99999999.0;
+        }
+
         // ====================================================================
-        // A. FAST-MATH CULLING LOOP (Quét Địch Siêu Tốc)
+        // TẦNG 1: RADAR 360 ĐỘ (SQUARED CULLING & THREAT SORTING)
+        // Quét toàn bản đồ cực nhẹ bằng Bình Phương để tìm 4 kẻ địch gần nhất.
+        // Tuyệt đối không dùng Math.sqrt hay Math.atan2 ở tầng này.
         // ====================================================================
         for (let i = 0; i < pLen; i++) {
             let enemy = payload.players[i];
@@ -433,26 +442,55 @@ class TargetScanner2D3D {
             if (enemy.is_teammate || (payload.my_team_id && enemy.team_id === payload.my_team_id)) continue;
             if (!enemy.hitboxes || (!enemy.hitboxes.head && !enemy.hitboxes.neck)) continue;
 
-            // XUYÊN THỦNG VÒNG LẶP nếu đã khóa mục tiêu
+            // Nếu đang đè cò khóa 1 mục tiêu, bỏ qua tất cả những kẻ khác
             if (lockedTargetId && enemy.id !== lockedTargetId) continue;
 
             let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
 
-            // Bù trừ trọng lực bản thân TRỰC TIẾP bằng biến số (Không tạo object mới)
-            let hX = headRef.x;
-            let hY = headRef.y - localDispY;
-            let hZ = headRef.z;
+            let dx = headRef.x - origin.x;
+            let dy = (headRef.y - localDispY) - origin.y;
+            let dz = headRef.z - origin.z;
 
-            let dx = hX - origin.x;
-            let dy = hY - origin.y;
-            let dz = hZ - origin.z;
-
-            // [LỌC BÌNH PHƯƠNG - SQUARED CULLING]: 150m^2 = 22500
-            // Nhanh hơn Math.sqrt gấp 5 lần. Những kẻ địch > 150m sẽ bị đá văng ngay lập tức.
+            // Khoảng cách bình phương (150m^2 = 22500)
             let distSq = (dx*dx) + (dy*dy) + (dz*dz);
             if (distSq > 22500.0) continue; 
 
-            // Chỉ tính Căn bậc hai khi địch chắc chắn ở gần
+            // Thuật toán chèn (Insertion Sort) vào Top 4 nhanh nhất
+            if (distSq < TargetScanner2D3D.topDistSq[0]) {
+                TargetScanner2D3D.topDistSq[3] = TargetScanner2D3D.topDistSq[2]; TargetScanner2D3D.topEnemies[3] = TargetScanner2D3D.topEnemies[2];
+                TargetScanner2D3D.topDistSq[2] = TargetScanner2D3D.topDistSq[1]; TargetScanner2D3D.topEnemies[2] = TargetScanner2D3D.topEnemies[1];
+                TargetScanner2D3D.topDistSq[1] = TargetScanner2D3D.topDistSq[0]; TargetScanner2D3D.topEnemies[1] = TargetScanner2D3D.topEnemies[0];
+                TargetScanner2D3D.topDistSq[0] = distSq; TargetScanner2D3D.topEnemies[0] = enemy;
+            } else if (distSq < TargetScanner2D3D.topDistSq[1]) {
+                TargetScanner2D3D.topDistSq[3] = TargetScanner2D3D.topDistSq[2]; TargetScanner2D3D.topEnemies[3] = TargetScanner2D3D.topEnemies[2];
+                TargetScanner2D3D.topDistSq[2] = TargetScanner2D3D.topDistSq[1]; TargetScanner2D3D.topEnemies[2] = TargetScanner2D3D.topEnemies[1];
+                TargetScanner2D3D.topDistSq[1] = distSq; TargetScanner2D3D.topEnemies[1] = enemy;
+            } else if (distSq < TargetScanner2D3D.topDistSq[2]) {
+                TargetScanner2D3D.topDistSq[3] = TargetScanner2D3D.topDistSq[2]; TargetScanner2D3D.topEnemies[3] = TargetScanner2D3D.topEnemies[2];
+                TargetScanner2D3D.topDistSq[2] = distSq; TargetScanner2D3D.topEnemies[2] = enemy;
+            } else if (distSq < TargetScanner2D3D.topDistSq[3]) {
+                TargetScanner2D3D.topDistSq[3] = distSq; TargetScanner2D3D.topEnemies[3] = enemy;
+            }
+        }
+
+        // ====================================================================
+        // TẦNG 2: ỐNG KÍNH QUANG HỌC 2D & TARGET HYSTERESIS
+        // Chỉ tính toán Lượng Giác cho tối đa 4 mục tiêu.
+        // ====================================================================
+        let bestTargetRef = null; 
+        let lowest2DScore = 999999.0; 
+        const ASPECT_RATIO = 1.77; 
+
+        for (let i = 0; i < 4; i++) {
+            let enemy = TargetScanner2D3D.topEnemies[i];
+            if (!enemy) continue; // Nếu mảng trống (Ít hơn 4 địch) thì bỏ qua
+
+            let headRef = enemy.hitboxes.head ? enemy.hitboxes.head.pos : enemy.hitboxes.neck.pos;
+            let dx = headRef.x - origin.x;
+            let dy = (headRef.y - localDispY) - origin.y;
+            let dz = headRef.z - origin.z;
+
+            let distSq = TargetScanner2D3D.topDistSq[i];
             let distance3D = Math.sqrt(distSq);
 
             // Tính Euler 3D
@@ -476,20 +514,24 @@ class TargetScanner2D3D {
             let isStickyTarget = (enemy.id === previousTargetId);
             if (isStickyTarget) capsuleFovLimit *= 1.5; 
 
+            // Loại bỏ nếu nằm ngoài ranh giới tầm nhìn
             if (fov2D > capsuleFovLimit) continue;
 
             let stancePenalty = 1.0;
-            if ((origin.y - hY) > 0.8) stancePenalty *= 2.0; 
+            if ((origin.y - (headRef.y - localDispY)) > 0.8) stancePenalty *= 2.0; 
             if (enemy.is_behind_cover) stancePenalty *= 10.0;
 
+            // [CÔNG NGHỆ KEO DÍNH - HYSTERESIS]: Chống Ping-Pong văng tâm
+            // Nếu đây là kẻ địch đang bắn từ frame trước, giảm 50% điểm số 2D của nó.
+            // Ép những kẻ địch khác muốn giành target phải đứng sát tâm hơn nó gấp 2 lần.
             let stickyBonus = isStickyTarget ? 0.50 : 1.0;
             let score2D = fov2D * stancePenalty * stickyBonus;
 
-            if (score2D < lowest2DDistance) {
-                lowest2DDistance = score2D;
-                bestTargetRef = enemy; // Chốt hạ tham chiếu mục tiêu
+            if (score2D < lowest2DScore) {
+                lowest2DScore = score2D;
+                bestTargetRef = enemy; 
 
-                // [ZERO-GC ALLOCATION]: Gọi "vỏ hộp" tái chế ra dùng
+                // Lôi vỏ hộp tái chế ra nạp dữ liệu
                 let tmp = state.pool.tempTarget;
                 tmp.id = enemy.id;
                 tmp.distance3D = distance3D;
@@ -500,16 +542,13 @@ class TargetScanner2D3D {
                 tmp.enemyDeltaYaw = isStickyTarget ? TargetScanner2D3D.normalizeAngle(enemyYaw - previousEnemyYaw) : 0.0;
                 tmp.isGhost = false;
 
-                // Tái chế tọa độ
                 tmp.rawHeadPos.x = headRef.x;
                 tmp.rawHeadPos.y = headRef.y;
                 tmp.rawHeadPos.z = headRef.z;
 
                 let eVel = enemy.real_velocity || enemy.velocity;
                 if (eVel) {
-                    tmp.velocity.x = eVel.x || 0;
-                    tmp.velocity.y = eVel.y || 0;
-                    tmp.velocity.z = eVel.z || 0;
+                    tmp.velocity.x = eVel.x || 0; tmp.velocity.y = eVel.y || 0; tmp.velocity.z = eVel.z || 0;
                 } else {
                     tmp.velocity.x = 0; tmp.velocity.y = 0; tmp.velocity.z = 0;
                 }
@@ -517,8 +556,7 @@ class TargetScanner2D3D {
         }
 
         // ====================================================================
-        // B. TARGET-ONLY BONE HIJACKING (Chỉ thao túng xương của kẻ bị săn)
-        // Xóa bỏ tình trạng can thiệp xương thừa thãi cho 50 người chơi
+        // TẦNG 3: TARGET-ONLY BONE HIJACKING (Chỉ thao túng xương Kẻ Bị Săn)
         // ====================================================================
         if (bestTargetRef && bestTargetRef.hitboxes) {
             const hitboxes = bestTargetRef.hitboxes;
@@ -544,7 +582,7 @@ class TargetScanner2D3D {
         }
 
         // ====================================================================
-        // C. CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT ZERO-GC)
+        // TẦNG 4: CROSS-PATH GHOSTING (BÓNG MA GIAO CẮT ZERO-GC)
         // ====================================================================
         let finalTarget = bestTargetRef ? state.pool.tempTarget : null;
 
@@ -555,7 +593,6 @@ class TargetScanner2D3D {
                 let lastPos = state.target.lastHeadPos;
                 let lastVel = state.target.lastVelocity;
                 
-                // Trực tiếp tính toán không sinh rác
                 let gX = lastPos.x + (lastVel.x * 0.016);
                 let gY = lastPos.y + (lastVel.y * 0.016) - localDispY;
                 let gZ = lastPos.z + (lastVel.z * 0.016);
@@ -578,7 +615,6 @@ class TargetScanner2D3D {
                 let scaledDeltaPitch = rawDeltaPitch * ASPECT_RATIO;
                 let fov2D = Math.sqrt((rawDeltaYaw*rawDeltaYaw) + (scaledDeltaPitch*scaledDeltaPitch));
 
-                // [ZERO-GC ALLOCATION]: Kéo bóng ma từ kho tái chế
                 let ghost = state.pool.tempGhost;
                 ghost.id = lockedTargetId;
                 ghost.distance3D = distance3D;
@@ -591,7 +627,6 @@ class TargetScanner2D3D {
 
                 finalTarget = ghost;
 
-                // Tịnh tiến tọa độ gốc trong bộ nhớ 
                 state.target.lastHeadPos.x = gX;
                 state.target.lastHeadPos.y = gY + localDispY; 
                 state.target.lastHeadPos.z = gZ;
@@ -603,13 +638,12 @@ class TargetScanner2D3D {
         }
 
         // ====================================================================
-        // D. XUẤT BÁO CÁO VÀO VORTEX STATE 
+        // TẦNG 5: XUẤT BÁO CÁO VÀO VORTEX STATE 
         // ====================================================================
         if (finalTarget) {
             if (!finalTarget.isGhost) {
                 state.target.ghostFrames = 0;
                 
-                // Copy giá trị nguyên thủy (Primitive copy) không dính reference rác
                 state.target.lastHeadPos.x = finalTarget.rawHeadPos.x;
                 state.target.lastHeadPos.y = finalTarget.rawHeadPos.y;
                 state.target.lastHeadPos.z = finalTarget.rawHeadPos.z;
