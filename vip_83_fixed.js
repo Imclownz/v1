@@ -3933,35 +3933,38 @@ class BallisticsSynchronizer {
                         bullet.trajectory.dir_z = dirZ;
 
                         // ============================================================
-                        // [MODULE 9 UPGRADE]: HERMITE CUBIC SPLINE PINPOINT TANGENT
-                        // Khóa chùm tia đạn cong tự nhiên xuyên thẳng tâm sọ hitbox server
+                        // [STEALTH RAYCAST ALIGNMENT]: KHÓA TIA ĐẠN TỰ NHIÊN CHUẨN XÁC
+                        // Tương thích 100% với Raycast Validator và Hermite Spline của COW Engine
                         // ============================================================
                         bullet.trajectory.hermite_spline = true;
                         bullet.trajectory.target_crown = { x: targetX + leadX, y: crownY + leadY, z: targetZ + leadZ };
-                        bullet.trajectory.homing = true;
-                        bullet.trajectory.homing_target = bullet.trajectory.target_crown;
-                        bullet.trajectory.tightness = 1.0;
-                        bullet.trajectory.lock_tangent = true;
-                        bullet.trajectory.snap_end_point = true;
                     }
 
-                    bullet.is_penetrating = true;
-                    bullet.collision_obstacle = false;
+                    // Đồng bộ cả tầng root và tầng trajectory nếu có
+                    if (bullet.dir_x !== undefined) bullet.dir_x = dirX;
+                    if (bullet.dir_y !== undefined) bullet.dir_y = dirY;
+                    if (bullet.dir_z !== undefined) bullet.dir_z = dirZ;
 
-                    // Khóa dính sọ mọi viên đạn
+                    bullet.is_penetrating = true;
+
+                    // Tính toán điểm va chạm tiếp xúc bề mặt thực tế (Surface Impact Point) của bone_Head
+                    // Chuẩn xác 100% theo thuật toán Raycast Collider của PhysX/Unity
+                    let surfaceHitX = (targetX + leadX) - (dirX * 0.08);
+                    let surfaceHitY = (crownY + leadY) - (dirY * 0.08);
+                    let surfaceHitZ = (targetZ + leadZ) - (dirZ * 0.08);
+                    bullet.hit_position = { x: surfaceHitX, y: surfaceHitY, z: surfaceHitZ };
+
+                    // [REVERSED COW ENGINE PROTOCOL] Đăng ký trúng đầu hợp lệ theo giao thức chuẩn
                     bullet.hit_zone = "head";
                     bullet.damage_zone = "head";
-                    bullet.hit_body_part = 1; // [REVERSED] COW Engine EHITBODYPART_HEAD
+                    bullet.hit_box_type = 1;           // m_hitBoxType (COW Engine)
+                    bullet.hit_body_part = 1;          // EHITBODYPART_HEAD (Mã nguồn COW Engine)
                     bullet.body_part = 1;
-                    bullet.target_bone = "bone_Head"; // [REVERSED] COW Engine Official Bone Name
+                    bullet.target_bone = "bone_Head";  // Xương sọ chuẩn Free Fire IL2CPP
                     bullet.bone_name = "bone_Head";
                     bullet.bone_id = 10;
                     bullet.is_headshot = true;
-                    bullet.headshot_guaranteed = true;
                     bullet.target_hitbox = "crown";
-                    bullet.bullet_suction = true;
-                    bullet.magnetic_force = 100.0;
-                    bullet.homing_factor = 1.0;
                 }
             }
         }
